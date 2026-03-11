@@ -990,7 +990,7 @@ async function doPunchOut() {
   try {
     const res = await apiFetch('/fichajes/salida', {
       method: 'POST',
-      body: JSON.stringify({ fichaje_id: selectedFichaje.id })
+      body: JSON.stringify({ empleado_id: selectedEmp.id })
     });
     const total = res.total_formateado || res.duracion_total || '—';
     showConfirm('exit',
@@ -1012,7 +1012,7 @@ async function doChangeDepart(newCcId, newCcName) {
   try {
     await apiFetch('/fichajes/cambio-departamento', {
       method: 'POST',
-      body: JSON.stringify({ fichaje_id: selectedFichaje.id, nuevo_centro_coste_id: newCcId })
+      body: JSON.stringify({ empleado_id: selectedEmp.id, nuevo_centro_coste_id: newCcId })
     });
     showConfirm('change',
       '🔄',
