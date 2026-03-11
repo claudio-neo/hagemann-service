@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Hagemann — Zeiterfassung Terminal</title>
+<style>
+/* ══════════════════════════════════════════
+   RESET & BASE
+══════════════════════════════════════════ */
+*, *::before, *::after {
+  margin: 0; padding: 0; box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+html, body {
+  height: 100%; overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  background: #f0f4f8; color: #1e293b;
+}
+
+/* ══════════════════════════════════════════
+   CSS VARIABLES — Light theme matching admin.html
+══════════════════════════════════════════ */
+:root {
+  --bg:       #f0f4f8;
+  --bg2:      #ffffff;
+  --bg3:      #e2e8f0;
+  --border:   #e2e8f0;
+  --text:     #1e293b;
+  --muted:    #64748b;
+  --green:    #10b981;
+  --green-bg: #d1fae5;
+  --red:      #ef4444;
+  --red-bg:   #fee2e2;
+  --amber:    #f59e0b;
+  --amber-bg: #fef3c7;
+  --blue:     #3b82f6;
+  --radius:   14px;
+  --shadow:   0 4px 24px rgba(0,0,0,0.08);
+}
+
+/* ══════════════════════════════════════════
+   LAYOUT
+══════════════════════════════════════════ */
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ══════════════════════════════════════════
+   HEADER
+══════════════════════════════════════════ */
+header {
+  background: #0f172a;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  padding: 0 28px;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 16px;
+}
+.logo-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.logo-icon {
+  width: 44px; height: 44px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0;
+}
+.logo-text {
+  display: flex; flex-direction: column;
+}
+.logo-name {
+  font-size: 20px; font-weight: 800;
+  letter-spacing: -0.5px; color: #f8fafc;
+}
+.logo-sub {
+  font-size: 11px; color: var(--muted);
+  font-weight: 500; letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.header-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.header-clock {
+  font-size: 42px;
+  font-weight: 200;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+  color: #f8fafc;
+  line-height: 1;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.header-date {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: right;
+  line-height: 1.5;
+}
+.badge-present {
+  background: rgba(16,185,129,0.15);
+  border: 1px solid rgba(16,185,129,0.3);
+  color: var(--green);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.badge-present.zero {
+  background: rgba(148,163,184,0.1);
+  border-color: rgba(148,163,184,0.2);
+  color: var(--muted);
+}
+
+/* ══════════════════════════════════════════
+   SCREENS (show/hide)
+══════════════════════════════════════════ */
+.screen {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.screen.hidden { display: none !important; }
+
+/* ══════════════════════════════════════════
+   SCREEN 1 — EMPLOYEE GRID
+══════════════════════════════════════════ */
+#screen-employees {
+  padding: 16px 20px 12px;
+}
+.search-bar {
+  margin-bottom: 14px;
+  position: relative;
+  flex-shrink: 0;
+}
+.search-bar input {
+  width: 100%;
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  color: #1e293b;
+  font-size: 18px;
+  padding: 14px 18px 14px 50px;
+  outline: none;
+  transition: border-color .15s;
+}
+.search-bar input::placeholder { color: #64748b; }
+.search-bar input:focus { border-color: var(--blue); }
+.search-icon {
+  position: absolute; left: 16px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 20px; pointer-events: none;
+}
+.employee-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+.employee-scroll::-webkit-scrollbar { width: 6px; }
+.employee-scroll::-webkit-scrollbar-track { background: transparent; }
+.employee-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.employee-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+.emp-tile {
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-radius: var(--radius);
+  padding: 18px 14px 16px;
+  cursor: pointer;
+  transition: border-color .12s, transform .1s, background .12s;
+  text-align: center;
+  position: relative;
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+.emp-tile:active { transform: scale(0.96); }
+.emp-tile.present {
+  border-color: var(--green);
+  background: rgba(16,185,129,0.06);
+}
+.emp-tile:not(.present):hover { border-color: #4f6c8a; background: #243447; }
+.emp-status-dot {
+  position: absolute;
+  top: 10px; right: 10px;
+  width: 11px; height: 11px;
+  border-radius: 50%;
+}
+.emp-status-dot.green {
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(16,185,129,.7);
+  animation: pulse-green 2s infinite;
+}
+.emp-status-dot.gray { background: #475569; }
+@keyframes pulse-green {
+  0%,100% { box-shadow: 0 0 5px rgba(16,185,129,.5); }
+  50%      { box-shadow: 0 0 12px rgba(16,185,129,.9); }
+}
+.emp-tile .emp-nr {
+  font-size: 11px; color: var(--muted);
+  font-weight: 600; letter-spacing: 0.5px;
+  background: #f1f5f9;
+  padding: 2px 10px; border-radius: 8px;
+  margin-bottom: 8px;
+}
+.emp-tile .emp-name {
+  font-size: 16px; font-weight: 700;
+  line-height: 1.2; color: #1e293b;
+}
+.emp-tile .emp-dept {
+  font-size: 11px; color: var(--green);
+  margin-top: 7px; font-weight: 600;
+  white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 100%;
+}
+.emp-no-results {
+  grid-column: 1/-1;
+  text-align: center;
+  color: var(--muted);
+  font-size: 18px;
+  padding: 60px 20px;
+}
+
+/* ══════════════════════════════════════════
+   SCREEN 2 — EINGANG (dept selection for entry)
+   SCREEN 3 — ANWESEND OPTIONS
+   SCREEN 3b — DEPT CHANGE
+══════════════════════════════════════════ */
+.centered-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 24px 20px 20px;
+  overflow-y: auto;
+  gap: 0;
+}
+.centered-screen::-webkit-scrollbar { width: 6px; }
+.centered-screen::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.screen-header {
+  text-align: center;
+  margin-bottom: 20px;
+  width: 100%;
+  max-width: 860px;
+}
+.screen-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: var(--muted);
+  font-size: 15px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 18px;
+  transition: background .12s, color .12s;
+}
+.screen-back-btn:hover { background: #cbd5e1; color: #1e293b; }
+.screen-back-btn:active { transform: scale(0.97); }
+.screen-title {
+  font-size: 28px; font-weight: 800;
+  color: #1e293b; margin-bottom: 6px;
+  line-height: 1.2;
+}
+.screen-subtitle {
+  font-size: 15px; color: var(--muted);
+  font-weight: 500;
+}
+.screen-info-box {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 20px;
+  margin: 0 auto 20px;
+  max-width: 860px;
+  width: 100%;
+  font-size: 15px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.screen-info-box.shift-info {
+  border-color: rgba(59,130,246,.3);
+  background: rgba(59,130,246,.06);
+  color: #1e40af;
+}
+.screen-info-box.status-info {
+  border-color: rgba(16,185,129,.3);
+  background: rgba(16,185,129,.06);
+  color: #065f46;
+}
+
+/* ══════════════════════════════════════════
+   DEPT GRID (for entry + change)
+══════════════════════════════════════════ */
+.cc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+  width: 100%;
+  max-width: 860px;
+}
+.cc-tile {
+  border-radius: var(--radius);
+  padding: 26px 18px 22px;
+  cursor: pointer;
+  transition: transform .1s, opacity .1s, box-shadow .1s;
+  text-align: center;
+  color: white;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 20px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.3);
+  user-select: none;
+  position: relative;
+}
+.cc-tile:active { transform: scale(0.95); opacity: 0.9; }
+.cc-tile .cc-code {
+  font-size: 12px; font-weight: 500;
+  opacity: 0.75; letter-spacing: 0.5px;
+}
+
+/* ══════════════════════════════════════════
+   SCREEN 3 — PRESENT OPTIONS
+══════════════════════════════════════════ */
+.options-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 520px;
+}
+.big-btn {
+  border: none;
+  border-radius: 16px;
+  padding: 28px 40px;
+  font-size: 22px; font-weight: 800;
+  cursor: pointer;
+  transition: transform .1s, opacity .1s, box-shadow .12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: white;
+  min-height: 88px;
+  width: 100%;
+  user-select: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+}
+.big-btn:active { transform: scale(0.96); opacity: 0.9; }
+.big-btn.btn-red    { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.big-btn.btn-amber  { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.big-btn.btn-green  { background: linear-gradient(135deg, #10b981, #059669); }
+.big-btn.btn-blue   { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+.big-btn .btn-icon  { font-size: 26px; }
+
+/* ══════════════════════════════════════════
+   SCREEN 4 — CONFIRMATION
+══════════════════════════════════════════ */
+#screen-confirm {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.confirm-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 30px;
+  height: 100%;
+  width: 100%;
+  transition: background .3s;
+}
+.confirm-body.type-entry  { background: rgba(16,185,129,0.12); }
+.confirm-body.type-exit   { background: rgba(239,68,68,0.12); }
+.confirm-body.type-change { background: rgba(245,158,11,0.12); }
+.confirm-checkmark {
+  font-size: 96px;
+  line-height: 1;
+  margin-bottom: 20px;
+  animation: pop-in .3s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes pop-in {
+  from { transform: scale(0.4); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+.confirm-title {
+  font-size: 36px; font-weight: 800;
+  margin-bottom: 14px; line-height: 1.2;
+}
+.confirm-title.type-entry  { color: var(--green); }
+.confirm-title.type-exit   { color: var(--red); }
+.confirm-title.type-change { color: var(--amber); }
+.confirm-detail {
+  font-size: 22px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.confirm-detail b { color: var(--text); font-weight: 700; }
+.confirm-detail .big-hours {
+  font-size: 44px; font-weight: 200;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  display: block;
+  margin: 8px 0;
+}
+.confirm-countdown {
+  margin-top: 32px;
+  font-size: 14px;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.countdown-bar {
+  width: 160px; height: 3px;
+  background: #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.countdown-fill {
+  height: 100%;
+  background: #64748b;
+  border-radius: 2px;
+  transition: width .1s linear;
+}
+
+/* ══════════════════════════════════════════
+   ERROR / LOADING STATES
+══════════════════════════════════════════ */
+.loading-overlay {
+  position: fixed; inset: 0;
+  background: rgba(255,255,255,.85);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 999; flex-direction: column; gap: 16px;
+}
+.loading-overlay.hidden { display: none; }
+.spinner {
+  width: 48px; height: 48px;
+  border: 4px solid #e2e8f0;
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { color: var(--muted); font-size: 16px; }
+
+.error-toast {
+  position: fixed;
+  bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #fee2e2;
+  border: 1px solid #ef4444;
+  color: #991b1b;
+  padding: 14px 24px;
+  border-radius: 12px;
+  font-size: 15px;
+  z-index: 998;
+  max-width: 90vw;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0,0,0,.1);
+  transition: opacity .3s;
+}
+.error-toast.hidden { display: none; }
+
+/* ══════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════ */
+@media (max-width: 600px) {
+  header { padding: 0 16px; height: 64px; }
+  .logo-name { font-size: 16px; }
+  .header-clock { font-size: 28px; }
+  .employee-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .emp-tile { min-height: 90px; padding: 14px 10px 12px; }
+  .emp-tile .emp-name { font-size: 14px; }
+  .cc-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .confirm-checkmark { font-size: 72px; }
+  .confirm-title { font-size: 28px; }
+  .confirm-detail { font-size: 18px; }
+  .screen-title { font-size: 22px; }
+  .big-btn { font-size: 19px; padding: 22px 28px; min-height: 78px; }
+}
+@media (min-width: 1200px) {
+  .employee-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══════════════ HEADER ═══════════════ -->
+  <header>
+    <div class="logo-block">
+      <div class="logo-icon">⏱</div>
+      <div class="logo-text">
+        <div class="logo-name">Hagemann</div>
+        <div class="logo-sub">Zeiterfassung</div>
+      </div>
+    </div>
+    <div class="header-center">
+      <div class="header-clock" id="clock">--:--:--</div>
+    </div>
+    <div class="header-right">
+      <div class="header-date" id="dateDisplay"></div>
+      <div class="badge-present zero" id="badgePresent">0 anwesend</div>
+    </div>
+  </header>
+
+  <!-- ═══════════════ SCREEN 1: MITARBEITER-AUSWAHL ═══════════════ -->
+  <div class="screen" id="screen-employees">
+    <div style="padding: 16px 20px 8px; flex-shrink:0;">
+      <div class="search-bar">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Mitarbeiter suchen…"
+               oninput="filterEmployees(this.value)">
+      </div>
+    </div>
+    <div class="employee-scroll" style="padding: 0 20px 12px;">
+      <div class="employee-grid" id="employeeGrid">
+        <div class="loading-text" style="padding:40px;text-align:center;color:var(--muted)">Daten werden geladen…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ SCREEN 2: EINGANG — ABTEILUNG ═══════════════ -->
+  <div class="screen hidden" id="screen-entry">
+    <div class="centered-screen">
+      <div style="max-width:860px;width:100%;">
+        <button class="screen-back-btn" onclick="goToScreen('screen-employees')">← Zurück</button>
+      </div>
+      <div class="screen-header">
+        <div class="screen-title" id="entryTitle">Eingang</div>
+        <div class="screen-subtitle">Kostenstelle wählen</div>
+      </div>
+      <div id="entryShiftInfo" class="screen-info-box shift-info hidden" style="max-width:860px;">
+        <span>📅</span>
+        <span id="entryShiftText"></span>
+      </div>
+      <div class="cc-grid" id="entryCCGrid"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ SCREEN 3: ANWESEND OPTIONEN ═══════════════ -->
+  <div class="screen hidden" id="screen-present">
+    <div class="centered-screen" style="align-items:center;">
+      <div style="max-width:860px;width:100%;text-align:left;">
+        <button class="screen-back-btn" onclick="goToScreen('screen-employees')">← Zurück</button>
+      </div>
+      <div class="screen-header">
+        <div class="screen-title" id="presentTitle">Hallo!</div>
+      </div>
+      <div class="screen-info-box status-info" id="presentStatusBox" style="max-width:520px;">
+        <span>🟢</span>
+        <span id="presentStatusText">Anwesend</span>
+      </div>
+      <div class="options-grid">
+        <button class="big-btn btn-red" onclick="doPunchOut()">
+          <span class="btn-icon">🚪</span> Ausgang
+        </button>
+        <button class="big-btn btn-amber" onclick="goToScreen('screen-change')">
+          <span class="btn-icon">🔄</span> Abteilung wechseln
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ SCREEN 3b: ABTEILUNG WECHSELN ═══════════════ -->
+  <div class="screen hidden" id="screen-change">
+    <div class="centered-screen">
+      <div style="max-width:860px;width:100%;">
+        <button class="screen-back-btn" onclick="goToScreen('screen-present')">← Zurück</button>
+      </div>
+      <div class="screen-header">
+        <div class="screen-title" id="changeTitle">Abteilung wechseln</div>
+        <div class="screen-subtitle" id="changeSubtitle">Neue Kostenstelle wählen</div>
+      </div>
+      <div class="cc-grid" id="changeCCGrid"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ SCREEN 4: BESTÄTIGUNG ═══════════════ -->
+  <div class="screen hidden" id="screen-confirm">
+    <div class="confirm-body" id="confirmBody">
+      <div class="confirm-checkmark" id="confirmIcon">✓</div>
+      <div class="confirm-title" id="confirmTitle"></div>
+      <div class="confirm-detail" id="confirmDetail"></div>
+      <div class="confirm-countdown">
+        <span id="countdownText">Zurück in 3s</span>
+        <div class="countdown-bar">
+          <div class="countdown-fill" id="countdownFill" style="width:100%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.app -->
+
+<!-- Loading overlay -->
+<div class="loading-overlay hidden" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">Bitte warten…</div>
+</div>
+
+<!-- Error toast -->
+<div class="error-toast hidden" id="errorToast"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   CONFIG & GLOBALS
+══════════════════════════════════════════════════════════════ */
+const basePath = window.location.pathname
+  .replace(/\/static.*$/, '')
+  .replace(/\/+$/, '');
+const API = window.location.origin + basePath + '/api/v1';
+
+let employees = [];
+let costCenters = [];
+let openFichajes = [];   // [{id, empleado:{id,nombre,apellido,id_nummer}, entrada, centro_coste_actual:{id,nombre,color}}]
+let selectedEmp = null;  // employee object
+let selectedFichaje = null; // open fichaje for selected employee
+let currentSearchTerm = '';
+
+let autoResetTimer = null;
+let refreshTimer = null;
+let countdownTimer = null;
+let errorToastTimer = null;
+
+/* ══════════════════════════════════════════════════════════════
+   CLOCK
+══════════════════════════════════════════════════════════════ */
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  document.getElementById('dateDisplay').innerHTML =
+    now.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ══════════════════════════════════════════════════════════════
+   UTILS
+══════════════════════════════════════════════════════════════ */
+function fullName(emp) {
+  return emp.nombre + (emp.apellido ? ' ' + emp.apellido : '');
+}
+
+function formatDuration(entradaISO) {
+  const entrada = new Date(entradaISO);
+  const now = new Date();
+  const totalMins = Math.max(0, Math.floor((now - entrada) / 60000));
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return h > 0 ? `${h}h ${m}min` : `${m}min`;
+}
+
+function formatTime(isoStr) {
+  return new Date(isoStr).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+}
+
+function todayDateStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   API HELPER
+══════════════════════════════════════════════════════════════ */
+async function apiFetch(path, opts = {}) {
+  const r = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: r.statusText }));
+    throw new Error(err.detail || err.message || `HTTP ${r.status}`);
+  }
+  return r.json();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LOADING / ERROR UI
+══════════════════════════════════════════════════════════════ */
+function showLoading(msg = 'Bitte warten…') {
+  document.getElementById('loadingText').textContent = msg;
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+}
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.add('hidden');
+}
+function showError(msg) {
+  clearTimeout(errorToastTimer);
+  const el = document.getElementById('errorToast');
+  el.textContent = '⚠ ' + msg;
+  el.classList.remove('hidden');
+  errorToastTimer = setTimeout(() => el.classList.add('hidden'), 5000);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SCREEN NAVIGATION
+══════════════════════════════════════════════════════════════ */
+const SCREENS = ['screen-employees','screen-entry','screen-present','screen-change','screen-confirm'];
+function goToScreen(id) {
+  SCREENS.forEach(s => {
+    document.getElementById(s).classList.toggle('hidden', s !== id);
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DATA LOADING
+══════════════════════════════════════════════════════════════ */
+async function loadData(silent = false) {
+  if (!silent) showLoading('Daten werden geladen…');
+  try {
+    const [empRes, ccRes, openRes] = await Promise.all([
+      apiFetch('/empleados/?activo=true&limit=500'),
+      apiFetch('/centros-coste/?limit=200'),
+      apiFetch('/fichajes/abiertos')
+    ]);
+    employees   = empRes.data   || empRes || [];
+    costCenters = ccRes.data    || ccRes  || [];
+    openFichajes = openRes.data || openRes || [];
+    renderEmployeeGrid();
+    updateBadge();
+  } catch (e) {
+    showError('Verbindungsfehler: ' + e.message);
+    if (!silent) {
+      document.getElementById('employeeGrid').innerHTML =
+        `<div class="emp-no-results">⚠ Verbindung fehlgeschlagen<br><small>${e.message}</small></div>`;
+    }
+  } finally {
+    hideLoading();
+  }
+}
+
+function updateBadge() {
+  const count = openFichajes.length;
+  const el = document.getElementById('badgePresent');
+  el.textContent = count + ' anwesend';
+  el.classList.toggle('zero', count === 0);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SCREEN 1 — EMPLOYEE GRID
+══════════════════════════════════════════════════════════════ */
+function getOpenFichajeForEmp(empId) {
+  return openFichajes.find(f => f.empleado && f.empleado.id === empId) || null;
+}
+
+function renderEmployeeGrid() {
+  const grid = document.getElementById('employeeGrid');
+  const term = currentSearchTerm.toLowerCase().trim();
+
+  const filtered = term
+    ? employees.filter(e =>
+        fullName(e).toLowerCase().includes(term) ||
+        String(e.id_nummer).includes(term)
+      )
+    : employees;
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div class="emp-no-results">Kein Mitarbeiter gefunden</div>`;
+    return;
+  }
+
+  // Sort: present first, then by name
+  const sorted = [...filtered].sort((a, b) => {
+    const aP = !!getOpenFichajeForEmp(a.id);
+    const bP = !!getOpenFichajeForEmp(b.id);
+    if (aP !== bP) return bP - aP;
+    return fullName(a).localeCompare(fullName(b), 'de');
+  });
+
+  grid.innerHTML = sorted.map(e => {
+    const fich = getOpenFichajeForEmp(e.id);
+    const isPresent = !!fich;
+    const deptName = fich && fich.centro_coste_actual ? fich.centro_coste_actual.nombre : '';
+    return `<div class="emp-tile ${isPresent ? 'present' : ''}" onclick="selectEmployee('${e.id}')">
+      <div class="emp-status-dot ${isPresent ? 'green' : 'gray'}"></div>
+      <div class="emp-nr">${e.id_nummer || e.id}</div>
+      <div class="emp-name">${escHtml(fullName(e))}</div>
+      ${isPresent && deptName ? `<div class="emp-dept">● ${escHtml(deptName)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function filterEmployees(term) {
+  currentSearchTerm = term;
+  renderEmployeeGrid();
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EMPLOYEE SELECTION
+══════════════════════════════════════════════════════════════ */
+async function selectEmployee(id) {
+  selectedEmp = employees.find(e => String(e.id) === String(id));
+  if (!selectedEmp) return;
+
+  // Refresh open fichajes
+  try {
+    const openRes = await apiFetch('/fichajes/abiertos');
+    openFichajes = openRes.data || openRes || [];
+    updateBadge();
+    renderEmployeeGrid();
+  } catch (e) { /* use cached data */ }
+
+  selectedFichaje = getOpenFichajeForEmp(selectedEmp.id);
+
+  if (selectedFichaje) {
+    showPresentScreen();
+  } else {
+    await showEntryScreen();
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SCREEN 2 — EINGANG
+══════════════════════════════════════════════════════════════ */
+async function showEntryScreen() {
+  document.getElementById('entryTitle').textContent = 'Eingang — ' + fullName(selectedEmp);
+
+  // Build CC grid
+  renderCCGrid('entryCCGrid', 'entry');
+
+  // Try to load planned shift for today
+  const shiftInfoEl = document.getElementById('entryShiftInfo');
+  const shiftTextEl = document.getElementById('entryShiftText');
+  shiftInfoEl.classList.add('hidden');
+  try {
+    const today = todayDateStr();
+    const planRes = await apiFetch(
+      `/turnos/planes?desde=${today}&hasta=${today}&empleado_id=${selectedEmp.id}`
+    );
+    const planes = planRes.data || planRes || [];
+    if (planes.length > 0) {
+      const p = planes[0];
+      const modeloNombre = p.modelo_turno_nombre || p.modelo?.nombre || '';
+      const horaInicio = p.hora_inicio || p.modelo?.hora_inicio || '';
+      const horaFin    = p.hora_fin    || p.modelo?.hora_fin    || '';
+      let shiftStr = 'Geplant: ' + (modeloNombre || 'Turno');
+      if (horaInicio && horaFin) shiftStr += ` ${horaInicio}–${horaFin}`;
+      shiftTextEl.textContent = shiftStr;
+      shiftInfoEl.classList.remove('hidden');
+    }
+  } catch (e) { /* no shift info available */ }
+
+  goToScreen('screen-entry');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SCREEN 3 — ANWESEND
+══════════════════════════════════════════════════════════════ */
+function showPresentScreen() {
+  const f = selectedFichaje;
+  const deptName = f.centro_coste_actual ? f.centro_coste_actual.nombre : '—';
+  const entradaTime = formatTime(f.entrada);
+  const duration = formatDuration(f.entrada);
+
+  document.getElementById('presentTitle').textContent = 'Hallo, ' + fullName(selectedEmp) + '!';
+  document.getElementById('presentStatusText').textContent =
+    `Eingang: ${entradaTime} — Kostenstelle: ${deptName} — Dauer: ${duration}`;
+
+  goToScreen('screen-present');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SCREEN 3b — ABTEILUNG WECHSELN
+══════════════════════════════════════════════════════════════ */
+function showChangeScreen() {
+  const deptName = selectedFichaje?.centro_coste_actual?.nombre || '';
+  document.getElementById('changeTitle').textContent = 'Abteilung wechseln';
+  document.getElementById('changeSubtitle').textContent =
+    deptName ? `Aktuell: ${deptName}` : 'Neue Kostenstelle wählen';
+
+  renderCCGrid('changeCCGrid', 'change');
+  goToScreen('screen-change');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CC GRID RENDERER
+══════════════════════════════════════════════════════════════ */
+let _ccAction = 'entry'; // 'entry' | 'change'
+
+function onCCTileClick(ccId) {
+  const cc = costCenters.find(c => String(c.id) === String(ccId));
+  const ccName = cc ? cc.nombre : ccId;
+  if (_ccAction === 'entry') {
+    doPunchIn(ccId, ccName);
+  } else {
+    doChangeDepart(ccId, ccName);
+  }
+}
+
+function renderCCGrid(gridId, action) {
+  _ccAction = action;
+  const grid = document.getElementById(gridId);
+  if (!costCenters.length) {
+    grid.innerHTML = '<div style="color:var(--muted);text-align:center;padding:30px;width:100%">Keine Kostenstellen verfügbar</div>';
+    return;
+  }
+  grid.innerHTML = costCenters.map(cc => {
+    const bg = cc.color || '#3b82f6';
+    return `<div class="cc-tile" style="background:${escHtml(bg)}"
+              onclick="onCCTileClick('${escHtml(String(cc.id))}')">
+      <span>${escHtml(cc.nombre)}</span>
+      ${cc.codigo ? `<span class="cc-code">${escHtml(cc.codigo)}</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ACTIONS
+══════════════════════════════════════════════════════════════ */
+async function doPunchIn(ccId, ccName) {
+  showLoading('Eingang wird registriert…');
+  try {
+    const res = await apiFetch('/fichajes/entrada', {
+      method: 'POST',
+      body: JSON.stringify({ empleado_id: selectedEmp.id, centro_coste_id: ccId })
+    });
+    const hora = res.entrada ? formatTime(res.entrada) : new Date().toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+    showConfirm('entry',
+      '✓',
+      `Willkommen, ${fullName(selectedEmp)}!`,
+      `<b>${escHtml(ccName)}</b><br>${hora} Uhr`
+    );
+  } catch (e) {
+    hideLoading();
+    showError('Fehler beim Eingang: ' + e.message);
+  }
+}
+
+async function doPunchOut() {
+  if (!selectedFichaje) return;
+  showLoading('Ausgang wird registriert…');
+  try {
+    const res = await apiFetch('/fichajes/salida', {
+      method: 'POST',
+      body: JSON.stringify({ fichaje_id: selectedFichaje.id })
+    });
+    const total = res.total_formateado || res.duracion_total || '—';
+    showConfirm('exit',
+      '🚪',
+      `Auf Wiedersehen, ${fullName(selectedEmp)}!`,
+      `<span class="big-hours">${escHtml(total)}</span>Schönen Feierabend!`
+    );
+  } catch (e) {
+    hideLoading();
+    showError('Fehler beim Ausgang: ' + e.message);
+  }
+}
+
+async function doChangeDepart(newCcId, newCcName) {
+  if (!selectedFichaje) return;
+  const oldCcName = selectedFichaje.centro_coste_actual
+    ? selectedFichaje.centro_coste_actual.nombre : '—';
+  showLoading('Abteilung wird gewechselt…');
+  try {
+    await apiFetch('/fichajes/cambio-departamento', {
+      method: 'POST',
+      body: JSON.stringify({ fichaje_id: selectedFichaje.id, nuevo_centro_coste_id: newCcId })
+    });
+    showConfirm('change',
+      '🔄',
+      'Abteilung gewechselt',
+      `<b>${escHtml(oldCcName)}</b> → <b>${escHtml(newCcName)}</b>`
+    );
+  } catch (e) {
+    hideLoading();
+    showError('Fehler beim Abteilungswechsel: ' + e.message);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SCREEN 4 — CONFIRMATION
+══════════════════════════════════════════════════════════════ */
+function showConfirm(type, icon, title, detail) {
+  hideLoading();
+
+  const body  = document.getElementById('confirmBody');
+  const iEl   = document.getElementById('confirmIcon');
+  const tEl   = document.getElementById('confirmTitle');
+  const dEl   = document.getElementById('confirmDetail');
+  const ctEl  = document.getElementById('countdownText');
+  const cfEl  = document.getElementById('countdownFill');
+
+  // Classes
+  body.className = 'confirm-body type-' + type;
+  tEl.className  = 'confirm-title type-' + type;
+
+  iEl.textContent = icon;
+  tEl.textContent = title;
+  dEl.innerHTML   = detail;
+
+  goToScreen('screen-confirm');
+
+  // Countdown (3s)
+  clearTimeout(autoResetTimer);
+  clearInterval(countdownTimer);
+  const DURATION = 3000;
+  const start = Date.now();
+
+  function tick() {
+    const elapsed = Date.now() - start;
+    const remaining = Math.max(0, DURATION - elapsed);
+    const pct = (remaining / DURATION) * 100;
+    cfEl.style.width = pct + '%';
+    const secs = Math.ceil(remaining / 1000);
+    ctEl.textContent = `Zurück in ${secs}s`;
+  }
+  tick();
+  countdownTimer = setInterval(tick, 100);
+
+  autoResetTimer = setTimeout(() => {
+    clearInterval(countdownTimer);
+    loadData(true);
+    selectedEmp = null;
+    selectedFichaje = null;
+    goToScreen('screen-employees');
+  }, DURATION);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   OVERRIDES FOR SCREEN 3 BUTTONS
+   (need to wire onclick to functions, not lambdas)
+══════════════════════════════════════════════════════════════ */
+// Override goToScreen for screen-change to use custom function
+const _origGoToScreen = goToScreen;
+function goToScreen(id) {
+  if (id === 'screen-change') {
+    showChangeScreen();
+    return;
+  }
+  _origGoToScreen(id);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   AUTO REFRESH (every 30s, only on employee screen)
+══════════════════════════════════════════════════════════════ */
+function startAutoRefresh() {
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => {
+    const empScreen = document.getElementById('screen-employees');
+    if (!empScreen.classList.contains('hidden')) {
+      loadData(true);
+    }
+  }, 30000);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════════════════════ */
+loadData().then(startAutoRefresh);
+</script>
+</body>
+</html>

@@ -1,0 +1,2708 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hagemann — Admin</title>
+<style>
+:root {
+  --blue: #3B82F6; --green: #10B981; --amber: #F59E0B; --red: #EF4444; --purple: #8B5CF6;
+  --bg: #f0f4f8; --card: #ffffff; --text: #1e293b; --muted: #64748b;
+  --border: #e2e8f0; --radius: 12px;
+  --header-bg: #0f172a;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* NAV */
+nav {
+  background: var(--header-bg); color: white;
+  padding: 0 24px; display: flex; align-items: center; height: 56px;
+  gap: 4px; position: sticky; top: 0; z-index: 100;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+nav .logo { font-weight: 700; font-size: 17px; margin-right: 16px; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+nav .logo-badge { background: var(--blue); color: white; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.nav-btn {
+  color: #94a3b8; text-decoration: none; font-size: 13.5px; font-weight: 500;
+  padding: 6px 12px; border-radius: 6px; border: none; background: transparent;
+  cursor: pointer; transition: .15s; white-space: nowrap;
+}
+.nav-btn:hover { color: white; background: rgba(255,255,255,.08); }
+.nav-btn.active { color: white; background: var(--blue); }
+.nav-spacer { flex: 1; }
+.nav-back { color: #64748b; font-size: 12px; text-decoration: none; padding: 4px 10px; border-radius: 6px; }
+.nav-back:hover { color: #94a3b8; }
+
+/* LAYOUT */
+.page { display: none; }
+.page.active { display: block; }
+.container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.page-header h1 { font-size: 22px; font-weight: 700; }
+.page-header p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+/* GRID */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+@media (max-width: 900px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+/* CARDS */
+.card { background: var(--card); border-radius: var(--radius); padding: 24px; border: 1px solid var(--border); }
+.card + .card { margin-top: 0; }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.card-title { font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.card-icon { font-size: 20px; }
+
+/* STAT CARDS */
+.stat-card { background: var(--card); border-radius: var(--radius); padding: 20px 24px; border: 1px solid var(--border); }
+.stat-card .stat-label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+.stat-card .stat-value { font-size: 32px; font-weight: 700; line-height: 1; }
+.stat-card .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.stat-card.accent-green { border-left: 4px solid var(--green); }
+.stat-card.accent-blue { border-left: 4px solid var(--blue); }
+.stat-card.accent-amber { border-left: 4px solid var(--amber); }
+.stat-card.accent-purple { border-left: 4px solid var(--purple); }
+
+/* TABLES */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th {
+  text-align: left; padding: 10px 14px;
+  border-bottom: 2px solid var(--border);
+  color: var(--muted); font-weight: 600; font-size: 12px;
+  text-transform: uppercase; letter-spacing: .5px;
+  cursor: pointer; user-select: none; white-space: nowrap;
+}
+th:hover { color: var(--text); }
+th .sort-icon { opacity: .4; margin-left: 4px; font-size: 11px; }
+th.sort-asc .sort-icon::after { content: '▲'; opacity: 1; }
+th.sort-desc .sort-icon::after { content: '▼'; opacity: 1; }
+th .sort-icon::after { content: '⇅'; }
+td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: #f8fafc; }
+.table-foot td { font-weight: 700; background: #f8fafc; border-top: 2px solid var(--border); }
+
+/* BADGES */
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.badge-green { background: #d1fae5; color: #065f46; }
+.badge-amber { background: #fef3c7; color: #92400e; }
+.badge-red { background: #fee2e2; color: #991b1b; }
+.badge-blue { background: #dbeafe; color: #1e40af; }
+.badge-purple { background: #ede9fe; color: #5b21b6; }
+.badge-gray { background: #f1f5f9; color: #475569; }
+
+/* BUTTONS */
+.btn { padding: 8px 16px; border-radius: 8px; border: none; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: .15s; display: inline-flex; align-items: center; gap: 6px; line-height: 1; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+.btn-primary { background: var(--blue); color: white; }
+.btn-primary:hover:not(:disabled) { background: #2563eb; }
+.btn-success { background: var(--green); color: white; }
+.btn-success:hover:not(:disabled) { background: #059669; }
+.btn-danger { background: var(--red); color: white; }
+.btn-danger:hover:not(:disabled) { background: #dc2626; }
+.btn-warning { background: var(--amber); color: white; }
+.btn-warning:hover:not(:disabled) { background: #d97706; }
+.btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn-outline:hover:not(:disabled) { background: #f1f5f9; }
+
+/* FORMS */
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+.form-control {
+  width: 100%; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 14px; background: white;
+  transition: .15s; outline: none; font-family: inherit;
+}
+.form-control:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+.form-control:disabled { background: #f8fafc; color: var(--muted); }
+.form-row { display: grid; gap: 16px; }
+.form-row.cols-2 { grid-template-columns: 1fr 1fr; }
+.form-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.form-row.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+/* TABS */
+.tab-bar { display: flex; gap: 4px; margin-bottom: 20px; background: #f1f5f9; padding: 4px; border-radius: 10px; width: fit-content; }
+.tab-btn { padding: 7px 18px; border-radius: 7px; border: none; font-size: 13.5px; font-weight: 500; cursor: pointer; background: transparent; color: var(--muted); transition: .15s; }
+.tab-btn.active { background: white; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+/* BAR CHART */
+.bar-chart { display: flex; flex-direction: column; gap: 10px; }
+.bar-row { display: flex; align-items: center; gap: 12px; }
+.bar-label { width: 130px; font-size: 13px; font-weight: 500; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+.bar-track { flex: 1; height: 30px; background: #f1f5f9; border-radius: 6px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; padding: 0 10px; color: white; font-size: 12px; font-weight: 600; min-width: 40px; transition: width .5s ease; }
+.bar-value { width: 70px; font-size: 13px; font-weight: 600; text-align: right; flex-shrink: 0; }
+
+/* LOADING / EMPTY */
+.loading { padding: 40px; text-align: center; color: var(--muted); font-size: 14px; }
+.loading::after { content: ''; display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; margin-left: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { padding: 40px; text-align: center; color: var(--muted); font-size: 14px; }
+
+/* MODALS */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200; padding: 20px;
+}
+.modal-overlay.hidden { display: none; }
+.modal {
+  background: white; border-radius: 16px; padding: 28px;
+  max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+}
+.modal-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+.modal-header h2 { font-size: 18px; font-weight: 700; }
+.modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--muted); padding: 0; line-height: 1; }
+.modal-close:hover { color: var(--text); }
+.modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+
+/* ALERT */
+.alert { padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.alert-success { background: #d1fae5; color: #065f46; }
+.alert-error { background: #fee2e2; color: #991b1b; }
+.alert-info { background: #dbeafe; color: #1e40af; }
+.alert.hidden { display: none; }
+
+/* STUNDENKONTO specific */
+.sk-positive { color: var(--green); font-weight: 700; }
+.sk-negative { color: var(--red); font-weight: 700; }
+.sk-kappung { color: var(--amber); }
+.sk-summary-row td { background: #f0fdf4; font-weight: 700; border-top: 2px solid var(--green); }
+
+/* SALDO OVERVIEW */
+.saldo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 16px; }
+.saldo-card { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.saldo-card .emp-name { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+.saldo-card .saldo-row { display: flex; justify-content: space-between; font-size: 13px; margin-top: 4px; }
+.saldo-card .saldo-row .key { color: var(--muted); }
+.saldo-card .saldo-row .val { font-weight: 600; }
+.saldo-card .saldo-big { font-size: 28px; font-weight: 700; color: var(--green); }
+.saldo-card .saldo-big.warn { color: var(--amber); }
+
+/* VACATION STATUS */
+.status-PENDIENTE { }
+.status-PROPUESTA { }
+.status-APROBADA { }
+.status-RECHAZADA { }
+
+/* Pill counters */
+.pill { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; background: var(--red); color: white; border-radius: 10px; font-size: 11px; font-weight: 700; padding: 0 6px; margin-left: 6px; }
+
+/* Dividers */
+hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+/* HIDDEN */
+.hidden { display: none !important; }
+
+/* ===== SCHICHTPLANUNG ===== */
+.shift-wrap { overflow-x: auto; }
+.shift-grid { width: 100%; border-collapse: collapse; font-size: 12px; }
+.shift-grid th { background: var(--header-bg); color: #94a3b8; padding: 7px 5px; text-align: center; font-size: 11px; font-weight: 600; letter-spacing: .3px; white-space: nowrap; }
+.shift-grid th.col-name { text-align: left; padding-left: 12px; min-width: 160px; }
+.shift-grid td { padding: 3px; border: 1px solid #f1f5f9; text-align: center; vertical-align: middle; }
+.shift-grid tr:hover td { background: #f8fafc; }
+.shift-grid td.col-name { text-align: left; padding: 6px 12px; font-weight: 600; font-size: 13px; white-space: nowrap; background: white; border-right: 2px solid var(--border); }
+.shift-cell { min-width: 36px; min-height: 28px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: white; transition: .1s; padding: 2px 4px; }
+.shift-cell:hover { filter: brightness(1.15); transform: scale(1.05); }
+.shift-cell.empty-cell { background: #f1f5f9; color: #94a3b8; font-weight: 400; font-size: 11px; }
+.shift-cell.empty-cell:hover { background: #e2e8f0; }
+.shift-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.shift-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
+.shift-legend-dot { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; }
+
+/* ===== KORREKTUREN ===== */
+.diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 12px 0; }
+.diff-box { padding: 14px; border-radius: 8px; border: 1px solid var(--border); }
+.diff-box.original { background: #fef9f9; border-color: #fca5a5; }
+.diff-box.requested { background: #f0fdf4; border-color: #6ee7b7; }
+.diff-box h4 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 10px; }
+.diff-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.diff-row:last-child { border-bottom: none; }
+.diff-row .key { color: var(--muted); }
+.diff-row .val { font-weight: 600; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ===== NAVIGATION ===== -->
+<nav>
+  <div class="logo">⚙ Hagemann <span class="logo-badge">Admin</span></div>
+  <button class="nav-btn active" onclick="showPage('dashboard')" id="nav-dashboard">📊 Dashboard</button>
+  <button class="nav-btn" onclick="showPage('berichte')" id="nav-berichte">📈 Berichte</button>
+  <button class="nav-btn" onclick="showPage('feiertage')" id="nav-feiertage">📅 Feiertage</button>
+  <button class="nav-btn" onclick="showPage('urlaub')" id="nav-urlaub">🌴 Urlaub</button>
+  <button class="nav-btn" onclick="showPage('stundenkonto')" id="nav-stundenkonto">⏱ Stundenkonto</button>
+  <button class="nav-btn" onclick="showPage('schichtplanung')" id="nav-schichtplanung">🗓 Schichtplanung</button>
+  <button class="nav-btn" onclick="showPage('korrekturen')" id="nav-korrekturen">📝 Korrekturen</button>
+  <button class="nav-btn" onclick="showPage('genehmigungen')" id="nav-genehmigungen">✅ Genehmigungen<span id="pill-genehmigungen" class="pill hidden">0</span></button>
+  <button class="nav-btn" onclick="showPage('export')" id="nav-export">📥 Export</button>
+  <button class="nav-btn" onclick="showPage('mitarbeiter')" id="nav-mitarbeiter">👥 Mitarbeiter</button>
+  <div class="nav-spacer"></div>
+  <a class="nav-back" href="index.html">← Zurück zur App</a>
+</nav>
+
+<!-- ===== GLOBAL ALERTS ===== -->
+<div id="globalAlert" class="hidden" style="margin:16px 24px 0; max-width:1280px;"></div>
+
+<!-- ===== PAGE: DASHBOARD ===== -->
+<div id="page-dashboard" class="page active">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Dashboard</h1><p>Übersicht in Echtzeit</p></div>
+      <button class="btn btn-outline" onclick="loadDashboard()">🔄 Aktualisieren</button>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="grid-4" id="dashStats" style="margin-bottom:20px">
+      <div class="stat-card accent-green"><div class="stat-label">Anwesend</div><div class="stat-value" id="ds-present">—</div><div class="stat-sub">von <span id="ds-total">—</span> Mitarbeitern</div></div>
+      <div class="stat-card accent-blue"><div class="stat-label">Mitarbeiter gesamt</div><div class="stat-value" id="ds-emps">—</div><div class="stat-sub">Aktiv</div></div>
+      <div class="stat-card accent-amber"><div class="stat-label">Kostenstellen</div><div class="stat-value" id="ds-ccs">—</div><div class="stat-sub">Aktiv</div></div>
+      <div class="stat-card accent-purple"><div class="stat-label">Stunden diesen Monat</div><div class="stat-value" id="ds-hours">—</div><div class="stat-sub" id="ds-hours-range">—</div></div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:20px; gap:20px">
+      <!-- Present employees -->
+      <div class="card" style="grid-column: 1 / -1">
+        <div class="card-header">
+          <span class="card-title">🟢 Aktuell anwesend</span>
+          <span id="dash-present-badge" class="badge badge-green">0 Personen</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nr.</th><th>Name</th><th>Eingang</th><th>Kostenstelle</th><th>Dauer</th>
+              </tr>
+            </thead>
+            <tbody id="dashPresentTable"></tbody>
+          </table>
+          <div id="dashNobody" class="empty hidden">Niemand anwesend</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CC bar chart -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📊 Stunden nach Kostenstelle (diesen Monat)</span>
+        <span id="dashCCTotal" class="badge badge-blue">—</span>
+      </div>
+      <div class="bar-chart" id="dashCCChart"><div class="loading">Lade Daten</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAGE: BERICHTE ===== -->
+<div id="page-berichte" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Berichte</h1><p>Stundenauswertung nach Zeitraum</p></div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap">
+        <div class="tab-bar">
+          <button class="tab-btn active" onclick="switchReportTab('cc')" id="rtab-cc">Nach Kostenstelle</button>
+          <button class="tab-btn" onclick="switchReportTab('emp')" id="rtab-emp">Nach Mitarbeiter</button>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+          <label style="font-size:13px; color:var(--muted); font-weight:600">Von</label>
+          <input type="date" id="rptFrom" class="form-control" style="width:auto">
+          <label style="font-size:13px; color:var(--muted); font-weight:600">Bis</label>
+          <input type="date" id="rptTo" class="form-control" style="width:auto">
+          <button class="btn btn-primary" onclick="loadReport()">Laden</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="reportContent"><div class="empty">Zeitraum wählen und auf <b>Laden</b> klicken</div></div>
+  </div>
+</div>
+
+<!-- ===== PAGE: FEIERTAGE ===== -->
+<div id="page-feiertage" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Feiertage</h1><p>Verwaltung der gesetzlichen Feiertage</p></div>
+      <button class="btn btn-primary" onclick="openFeiertagModal()">+ Feiertag hinzufügen</button>
+    </div>
+
+    <!-- Check date -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title" style="margin-bottom:12px">📅 Datum prüfen</div>
+      <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Datum prüfen</label>
+          <input type="date" id="checkDate" class="form-control" style="width:200px">
+        </div>
+        <button class="btn btn-outline" onclick="checkFeiertag()">Prüfen</button>
+        <div id="checkResult" style="font-size:14px; padding:8px 0;"></div>
+      </div>
+    </div>
+
+    <!-- Year selector -->
+    <div style="display:flex; gap:10px; align-items:center; margin-bottom:16px">
+      <select id="feiertageYear" class="form-control" style="width:120px" onchange="loadFeiertage()"></select>
+      <span id="feiertageBadge" class="badge badge-blue">—</span>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table id="feiertageTable">
+          <thead>
+            <tr>
+              <th onclick="sortTable('feiertageTable',0)" data-col="0">Datum <span class="sort-icon"></span></th>
+              <th onclick="sortTable('feiertageTable',1)" data-col="1">Name <span class="sort-icon"></span></th>
+              <th onclick="sortTable('feiertageTable',2)" data-col="2">Bundesland <span class="sort-icon"></span></th>
+              <th onclick="sortTable('feiertageTable',3)" data-col="3">Typ <span class="sort-icon"></span></th>
+              <th onclick="sortTable('feiertageTable',4)" data-col="4">Status <span class="sort-icon"></span></th>
+              <th>Aktion</th>
+            </tr>
+          </thead>
+          <tbody id="feiertageTbody"></tbody>
+        </table>
+        <div id="feiertageLeer" class="empty hidden">Keine Feiertage vorhanden</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAGE: URLAUB ===== -->
+<div id="page-urlaub" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Urlaub</h1><p>Urlaubsanträge und Salden</p></div>
+      <div style="display:flex; gap:8px; align-items:center">
+        <select id="urlaubYear" class="form-control" style="width:100px" onchange="loadUrlaub()"></select>
+        <button class="btn btn-primary" onclick="openUrlaubModal()">+ Neuer Antrag</button>
+      </div>
+    </div>
+
+    <!-- Sub-tabs -->
+    <div class="tab-bar" style="margin-bottom:20px">
+      <button class="tab-btn active" onclick="switchUrlaubTab('antraege')" id="utab-antraege">Anträge</button>
+      <button class="tab-btn" onclick="switchUrlaubTab('saldo')" id="utab-saldo">Salden</button>
+    </div>
+
+    <!-- ANTRÄGE -->
+    <div id="urlaubAntraege">
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+          <label style="font-size:13px; color:var(--muted); font-weight:600">Filter:</label>
+          <select id="urlaubStatusFilter" class="form-control" style="width:auto" onchange="filterUrlaub()">
+            <option value="">Alle Status</option>
+            <option value="PENDIENTE">Ausstehend</option>
+            <option value="PROPUESTA">Vorgeschlagen</option>
+            <option value="APROBADA">Genehmigt</option>
+            <option value="RECHAZADA">Abgelehnt</option>
+          </select>
+          <span id="urlaubPending" class="badge badge-amber" style="margin-left:8px">—</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table id="urlaubTable">
+            <thead>
+              <tr>
+                <th onclick="sortTable('urlaubTable',0)" data-col="0">Mitarbeiter <span class="sort-icon"></span></th>
+                <th onclick="sortTable('urlaubTable',1)" data-col="1">Von <span class="sort-icon"></span></th>
+                <th onclick="sortTable('urlaubTable',2)" data-col="2">Bis <span class="sort-icon"></span></th>
+                <th onclick="sortTable('urlaubTable',3)" data-col="3">Tage <span class="sort-icon"></span></th>
+                <th onclick="sortTable('urlaubTable',4)" data-col="4">Status <span class="sort-icon"></span></th>
+                <th>Genehmigt von</th>
+                <th>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody id="urlaubTbody"></tbody>
+          </table>
+          <div id="urlaubLeer" class="empty hidden">Keine Anträge vorhanden</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SALDEN -->
+    <div id="urlaubSaldo" class="hidden">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:12px">Urlaubssaldo pro Mitarbeiter</div>
+        <div id="saldoGrid" class="saldo-grid"><div class="loading">Lade Daten</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAGE: STUNDENKONTO ===== -->
+<div id="page-stundenkonto" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Stundenkonto</h1><p>Monatliche Stundenbilanz pro Mitarbeiter</p></div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Mitarbeiter</label>
+          <select id="skEmpSelect" class="form-control" style="min-width:220px" onchange="loadStundenkonto()">
+            <option value="">— bitte wählen —</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Jahr</label>
+          <select id="skYear" class="form-control" style="width:100px" onchange="loadStundenkonto()"></select>
+        </div>
+      </div>
+    </div>
+
+    <div id="skContent"><div class="empty">Mitarbeiter und Jahr auswählen</div></div>
+  </div>
+</div>
+
+<!-- ===== PAGE: MITARBEITER ===== -->
+<div id="page-mitarbeiter" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Mitarbeiter</h1><p>Übersicht aller Mitarbeiter</p></div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+        <input type="text" id="empSearch" class="form-control" placeholder="Suchen…" style="width:200px" oninput="filterEmployees()">
+        <select id="empStatusFilter" class="form-control" style="width:auto" onchange="filterEmployees()">
+          <option value="">Alle</option>
+          <option value="aktiv">Aktiv</option>
+          <option value="inaktiv">Inaktiv</option>
+        </select>
+        <button class="btn btn-primary" onclick="openNewEmpModal()">+ Neuer Mitarbeiter</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table id="empTable">
+          <thead>
+            <tr>
+              <th onclick="sortTable('empTable',0)" data-col="0">Nr. <span class="sort-icon"></span></th>
+              <th onclick="sortTable('empTable',1)" data-col="1">Name <span class="sort-icon"></span></th>
+              <th onclick="sortTable('empTable',2)" data-col="2">Gruppe <span class="sort-icon"></span></th>
+              <th onclick="sortTable('empTable',3)" data-col="3">Std./Monat <span class="sort-icon"></span></th>
+              <th onclick="sortTable('empTable',4)" data-col="4">Status <span class="sort-icon"></span></th>
+              <th>Aktionen</th>
+            </tr>
+          </thead>
+          <tbody id="empTbody"></tbody>
+        </table>
+        <div id="empLeer" class="empty hidden">Keine Mitarbeiter gefunden</div>
+      </div>
+      <div id="empCount" style="padding:12px 14px; font-size:12px; color:var(--muted); border-top:1px solid var(--border)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAGE: SCHICHTPLANUNG ===== -->
+<div id="page-schichtplanung" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Schichtplanung</h1><p>Wöchentliche Schichtzuweisung</p></div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+        <select id="spGruppe" class="form-control" style="width:auto" onchange="renderSchichtplan()">
+          <option value="">Alle Gruppen</option>
+        </select>
+        <button class="btn btn-outline" onclick="navigateWeek(-1)">← Vorherige Woche</button>
+        <span id="spWeekLabel" style="font-weight:600; font-size:14px; min-width:160px; text-align:center; display:inline-block"></span>
+        <button class="btn btn-outline" onclick="navigateWeek(1)">Nächste Woche →</button>
+        <button class="btn btn-primary" onclick="openBulkModal()">📋 Woche kopieren</button>
+      </div>
+    </div>
+
+    <div class="card" style="overflow:hidden; padding:0">
+      <div class="shift-wrap">
+        <table class="shift-grid" id="schichtGrid">
+          <thead id="schichtGridHead"></thead>
+          <tbody id="schichtGridBody"></tbody>
+        </table>
+        <div id="schichtLeer" class="empty hidden">Keine Mitarbeiter gefunden</div>
+        <div id="schichtLoading" class="loading" style="display:none">Lade Schichtplan</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px">
+        <span class="card-title">Legende</span>
+        <button class="btn btn-sm btn-outline" onclick="openTurnoModelModal()">⚙ Modelle verwalten</button>
+      </div>
+      <div class="shift-legend" id="schichtLegend"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAGE: KORREKTUREN ===== -->
+<div id="page-korrekturen" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Korrekturen</h1><p>Stempelkorrektur-Anträge</p></div>
+      <button class="btn btn-outline" onclick="loadKorrekturen()">🔄 Aktualisieren</button>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+        <label style="font-size:13px; color:var(--muted); font-weight:600">Filter:</label>
+        <select id="korrStatusFilter" class="form-control" style="width:auto" onchange="filterKorrekturen()">
+          <option value="">Alle Status</option>
+          <option value="PENDIENTE">Ausstehend</option>
+          <option value="PROPUESTA">Vorgeschlagen</option>
+          <option value="APROBADA">Genehmigt</option>
+          <option value="RECHAZADA">Abgelehnt</option>
+        </select>
+        <select id="korrEmpFilter" class="form-control" style="width:auto" onchange="filterKorrekturen()">
+          <option value="">Alle Mitarbeiter</option>
+        </select>
+        <span id="korrPendingBadge" class="badge badge-amber">—</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table id="korrTable">
+          <thead>
+            <tr>
+              <th>Mitarbeiter</th>
+              <th>Original Ein</th>
+              <th>Original Aus</th>
+              <th>Beantragt Ein</th>
+              <th>Beantragt Aus</th>
+              <th>Grund</th>
+              <th>Status</th>
+              <th>Aktionen</th>
+            </tr>
+          </thead>
+          <tbody id="korrTbody"></tbody>
+        </table>
+        <div id="korrLeer" class="empty hidden">Keine Korrekturen gefunden</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAGE: GENEHMIGUNGEN ===== -->
+<div id="page-genehmigungen" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Genehmigungen</h1><p>Alle ausstehenden Genehmigungen</p></div>
+      <button class="btn btn-outline" onclick="loadGenehmigungen()">🔄 Aktualisieren</button>
+    </div>
+    <div id="genehmigungContent">
+      <div class="loading">Lade ausstehende Genehmigungen</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAGE: EXPORT ===== -->
+<div id="page-export" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Export</h1><p>Datenexport als Excel-Datei</p></div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title" style="margin-bottom:16px">📅 Zeitraum auswählen</div>
+      <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Monat</label>
+          <select id="exportMonth" class="form-control" style="width:140px">
+            <option value="1">Januar</option>
+            <option value="2">Februar</option>
+            <option value="3">März</option>
+            <option value="4">April</option>
+            <option value="5">Mai</option>
+            <option value="6">Juni</option>
+            <option value="7">Juli</option>
+            <option value="8">August</option>
+            <option value="9">September</option>
+            <option value="10">Oktober</option>
+            <option value="11">November</option>
+            <option value="12">Dezember</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Jahr</label>
+          <select id="exportYear" class="form-control" style="width:100px"></select>
+        </div>
+        <button class="btn btn-outline" onclick="loadExportPreview()">👁 Vorschau laden</button>
+        <button class="btn btn-success" onclick="downloadExcel()" id="btnDownloadExcel" disabled>📥 Excel herunterladen</button>
+      </div>
+    </div>
+
+    <div id="exportStatus" class="hidden card" style="margin-bottom:20px">
+      <div class="card-title" style="margin-bottom:12px">Status</div>
+      <div id="exportStatusContent"></div>
+    </div>
+
+    <div id="exportPreview" class="hidden card">
+      <div class="card-header">
+        <span class="card-title" id="exportPreviewTitle">Vorschau</span>
+        <span id="exportPreviewBadge" class="badge badge-blue">—</span>
+      </div>
+      <div class="table-wrap" id="exportPreviewTable"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: FEIERTAG ===== -->
+<div id="feiertagModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Feiertag hinzufügen</h2>
+      <button class="modal-close" onclick="closeModal('feiertagModal')">✕</button>
+    </div>
+    <div id="feiertagModalAlert"></div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label>Datum *</label>
+        <input type="date" id="ftDatum" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>Typ *</label>
+        <select id="ftTipo" class="form-control">
+          <option value="NACIONAL">NACIONAL</option>
+          <option value="REGIONAL">REGIONAL</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Name *</label>
+      <input type="text" id="ftNombre" class="form-control" placeholder="z.B. Neujahr">
+    </div>
+    <div class="form-group">
+      <label>Bundesland</label>
+      <select id="ftBundesland" class="form-control">
+        <option value="DE">DE — Deutschland (alle Bundesländer)</option>
+        <option value="SN" selected>SN — Sachsen</option>
+        <option value="BY">BY — Bayern</option>
+        <option value="BE">BE — Berlin</option>
+        <option value="BB">BB — Brandenburg</option>
+        <option value="HB">HB — Bremen</option>
+        <option value="HH">HH — Hamburg</option>
+        <option value="HE">HE — Hessen</option>
+        <option value="MV">MV — Mecklenburg-Vorpommern</option>
+        <option value="NI">NI — Niedersachsen</option>
+        <option value="NW">NW — Nordrhein-Westfalen</option>
+        <option value="RP">RP — Rheinland-Pfalz</option>
+        <option value="SL">SL — Saarland</option>
+        <option value="ST">ST — Sachsen-Anhalt</option>
+        <option value="SH">SH — Schleswig-Holstein</option>
+        <option value="TH">TH — Thüringen</option>
+        <option value="BW">BW — Baden-Württemberg</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('feiertagModal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="saveFeiertag()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: URLAUB ===== -->
+<div id="urlaubModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Neuer Urlaubsantrag</h2>
+      <button class="modal-close" onclick="closeModal('urlaubModal')">✕</button>
+    </div>
+    <div id="urlaubModalAlert"></div>
+    <div class="form-group">
+      <label>Mitarbeiter *</label>
+      <select id="uaEmp" class="form-control" onchange="loadEmpSaldoPreview()">
+        <option value="">— bitte wählen —</option>
+      </select>
+    </div>
+    <div id="empSaldoPreview" style="margin-bottom:16px; display:none">
+      <div class="alert alert-info" id="empSaldoInfo"></div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label>Von *</label>
+        <input type="date" id="uaVon" class="form-control" onchange="calcVacDays()">
+      </div>
+      <div class="form-group">
+        <label>Bis *</label>
+        <input type="date" id="uaBis" class="form-control" onchange="calcVacDays()">
+      </div>
+    </div>
+    <div id="vacDaysPreview" style="margin-bottom:16px; font-size:13px; color:var(--muted)"></div>
+    <div class="form-group">
+      <label>Bemerkung</label>
+      <input type="text" id="uaMotivo" class="form-control" placeholder="Optional">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('urlaubModal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="saveUrlaub()">Antrag erstellen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: REJECT ===== -->
+<div id="rejectModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h2>Antrag ablehnen</h2>
+      <button class="modal-close" onclick="closeModal('rejectModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Begründung</label>
+      <input type="text" id="rejectReason" class="form-control" placeholder="Grund der Ablehnung">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('rejectModal')">Abbrechen</button>
+      <button class="btn btn-danger" onclick="confirmReject()">Ablehnen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: TURNO MODELL ===== -->
+<div id="turnoModelModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="turnoModelModalTitle">Schichtmodell hinzufügen</h2>
+      <button class="modal-close" onclick="closeModal('turnoModelModal')">✕</button>
+    </div>
+    <div id="turnoModelModalAlert" class="hidden"></div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label>Kürzel *</label>
+        <input type="text" id="tmCodigo" class="form-control" placeholder="z.B. F, S, N" maxlength="5">
+      </div>
+      <div class="form-group">
+        <label>Farbe</label>
+        <input type="color" id="tmColor" class="form-control" value="#3B82F6" style="height:38px; padding:2px 4px">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Name *</label>
+      <input type="text" id="tmNombre" class="form-control" placeholder="z.B. Frühschicht">
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label>Beginn</label>
+        <input type="time" id="tmHoraInicio" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>Ende</label>
+        <input type="time" id="tmHoraFin" class="form-control">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Stunden pro Tag</label>
+      <input type="number" id="tmHoras" class="form-control" placeholder="8" min="0" max="24" step="0.5">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('turnoModelModal')">Abbrechen</button>
+      <button class="btn btn-danger btn-sm" id="tmDeleteBtn" onclick="deleteTurnoModel()" style="margin-right:auto;display:none">🗑 Löschen</button>
+      <button class="btn btn-primary" onclick="saveTurnoModel()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: WOCHE KOPIEREN (BULK) ===== -->
+<div id="bulkTurnoModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <h2>Schichten zuweisen</h2>
+      <button class="modal-close" onclick="closeModal('bulkTurnoModal')">✕</button>
+    </div>
+    <div id="bulkTurnoAlert" class="hidden"></div>
+    <div class="form-group">
+      <label>Schichtmodell *</label>
+      <select id="bulkModelo" class="form-control">
+        <option value="">— bitte wählen —</option>
+      </select>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label>Von *</label>
+        <input type="date" id="bulkVon" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>Bis *</label>
+        <input type="date" id="bulkBis" class="form-control">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Mitarbeiter (leer = alle)</label>
+      <div id="bulkEmpList" style="max-height:180px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:4px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('bulkTurnoModal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="saveBulkTurno()">Zuweisen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: KORREKTUR DETAIL ===== -->
+<div id="korrDetailModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <h2>Korrektur-Antrag</h2>
+      <button class="modal-close" onclick="closeModal('korrDetailModal')">✕</button>
+    </div>
+    <div id="korrDetailContent"><div class="loading">Lade Details</div></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('korrDetailModal')">Schließen</button>
+      <button class="btn btn-danger" id="korrDetailRejectBtn" onclick="rejectKorrekturFromDetail()">✗ Ablehnen</button>
+      <button class="btn btn-success" id="korrDetailApproveBtn" onclick="approveKorrekturFromDetail()">✓ Genehmigen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: NEUER MITARBEITER ===== -->
+<div id="newEmpModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <h2 id="newEmpModalTitle">Neuer Mitarbeiter</h2>
+      <button class="modal-close" onclick="closeModal('newEmpModal')">✕</button>
+    </div>
+    <div id="newEmpModalAlert" class="hidden"></div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label>Vorname *</label>
+        <input type="text" id="neNombre" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>Nachname</label>
+        <input type="text" id="neApellido" class="form-control">
+      </div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label>Mitarbeiter-Nr. *</label>
+        <input type="number" id="neIdNummer" class="form-control" min="1">
+      </div>
+      <div class="form-group">
+        <label>Stunden/Monat *</label>
+        <input type="number" id="neMonthlyHours" class="form-control" value="160" min="1">
+      </div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label>PIN (4-stellig)</label>
+        <input type="text" id="nePin" class="form-control" maxlength="4" placeholder="z.B. 1234">
+      </div>
+      <div class="form-group">
+        <label>NFC Tag</label>
+        <input type="text" id="neNfc" class="form-control" placeholder="Optional">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Gruppe</label>
+      <select id="neGrupo" class="form-control">
+        <option value="">— keine —</option>
+      </select>
+    </div>
+    <input type="hidden" id="neEditId">
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('newEmpModal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="saveEmployee()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: NFC ÄNDERN ===== -->
+<div id="nfcModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h2>NFC Tag ändern</h2>
+      <button class="modal-close" onclick="closeModal('nfcModal')">✕</button>
+    </div>
+    <div id="nfcModalAlert" class="hidden"></div>
+    <p style="font-size:13px; color:var(--muted); margin-bottom:16px">Mitarbeiter: <b id="nfcEmpName">—</b></p>
+    <div class="form-group">
+      <label>Neuer NFC Tag *</label>
+      <input type="text" id="nfcTagValue" class="form-control" placeholder="NFC Tag ID eingeben">
+    </div>
+    <input type="hidden" id="nfcEmpId">
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('nfcModal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="saveNfc()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =====================================================================
+// API SETUP
+// =====================================================================
+const basePath = window.location.pathname
+  .replace(/\/admin\.html.*$/, '')
+  .replace(/\/static\/?$/, '')
+  .replace(/\/+$/, '');
+const API = window.location.origin + basePath + '/api/v1';
+
+let employees = [], costCenters = [], allFeiertage = [], allUrlaub = [];
+let rejectContext = { type: 'urlaub', id: null, currentStatus: null };
+let reportTab = 'cc';
+let urlaubTab = 'antraege';
+
+// =====================================================================
+// UTILS
+// =====================================================================
+async function api(path, opts = {}) {
+  const url = API + path;
+  const r = await fetch(url, {
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    ...opts
+  });
+  if (r.status === 204) return null;
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || data.message || `HTTP ${r.status}`);
+  return data;
+}
+
+function fmtDate(dateStr) {
+  if (!dateStr) return '—';
+  // Convert UTC datetime to local date
+  const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function fmtDateTime(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
+  return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtTime(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
+  return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+}
+
+function elapsed(dateStr) {
+  const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
+  const mins = Math.round((Date.now() - d) / 60000);
+  if (mins < 60) return `${mins} Min.`;
+  return `${Math.floor(mins/60)}h ${mins % 60}min`;
+}
+
+function thisMonthRange() {
+  const now = new Date();
+  const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,'0');
+  const last = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  return { from: `${y}-${m}-01`, to: `${y}-${m}-${last}` };
+}
+
+function statusBadge(estado) {
+  const map = {
+    PENDIENTE: ['badge-amber', 'Ausstehend'],
+    PROPUESTA: ['badge-blue', 'Vorgeschlagen'],
+    APROBADA:  ['badge-green', 'Genehmigt'],
+    RECHAZADA: ['badge-red', 'Abgelehnt']
+  };
+  const [cls, label] = map[estado] || ['badge-gray', estado];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function showGlobalAlert(type, msg, autoHide = 4000) {
+  const el = document.getElementById('globalAlert');
+  el.className = `alert alert-${type}`;
+  el.textContent = msg;
+  if (autoHide) setTimeout(() => el.classList.add('hidden'), autoHide);
+}
+
+function showModalAlert(containerId, type, msg) {
+  const el = document.getElementById(containerId);
+  el.className = `alert alert-${type}`;
+  el.textContent = msg;
+  el.style.display = 'flex';
+}
+
+function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+function populateYearSelect(selectId, defaultYear) {
+  const el = document.getElementById(selectId);
+  const now = new Date().getFullYear();
+  el.innerHTML = '';
+  for (let y = now + 1; y >= now - 3; y--) {
+    el.innerHTML += `<option value="${y}" ${y === (defaultYear || now) ? 'selected' : ''}>${y}</option>`;
+  }
+}
+
+// =====================================================================
+// NAVIGATION
+// =====================================================================
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.getElementById('nav-' + page).classList.add('active');
+  document.getElementById('globalAlert').classList.add('hidden');
+
+  if (page === 'dashboard') loadDashboard();
+  if (page === 'berichte') initBerichte();
+  if (page === 'feiertage') initFeiertage();
+  if (page === 'urlaub') loadUrlaub();
+  if (page === 'stundenkonto') initStundenkonto();
+  if (page === 'schichtplanung') initSchichtplanung();
+  if (page === 'korrekturen') loadKorrekturen();
+  if (page === 'genehmigungen') loadGenehmigungen();
+  if (page === 'export') initExport();
+  if (page === 'mitarbeiter') renderEmployees();
+}
+
+// =====================================================================
+// INIT
+// =====================================================================
+async function init() {
+  populateYearSelect('feiertageYear');
+  populateYearSelect('urlaubYear');
+  populateYearSelect('skYear');
+  populateYearSelect('exportYear');
+
+  try {
+    const [empRes, ccRes] = await Promise.all([
+      api('/empleados/?activo=true'),
+      api('/centros-coste/')
+    ]);
+    employees = empRes.data || [];
+    costCenters = ccRes.data || [];
+
+    // Populate employee dropdowns
+    populateEmpDropdowns();
+    loadDashboard();
+
+    // Load initial pending count for Genehmigungen badge
+    try {
+      const pendRes = await api('/aprobaciones/pendientes');
+      const pendCount = (pendRes.data || pendRes || []).length;
+      if (pendCount > 0) {
+        const pill = document.getElementById('pill-genehmigungen');
+        pill.textContent = pendCount;
+        pill.classList.remove('hidden');
+      }
+    } catch(e) { /* badge is optional */ }
+
+  } catch(e) {
+    showGlobalAlert('error', 'Fehler beim Laden: ' + e.message, 0);
+  }
+}
+
+function populateEmpDropdowns() {
+  const skSel = document.getElementById('skEmpSelect');
+  skSel.innerHTML = '<option value="">— bitte wählen —</option>';
+  employees.forEach(e => {
+    skSel.innerHTML += `<option value="${e.id}">#${e.id_nummer} ${e.nombre} ${e.apellido||''}</option>`;
+  });
+
+  const uaSel = document.getElementById('uaEmp');
+  uaSel.innerHTML = '<option value="">— bitte wählen —</option>';
+  employees.forEach(e => {
+    uaSel.innerHTML += `<option value="${e.id}">#${e.id_nummer} ${e.nombre} ${e.apellido||''}</option>`;
+  });
+}
+
+// =====================================================================
+// DASHBOARD
+// =====================================================================
+async function loadDashboard() {
+  try {
+    const { from, to } = thisMonthRange();
+    const [openRes, ccRes] = await Promise.all([
+      api('/fichajes/abiertos'),
+      api(`/reportes/resumen-centros-coste?desde=${from}&hasta=${to}`)
+    ]);
+    const open = openRes.data || [];
+    const ccs = ccRes.centros_coste || [];
+
+    // Stats
+    document.getElementById('ds-present').textContent = open.length;
+    document.getElementById('ds-total').textContent = employees.length;
+    document.getElementById('ds-emps').textContent = employees.length;
+    document.getElementById('ds-ccs').textContent = costCenters.length;
+    document.getElementById('ds-hours').textContent = ccRes.total_formateado || '0:00';
+    document.getElementById('ds-hours-range').textContent = `${fmtDate(from)} – ${fmtDate(to)}`;
+
+    // Present table
+    document.getElementById('dash-present-badge').textContent = `${open.length} ${open.length === 1 ? 'Person' : 'Personen'}`;
+    const tbody = document.getElementById('dashPresentTable');
+    const noMsg = document.getElementById('dashNobody');
+    if (open.length === 0) {
+      tbody.innerHTML = '';
+      noMsg.classList.remove('hidden');
+    } else {
+      noMsg.classList.add('hidden');
+      tbody.innerHTML = open.map(f => {
+        const cc = f.centro_coste_actual;
+        const ccData = cc ? costCenters.find(c => c.id === cc.id) : null;
+        const ccBadge = cc
+          ? `<span class="badge" style="background:${ccData?.color||'#ddd'}22;color:${ccData?.color||'#555'};border:1px solid ${ccData?.color||'#ccc'}44">${cc.nombre}</span>`
+          : '—';
+        return `<tr>
+          <td><b>${f.empleado.id_nummer}</b></td>
+          <td>${f.empleado.nombre}</td>
+          <td>${fmtTime(f.entrada)}</td>
+          <td>${ccBadge}</td>
+          <td>${elapsed(f.entrada)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // CC bar chart
+    const maxMin = Math.max(...ccs.map(c => c.total_minutos), 1);
+    document.getElementById('dashCCTotal').textContent = ccRes.total_formateado || '0:00';
+    const chart = document.getElementById('dashCCChart');
+    if (ccs.length === 0) {
+      chart.innerHTML = '<div class="empty">Keine Daten für diesen Monat</div>';
+    } else {
+      chart.innerHTML = ccs.map(cc => `
+        <div class="bar-row">
+          <div class="bar-label" title="${cc.nombre}">${cc.nombre}</div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:${Math.max(cc.total_minutos/maxMin*100,2)}%;background:${cc.color||'var(--blue)'}">
+              ${cc.total_formateado}
+            </div>
+          </div>
+          <div class="bar-value">${cc.empleados_count} MA</div>
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    showGlobalAlert('error', 'Dashboard-Fehler: ' + e.message);
+  }
+}
+
+// =====================================================================
+// BERICHTE
+// =====================================================================
+function initBerichte() {
+  const { from, to } = thisMonthRange();
+  const rFrom = document.getElementById('rptFrom');
+  const rTo   = document.getElementById('rptTo');
+  if (!rFrom.value) rFrom.value = from;
+  if (!rTo.value)   rTo.value = to;
+  loadReport();
+}
+
+function switchReportTab(tab) {
+  reportTab = tab;
+  document.getElementById('rtab-cc').classList.toggle('active', tab === 'cc');
+  document.getElementById('rtab-emp').classList.toggle('active', tab === 'emp');
+  loadReport();
+}
+
+async function loadReport() {
+  const from = document.getElementById('rptFrom').value;
+  const to   = document.getElementById('rptTo').value;
+  if (!from || !to) return;
+
+  const content = document.getElementById('reportContent');
+  content.innerHTML = '<div class="loading">Lade Daten</div>';
+
+  try {
+    if (reportTab === 'cc') {
+      const res = await api(`/reportes/resumen-centros-coste?desde=${from}&hasta=${to}`);
+      const ccs = res.centros_coste || [];
+      const maxMin = Math.max(...ccs.map(c => c.total_minutos), 1);
+
+      // Fetch detail for each CC with hours
+      const detailRequests = ccs.filter(cc => cc.total_minutos > 0).map(cc =>
+        api(`/reportes/horas-centro-coste?centro_coste_id=${cc.id}&desde=${from}&hasta=${to}`)
+          .then(d => ({ ...d, color: cc.color, codigo: cc.codigo }))
+          .catch(() => null)
+      );
+      const details = await Promise.all(detailRequests);
+
+      content.innerHTML = `
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-header">
+            <span class="card-title">Stunden nach Kostenstelle</span>
+            <span class="badge badge-blue">${res.total_formateado || '0:00'} gesamt</span>
+          </div>
+          <div class="bar-chart">
+            ${ccs.length === 0 ? '<div class="empty">Keine Daten</div>' : ccs.map(cc => `
+              <div class="bar-row">
+                <div class="bar-label" title="${cc.nombre}">${cc.nombre}</div>
+                <div class="bar-track">
+                  <div class="bar-fill" style="width:${Math.max(cc.total_minutos/maxMin*100,2)}%;background:${cc.color||'var(--blue)'}">
+                    ${cc.total_formateado}
+                  </div>
+                </div>
+                <div class="bar-value">${cc.empleados_count} MA</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        <div class="grid-2" style="gap:20px">
+          ${details.filter(Boolean).map(det => {
+            const empRows = (det.por_empleado || []).map(e =>
+              `<tr><td><b>${e.id_nummer}</b></td><td>${e.nombre}</td><td>${e.formateado}</td><td>${e.porcentaje}%</td></tr>`
+            ).join('');
+            return `<div class="card">
+              <div class="card-header">
+                <span class="card-title" style="color:${det.color||'var(--blue)'}">● ${det.centro_coste?.nombre||'—'} <small style="opacity:.6;font-size:11px">${det.codigo}</small></span>
+                <span class="badge badge-blue">${det.total_formateado}</span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Nr.</th><th>Name</th><th>Stunden</th><th>%</th></tr></thead>
+                  <tbody>${empRows || '<tr><td colspan="4" class="empty">Keine Einträge</td></tr>'}</tbody>
+                </table>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`;
+
+    } else {
+      // Nach Mitarbeiter
+      const detailReqs = employees.map(emp =>
+        api(`/reportes/horas-empleado?empleado_id=${emp.id}&desde=${from}&hasta=${to}`)
+          .then(d => ({ emp, ...d }))
+          .catch(() => null)
+      );
+      const details = (await Promise.all(detailReqs)).filter(d => d && d.total_minutos > 0);
+
+      if (details.length === 0) {
+        content.innerHTML = '<div class="empty card">Keine Daten für diesen Zeitraum</div>';
+        return;
+      }
+
+      content.innerHTML = `<div class="grid-2" style="gap:20px">${details.map(det => {
+        const ccBars = (det.por_centro_coste || []).map(cc => {
+          const color = costCenters.find(c => c.id === cc.centro_coste_id)?.color || 'var(--blue)';
+          return `<div class="bar-row">
+            <div class="bar-label" title="${cc.nombre}">${cc.nombre}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:${Math.max(cc.porcentaje, 2)}%;background:${color}">${cc.formateado}</div>
+            </div>
+            <div class="bar-value">${cc.porcentaje}%</div>
+          </div>`;
+        }).join('');
+
+        return `<div class="card">
+          <div class="card-header">
+            <span class="card-title">#${det.emp.id_nummer} ${det.emp.nombre} ${det.emp.apellido||''}</span>
+            <span style="font-size:24px;font-weight:700;color:var(--blue)">${det.total_formateado}</span>
+          </div>
+          <div class="bar-chart">${ccBars || '<div class="empty">Keine Kostenstellen</div>'}</div>
+        </div>`;
+      }).join('')}</div>`;
+    }
+  } catch(e) {
+    content.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+// =====================================================================
+// FEIERTAGE
+// =====================================================================
+function initFeiertage() {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('checkDate').value = today;
+  loadFeiertage();
+}
+
+async function loadFeiertage() {
+  const year = document.getElementById('feiertageYear').value;
+  const tbody = document.getElementById('feiertageTbody');
+  const leer  = document.getElementById('feiertageLeer');
+  tbody.innerHTML = '<tr><td colspan="6"><div class="loading">Lade Daten</div></td></tr>';
+
+  try {
+    const res = await api('/festivos/');
+    allFeiertage = (res.data || []).filter(f => f.fecha.startsWith(year));
+
+    document.getElementById('feiertageBadge').textContent = `${allFeiertage.length} Einträge`;
+
+    if (allFeiertage.length === 0) {
+      tbody.innerHTML = '';
+      leer.classList.remove('hidden');
+      return;
+    }
+    leer.classList.add('hidden');
+    renderFeiertageTable();
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="alert alert-error">Fehler: ${e.message}</div></td></tr>`;
+  }
+}
+
+function renderFeiertageTable() {
+  const tbody = document.getElementById('feiertageTbody');
+  tbody.innerHTML = allFeiertage.map(f => `
+    <tr>
+      <td>${f.fecha}</td>
+      <td><b>${f.nombre}</b></td>
+      <td><span class="badge badge-gray">${f.bundesland}</span></td>
+      <td>${f.tipo === 'NACIONAL' ? '<span class="badge badge-blue">National</span>' : '<span class="badge badge-purple">Regional</span>'}</td>
+      <td>${f.activo ? '<span class="badge badge-green">Aktiv</span>' : '<span class="badge badge-gray">Inaktiv</span>'}</td>
+      <td>
+        <button class="btn btn-sm btn-danger" onclick="deleteFeiertag('${f.id}','${f.nombre.replace(/'/g,'\\\'')}')" title="Löschen">🗑</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function checkFeiertag() {
+  const fecha = document.getElementById('checkDate').value;
+  if (!fecha) return;
+  const res = document.getElementById('checkResult');
+  res.textContent = '…';
+  try {
+    const data = await api(`/festivos/check/${fecha}`);
+    if (data.es_festivo) {
+      const names = (data.festivos || []).map(f => f.nombre).join(', ');
+      res.innerHTML = `<span class="badge badge-red">🎉 Feiertag: ${names}</span>`;
+    } else {
+      res.innerHTML = `<span class="badge badge-gray">✓ Kein Feiertag</span>`;
+    }
+  } catch(e) {
+    res.innerHTML = `<span class="badge badge-amber">Fehler: ${e.message}</span>`;
+  }
+}
+
+function openFeiertagModal() {
+  document.getElementById('ftDatum').value = '';
+  document.getElementById('ftNombre').value = '';
+  document.getElementById('ftTipo').value = 'NACIONAL';
+  document.getElementById('ftBundesland').value = 'SN';
+  document.getElementById('feiertagModalAlert').innerHTML = '';
+  document.getElementById('feiertagModalAlert').style.display = 'none';
+  openModal('feiertagModal');
+}
+
+async function saveFeiertag() {
+  const fecha = document.getElementById('ftDatum').value;
+  const nombre = document.getElementById('ftNombre').value.trim();
+  const tipo = document.getElementById('ftTipo').value;
+  const bundesland = document.getElementById('ftBundesland').value;
+
+  if (!fecha || !nombre) {
+    showModalAlert('feiertagModalAlert', 'error', 'Datum und Name sind Pflichtfelder');
+    return;
+  }
+
+  try {
+    await api('/festivos/', { method: 'POST', body: JSON.stringify({ fecha, nombre, bundesland, tipo }) });
+    closeModal('feiertagModal');
+    showGlobalAlert('success', `✓ Feiertag "${nombre}" hinzugefügt`);
+    loadFeiertage();
+  } catch(e) {
+    showModalAlert('feiertagModalAlert', 'error', 'Fehler: ' + e.message);
+  }
+}
+
+async function deleteFeiertag(id, name) {
+  if (!confirm(`Feiertag "${name}" wirklich löschen?`)) return;
+  try {
+    await api(`/festivos/${id}`, { method: 'DELETE' });
+    showGlobalAlert('success', `✓ Feiertag "${name}" gelöscht`);
+    loadFeiertage();
+  } catch(e) {
+    showGlobalAlert('error', 'Fehler: ' + e.message);
+  }
+}
+
+// =====================================================================
+// URLAUB
+// =====================================================================
+function switchUrlaubTab(tab) {
+  urlaubTab = tab;
+  document.getElementById('utab-antraege').classList.toggle('active', tab === 'antraege');
+  document.getElementById('utab-saldo').classList.toggle('active', tab === 'saldo');
+  document.getElementById('urlaubAntraege').classList.toggle('hidden', tab !== 'antraege');
+  document.getElementById('urlaubSaldo').classList.toggle('hidden', tab !== 'saldo');
+  if (tab === 'saldo') loadSaldoGrid();
+}
+
+async function loadUrlaub() {
+  const year = document.getElementById('urlaubYear').value;
+  const tbody = document.getElementById('urlaubTbody');
+  const leer  = document.getElementById('urlaubLeer');
+  tbody.innerHTML = '<tr><td colspan="7"><div class="loading">Lade Daten</div></td></tr>';
+
+  try {
+    const res = await api(`/vacaciones/solicitudes?anio=${year}`);
+    allUrlaub = res.data || [];
+    const pending = allUrlaub.filter(u => u.estado === 'PENDIENTE').length;
+    document.getElementById('urlaubPending').textContent = `${pending} ausstehend`;
+    renderUrlaubTable();
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="alert alert-error">Fehler: ${e.message}</div></td></tr>`;
+  }
+}
+
+function filterUrlaub() {
+  renderUrlaubTable();
+}
+
+function renderUrlaubTable() {
+  const filter = document.getElementById('urlaubStatusFilter').value;
+  const data = filter ? allUrlaub.filter(u => u.estado === filter) : allUrlaub;
+  const tbody = document.getElementById('urlaubTbody');
+  const leer  = document.getElementById('urlaubLeer');
+
+  if (data.length === 0) {
+    tbody.innerHTML = '';
+    leer.classList.remove('hidden');
+    return;
+  }
+  leer.classList.add('hidden');
+
+  tbody.innerHTML = data.map(u => {
+    const approvers = [];
+    if (u.aprobado_por_nivel1) approvers.push(`L1: ${u.aprobado_por_nivel1}`);
+    if (u.aprobado_por_nivel2) approvers.push(`L2: ${u.aprobado_por_nivel2}`);
+
+    let actions = '';
+    if (u.estado === 'PENDIENTE') {
+      actions = `
+        <button class="btn btn-sm btn-success" onclick="approveUrlaub('${u.id}', 1)" title="Genehmigen Stufe 1">✓ L1</button>
+        <button class="btn btn-sm btn-danger" onclick="openReject('${u.id}')" title="Ablehnen">✗</button>
+      `;
+    } else if (u.estado === 'PROPUESTA') {
+      actions = `
+        <button class="btn btn-sm btn-success" onclick="approveUrlaub('${u.id}', 2)" title="Genehmigen Stufe 2">✓ L2</button>
+        <button class="btn btn-sm btn-danger" onclick="openReject('${u.id}')" title="Ablehnen">✗</button>
+      `;
+    }
+
+    return `<tr>
+      <td><b>${u.empleado_nombre}</b></td>
+      <td>${u.fecha_inicio}</td>
+      <td>${u.fecha_fin}</td>
+      <td><b>${u.dias}</b></td>
+      <td>${statusBadge(u.estado)}</td>
+      <td style="font-size:12px;color:var(--muted)">${approvers.join('<br>') || '—'}</td>
+      <td style="white-space:nowrap">${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function approveUrlaub(id, level) {
+  const aprobador = prompt(`Genehmiger Name (Stufe ${level}):`);
+  if (!aprobador) return;
+  try {
+    const endpoint = level === 1 ? 'nivel1' : 'nivel2';
+    await api(`/vacaciones/solicitudes/${id}/${endpoint}`, {
+      method: 'POST',
+      body: JSON.stringify({ aprobado_por: aprobador, aprobar: true })
+    });
+    showGlobalAlert('success', `✓ Antrag genehmigt (Stufe ${level})`);
+    loadUrlaub();
+  } catch(e) {
+    showGlobalAlert('error', 'Fehler: ' + e.message);
+  }
+}
+
+function openReject(id) {
+  const sol = allUrlaub.find(u => u.id === id);
+  rejectContext = { type: 'urlaub', id, currentStatus: sol?.estado };
+  document.getElementById('rejectReason').value = '';
+  openModal('rejectModal');
+}
+
+function openRejectKorrektur(id) {
+  const k = allKorrekturen.find(k => k.id === id);
+  rejectContext = { type: 'correccion', id, currentStatus: k?.estado };
+  document.getElementById('rejectReason').value = '';
+  openModal('rejectModal');
+}
+
+async function confirmReject() {
+  const motivo = document.getElementById('rejectReason').value.trim();
+  if (!motivo) { alert('Bitte Begründung eingeben'); return; }
+  const { type, id, currentStatus } = rejectContext;
+  const endpoint = currentStatus === 'PROPUESTA' ? 'nivel2' : 'nivel1';
+  try {
+    if (type === 'urlaub') {
+      await api(`/vacaciones/solicitudes/${id}/${endpoint}`, {
+        method: 'POST',
+        body: JSON.stringify({ aprobado_por: 'Admin', aprobar: false, notas: motivo })
+      });
+      closeModal('rejectModal');
+      showGlobalAlert('success', '✓ Antrag abgelehnt');
+      loadUrlaub();
+    } else if (type === 'correccion') {
+      await api(`/aprobaciones/correccion/${id}/${endpoint}`, {
+        method: 'POST',
+        body: JSON.stringify({ aprobado_por: 'Admin', aprobar: false, notas: motivo })
+      });
+      closeModal('rejectModal');
+      showGlobalAlert('success', '✓ Korrektur abgelehnt');
+      loadKorrekturen();
+    }
+  } catch(e) {
+    showGlobalAlert('error', 'Fehler: ' + e.message);
+  }
+}
+
+async function loadSaldoGrid() {
+  const year = document.getElementById('urlaubYear').value;
+  const grid = document.getElementById('saldoGrid');
+  grid.innerHTML = '<div class="loading">Lade Salden</div>';
+
+  try {
+    const results = await Promise.all(employees.map(e =>
+      api(`/vacaciones/saldo/${e.id}?anio=${year}`)
+        .then(d => ({ emp: e, ...d }))
+        .catch(() => null)
+    ));
+    const valid = results.filter(Boolean);
+
+    if (valid.length === 0) {
+      grid.innerHTML = '<div class="empty">Keine Daten verfügbar</div>';
+      return;
+    }
+
+    grid.innerHTML = valid.map(s => `
+      <div class="saldo-card">
+        <div class="emp-name">${s.empleado?.nombre || s.emp.nombre} ${s.emp.apellido||''}</div>
+        <div class="saldo-big ${s.dias_disponibles < 5 ? 'warn' : ''}">${s.dias_disponibles} Tage</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">verfügbar</div>
+        <hr style="margin:10px 0">
+        <div class="saldo-row"><span class="key">Gesamt</span><span class="val">${s.dias_totales}</span></div>
+        <div class="saldo-row"><span class="key">Genutzt</span><span class="val">${s.dias_usados}</span></div>
+        <div class="saldo-row"><span class="key">Ausstehend</span><span class="val">${s.dias_pendientes}</span></div>
+        <div class="saldo-row"><span class="key">Verfügbar</span><span class="val"><b>${s.dias_disponibles}</b></span></div>
+      </div>
+    `).join('');
+  } catch(e) {
+    grid.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+function openUrlaubModal() {
+  document.getElementById('uaEmp').value = '';
+  document.getElementById('uaVon').value = '';
+  document.getElementById('uaBis').value = '';
+  document.getElementById('uaMotivo').value = '';
+  document.getElementById('empSaldoPreview').style.display = 'none';
+  document.getElementById('vacDaysPreview').textContent = '';
+  document.getElementById('urlaubModalAlert').innerHTML = '';
+  document.getElementById('urlaubModalAlert').style.display = 'none';
+  openModal('urlaubModal');
+}
+
+async function loadEmpSaldoPreview() {
+  const empId = document.getElementById('uaEmp').value;
+  if (!empId) return;
+  const year = document.getElementById('urlaubYear').value;
+  const preview = document.getElementById('empSaldoPreview');
+  const info = document.getElementById('empSaldoInfo');
+  try {
+    const s = await api(`/vacaciones/saldo/${empId}?anio=${year}`);
+    info.textContent = `Saldo ${year}: ${s.dias_totales} Tage gesamt — ${s.dias_usados} genutzt — ${s.dias_disponibles} verfügbar`;
+    preview.style.display = 'block';
+  } catch(e) {
+    preview.style.display = 'none';
+  }
+}
+
+function calcVacDays() {
+  const von = document.getElementById('uaVon').value;
+  const bis = document.getElementById('uaBis').value;
+  const el = document.getElementById('vacDaysPreview');
+  if (!von || !bis) { el.textContent = ''; return; }
+  const d1 = new Date(von), d2 = new Date(bis);
+  if (d2 < d1) { el.textContent = '⚠ Enddatum vor Startdatum'; return; }
+  const days = Math.round((d2 - d1) / 86400000) + 1;
+  el.textContent = `≈ ${days} Kalendertage`;
+}
+
+async function saveUrlaub() {
+  const empleado_id = document.getElementById('uaEmp').value;
+  const fecha_inicio = document.getElementById('uaVon').value;
+  const fecha_fin = document.getElementById('uaBis').value;
+  const motivo = document.getElementById('uaMotivo').value.trim();
+
+  if (!empleado_id || !fecha_inicio || !fecha_fin) {
+    showModalAlert('urlaubModalAlert', 'error', 'Mitarbeiter und Datumsangaben sind Pflichtfelder');
+    return;
+  }
+  if (fecha_fin < fecha_inicio) {
+    showModalAlert('urlaubModalAlert', 'error', 'Enddatum muss nach dem Startdatum liegen');
+    return;
+  }
+
+  try {
+    const anio = parseInt(fecha_inicio.substring(0, 4));
+    await api('/vacaciones/solicitudes', {
+      method: 'POST',
+      body: JSON.stringify({ empleado_id, anio, fecha_inicio, fecha_fin, notas: motivo })
+    });
+    closeModal('urlaubModal');
+    showGlobalAlert('success', '✓ Urlaubsantrag erstellt');
+    loadUrlaub();
+  } catch(e) {
+    showModalAlert('urlaubModalAlert', 'error', 'Fehler: ' + e.message);
+  }
+}
+
+// =====================================================================
+// STUNDENKONTO
+// =====================================================================
+function initStundenkonto() {
+  // Nothing special on init
+}
+
+async function loadStundenkonto() {
+  const empId = document.getElementById('skEmpSelect').value;
+  const year  = document.getElementById('skYear').value;
+  const content = document.getElementById('skContent');
+
+  if (!empId) { content.innerHTML = '<div class="empty">Mitarbeiter auswählen</div>'; return; }
+
+  content.innerHTML = '<div class="loading">Lade Stundenkonto</div>';
+
+  try {
+    const data = await api(`/saldo-horas/${empId}?year=${year}`);
+    const meses = data.meses || [];
+    const r = data.resumen || {};
+
+    const empName = data.empleado?.nombre || '—';
+    const monthlyH = data.empleado?.monthly_hours || 0;
+    const kappung = data.limite_kappung;
+
+    const rows = meses.map(m => {
+      const saldoClass = m.saldo_final > 0 ? 'sk-positive' : m.saldo_final < 0 ? 'sk-negative' : '';
+      const accClass   = m.saldo_acumulado > 0 ? 'sk-positive' : m.saldo_acumulado < 0 ? 'sk-negative' : '';
+      const kappIcon   = m.kappung_aplicado ? `<span class="sk-kappung" title="Kappung angewendet">⚠</span>` : '';
+      return `<tr>
+        <td><b>${m.mes_nombre}</b></td>
+        <td>${fmtHours(m.horas_planificadas)}</td>
+        <td>${fmtHours(m.horas_reales)}</td>
+        <td class="${saldoClass}">${fmtHoursSigned(m.saldo_mes)}</td>
+        <td style="color:var(--muted)">${fmtHoursSigned(m.carryover_anterior)}</td>
+        <td class="${accClass}">${fmtHoursSigned(m.saldo_acumulado)}</td>
+        <td class="${saldoClass}">${fmtHoursSigned(m.saldo_final)} ${kappIcon}</td>
+      </tr>`;
+    }).join('');
+
+    const totalSaldoClass = r.saldo_total > 0 ? 'sk-positive' : r.saldo_total < 0 ? 'sk-negative' : '';
+
+    content.innerHTML = `
+      <div class="grid-4" style="margin-bottom:20px; gap:16px">
+        <div class="stat-card accent-blue">
+          <div class="stat-label">Mitarbeiter</div>
+          <div style="font-size:18px;font-weight:700">${empName}</div>
+          <div class="stat-sub">${monthlyH}h/Monat Soll</div>
+        </div>
+        <div class="stat-card accent-blue">
+          <div class="stat-label">Planstunden ${year}</div>
+          <div class="stat-value">${fmtHours(r.total_planificado)}</div>
+        </div>
+        <div class="stat-card accent-green">
+          <div class="stat-label">Iststunden ${year}</div>
+          <div class="stat-value">${fmtHours(r.total_real)}</div>
+        </div>
+        <div class="stat-card ${r.saldo_total >= 0 ? 'accent-green' : 'accent-amber'}">
+          <div class="stat-label">Saldo ${year}</div>
+          <div class="stat-value ${totalSaldoClass}">${fmtHoursSigned(r.saldo_total)}</div>
+          <div class="stat-sub">Kappungsgrenze: ±${kappung}h</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Monatliche Stundenübersicht ${year}</span>
+          <span class="badge badge-gray">⚠ = Kappung angewendet</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Monat</th>
+                <th>Soll-Std.</th>
+                <th>Ist-Std.</th>
+                <th>Saldo</th>
+                <th>Übertrag</th>
+                <th>Kumuliert</th>
+                <th>Saldo nach Kappung</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+            <tfoot>
+              <tr class="sk-summary-row">
+                <td>Gesamt</td>
+                <td>${fmtHours(r.total_planificado)}</td>
+                <td>${fmtHours(r.total_real)}</td>
+                <td class="${totalSaldoClass}">${fmtHoursSigned(r.saldo_total)}</td>
+                <td>—</td>
+                <td>—</td>
+                <td>${fmtHoursSigned(r.saldo_acumulado_diciembre || r.saldo_total)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch(e) {
+    content.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+function fmtHours(h) {
+  if (h == null) return '—';
+  const sign = h < 0 ? '-' : '';
+  const abs = Math.abs(h);
+  const hh = Math.floor(abs);
+  const mm = Math.round((abs - hh) * 60);
+  return `${sign}${hh}:${String(mm).padStart(2,'0')}`;
+}
+
+function fmtHoursSigned(h) {
+  if (h == null) return '—';
+  const sign = h > 0 ? '+' : '';
+  return sign + fmtHours(h);
+}
+
+// =====================================================================
+// MITARBEITER
+// =====================================================================
+let allEmployeesAll = [];
+
+async function renderEmployees() {
+  const tbody = document.getElementById('empTbody');
+  const leer  = document.getElementById('empLeer');
+
+  if (allEmployeesAll.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="loading">Lade Daten</div></td></tr>';
+    try {
+      const res = await api('/empleados/');
+      allEmployeesAll = res.data || [];
+    } catch(e) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="alert alert-error">Fehler: ${e.message}</div></td></tr>`;
+      return;
+    }
+  }
+
+  filterEmployees();
+}
+
+function filterEmployees() {
+  const q = (document.getElementById('empSearch')?.value || '').toLowerCase();
+  const statusFilter = document.getElementById('empStatusFilter')?.value || '';
+  const tbody = document.getElementById('empTbody');
+  const leer  = document.getElementById('empLeer');
+  const count = document.getElementById('empCount');
+
+  let data = allEmployeesAll;
+  if (q) data = data.filter(e =>
+    `${e.nombre} ${e.apellido||''}`.toLowerCase().includes(q) ||
+    String(e.id_nummer).includes(q) ||
+    (e.grupo_nombre||'').toLowerCase().includes(q)
+  );
+  if (statusFilter === 'aktiv')   data = data.filter(e => e.activo);
+  if (statusFilter === 'inaktiv') data = data.filter(e => !e.activo);
+
+  if (data.length === 0) {
+    tbody.innerHTML = '';
+    leer.classList.remove('hidden');
+    count.textContent = '';
+    return;
+  }
+  leer.classList.add('hidden');
+  count.textContent = `${data.length} Mitarbeiter`;
+
+  tbody.innerHTML = data.map(e => {
+    const name = `${e.nombre} ${e.apellido||''}`.trim();
+    let actions = `<button class="btn btn-sm btn-outline" onclick='openNewEmpModal(${JSON.stringify(e)})' title="Bearbeiten">✏</button>
+      <button class="btn btn-sm btn-outline" onclick="openNfcModal('${e.id}','${name.replace(/'/g,"\\'")}') " title="NFC ändern">📡</button>`;
+    if (e.activo) {
+      actions += ` <button class="btn btn-sm btn-danger" onclick="deactivateEmployee('${e.id}','${name.replace(/'/g,"\\'")}') " title="Deaktivieren">⊘</button>`;
+    } else {
+      actions += ` <button class="btn btn-sm btn-success" onclick="reactivateEmployee('${e.id}','${name.replace(/'/g,"\\'")}') " title="Reaktivieren">↺</button>`;
+    }
+    return `<tr>
+      <td><b>#${e.id_nummer}</b></td>
+      <td>${name}</td>
+      <td>${e.grupo_nombre ? `<span class="badge badge-gray">${e.grupo_nombre}</span>` : '—'}</td>
+      <td>${e.monthly_hours}h</td>
+      <td>${e.activo
+        ? '<span class="badge badge-green">● Aktiv</span>'
+        : '<span class="badge badge-gray">○ Inaktiv</span>'
+      }</td>
+      <td style="white-space:nowrap">${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+// =====================================================================
+// TABLE SORT
+// =====================================================================
+const sortState = {};
+
+function sortTable(tableId, colIdx) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const tbody = table.querySelector('tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  if (rows.length < 2) return;
+
+  const key = `${tableId}-${colIdx}`;
+  const prev = sortState[key] || 'none';
+  const dir = prev === 'asc' ? 'desc' : 'asc';
+  sortState[key] = dir;
+
+  // Update header icons
+  table.querySelectorAll('th').forEach((th, i) => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (i === colIdx) th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+  });
+
+  rows.sort((a, b) => {
+    const ta = a.cells[colIdx]?.textContent?.trim() || '';
+    const tb = b.cells[colIdx]?.textContent?.trim() || '';
+    const na = parseFloat(ta.replace(/[^0-9.-]/g,''));
+    const nb = parseFloat(tb.replace(/[^0-9.-]/g,''));
+    let cmp = isNaN(na) || isNaN(nb)
+      ? ta.localeCompare(tb, 'de')
+      : na - nb;
+    return dir === 'asc' ? cmp : -cmp;
+  });
+
+  rows.forEach(r => tbody.appendChild(r));
+}
+
+// =====================================================================
+// SCHICHTPLANUNG
+// =====================================================================
+let turnoModelos = [], turnoPlanes = {};
+let spCurrentWeekStart = null;
+let editTurnoModelId = null;
+
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function navigateWeek(dir) {
+  if (!spCurrentWeekStart) spCurrentWeekStart = getMonday(new Date());
+  spCurrentWeekStart = new Date(spCurrentWeekStart);
+  spCurrentWeekStart.setDate(spCurrentWeekStart.getDate() + dir * 7);
+  loadSchichtplanung();
+}
+
+async function initSchichtplanung() {
+  if (!spCurrentWeekStart) spCurrentWeekStart = getMonday(new Date());
+
+  try {
+    const res = await api('/turnos/modelos');
+    turnoModelos = res.data || res || [];
+  } catch(e) { turnoModelos = []; }
+
+  // Populate group filter
+  const grupos = [...new Set(employees.map(e => e.grupo_nombre).filter(Boolean))];
+  const grupSel = document.getElementById('spGruppe');
+  grupSel.innerHTML = '<option value="">Alle Gruppen</option>';
+  grupos.forEach(g => { grupSel.innerHTML += `<option value="${g}">${g}</option>`; });
+
+  renderSchichtLegend();
+  await loadSchichtplanung();
+}
+
+function renderSchichtLegend() {
+  const legend = document.getElementById('schichtLegend');
+  if (!legend) return;
+  if (!turnoModelos.length) {
+    legend.innerHTML = '<span style="color:var(--muted);font-size:13px">Keine Schichtmodelle. Oben auf "Modelle verwalten" klicken.</span>';
+    return;
+  }
+  legend.innerHTML = turnoModelos.map(m => `
+    <div class="shift-legend-item" style="cursor:pointer" onclick='openTurnoModelModal(${JSON.stringify(m)})' title="Klicken zum Bearbeiten">
+      <div class="shift-legend-dot" style="background:${m.color||'#6b7280'}"></div>
+      <span><b>${m.codigo}</b> — ${m.nombre}</span>
+      ${m.hora_inicio ? `<span style="color:var(--muted);font-size:11px">(${m.hora_inicio}–${m.hora_fin})</span>` : ''}
+    </div>
+  `).join('') + `
+    <div class="shift-legend-item">
+      <div class="shift-legend-dot" style="background:#f1f5f9; border:1px solid #cbd5e1"></div>
+      <span style="color:var(--muted)">— Kein Turnus</span>
+    </div>
+  `;
+}
+
+async function renderSchichtplan() {
+  await loadSchichtplanung();
+}
+
+async function loadSchichtplanung() {
+  const loading = document.getElementById('schichtLoading');
+  const leer = document.getElementById('schichtLeer');
+  const head = document.getElementById('schichtGridHead');
+  const body = document.getElementById('schichtGridBody');
+  if (!head || !body) return;
+
+  loading.style.display = 'block';
+  head.innerHTML = '';
+  body.innerHTML = '';
+
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(spCurrentWeekStart);
+    d.setDate(d.getDate() + i);
+    days.push(d);
+  }
+  const fromStr = spCurrentWeekStart.toISOString().slice(0,10);
+  const toStr = days[6].toISOString().slice(0,10);
+
+  document.getElementById('spWeekLabel').textContent =
+    `${spCurrentWeekStart.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})} – ${days[6].toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})}`;
+
+  try {
+    const res = await api(`/turnos/planes?desde=${fromStr}&hasta=${toStr}`);
+    const planes = res.data || res || [];
+    turnoPlanes = {};
+    planes.forEach(p => { turnoPlanes[`${p.empleado_id}_${p.fecha}`] = p; });
+
+    const grupoFilter = document.getElementById('spGruppe')?.value || '';
+    let emps = employees;
+    if (grupoFilter) emps = emps.filter(e => e.grupo_nombre === grupoFilter);
+
+    loading.style.display = 'none';
+
+    if (emps.length === 0) { leer.classList.remove('hidden'); return; }
+    leer.classList.add('hidden');
+
+    const dayNames = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+    const today = new Date().toISOString().slice(0,10);
+
+    head.innerHTML = `<tr>
+      <th class="col-name">Mitarbeiter</th>
+      ${days.map((d,i) => {
+        const ds = d.toISOString().slice(0,10);
+        const isToday = ds === today;
+        return `<th style="${isToday ? 'background:#1e40af;color:white' : ''}">${dayNames[i]}<br><span style="font-weight:400;opacity:.8">${d.getDate()}.${d.getMonth()+1}.</span></th>`;
+      }).join('')}
+    </tr>`;
+
+    body.innerHTML = emps.map(emp => {
+      const cells = days.map(d => {
+        const ds = d.toISOString().slice(0,10);
+        const plan = turnoPlanes[`${emp.id}_${ds}`];
+        const modelo = plan ? turnoModelos.find(m => m.id === plan.turno_modelo_id) : null;
+        const isToday = ds === today;
+        const tdStyle = isToday ? 'background:#eff6ff' : '';
+        if (modelo) {
+          const bg = modelo.color || '#6b7280';
+          return `<td style="${tdStyle}"><div class="shift-cell" style="background:${bg}"
+            onclick="openShiftCellMenu('${emp.id}','${ds}','${plan.id}',this)"
+            title="${modelo.nombre}${modelo.hora_inicio?' ('+modelo.hora_inicio+'–'+modelo.hora_fin+')':''}">${modelo.codigo}</div></td>`;
+        } else {
+          return `<td style="${tdStyle}"><div class="shift-cell empty-cell"
+            onclick="openShiftCellMenu('${emp.id}','${ds}',null,this)"
+            title="Kein Turnus">—</div></td>`;
+        }
+      }).join('');
+      return `<tr><td class="col-name">#${emp.id_nummer} ${emp.nombre} ${emp.apellido||''}</td>${cells}</tr>`;
+    }).join('');
+
+  } catch(e) {
+    loading.style.display = 'none';
+    body.innerHTML = `<tr><td colspan="8"><div class="alert alert-error">Fehler: ${e.message}</div></td></tr>`;
+  }
+}
+
+function openShiftCellMenu(empId, fecha, planId, cellEl) {
+  document.querySelectorAll('.shift-dropdown').forEach(d => d.remove());
+
+  const dropdown = document.createElement('div');
+  dropdown.className = 'shift-dropdown';
+  dropdown.style.cssText = `position:fixed;background:white;border:1px solid var(--border);border-radius:8px;padding:6px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:300;min-width:180px;`;
+
+  const rect = cellEl.getBoundingClientRect();
+  let top = rect.bottom + 4;
+  let left = rect.left;
+  if (top + 300 > window.innerHeight) top = rect.top - 310;
+  if (left + 200 > window.innerWidth) left = window.innerWidth - 205;
+  dropdown.style.top = top + 'px';
+  dropdown.style.left = left + 'px';
+
+  let items = '';
+  if (planId) {
+    items += `<div onclick="deleteShiftPlan('${planId}')" style="padding:8px 12px;cursor:pointer;border-radius:6px;font-size:13px;color:var(--red);font-weight:600"
+      onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background=''">✗ Turnus entfernen</div>
+      <div style="height:1px;background:var(--border);margin:4px 0"></div>`;
+  }
+  if (turnoModelos.length === 0) {
+    items += `<div style="padding:8px 12px;font-size:13px;color:var(--muted)">Keine Modelle vorhanden</div>`;
+  } else {
+    turnoModelos.forEach(m => {
+      items += `<div onclick="assignShift('${empId}','${fecha}','${m.id}','${planId||''}')"
+        style="padding:8px 12px;cursor:pointer;border-radius:6px;font-size:13px;display:flex;align-items:center;gap:8px"
+        onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background=''">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${m.color||'#6b7280'}"></span>
+        <b>${m.codigo}</b> — ${m.nombre}
+      </div>`;
+    });
+  }
+  dropdown.innerHTML = items;
+  document.body.appendChild(dropdown);
+
+  const handler = (e) => {
+    if (!dropdown.contains(e.target)) {
+      dropdown.remove();
+      document.removeEventListener('click', handler, true);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', handler, true), 50);
+}
+
+async function assignShift(empId, fecha, modeloId, existingPlanId) {
+  document.querySelectorAll('.shift-dropdown').forEach(d => d.remove());
+  try {
+    if (existingPlanId) {
+      await api(`/turnos/planes/${existingPlanId}`, {
+        method: 'PUT', body: JSON.stringify({ turno_modelo_id: parseInt(modeloId) })
+      });
+    } else {
+      await api('/turnos/planes', {
+        method: 'POST', body: JSON.stringify({ empleado_id: parseInt(empId), fecha, turno_modelo_id: parseInt(modeloId) })
+      });
+    }
+    await loadSchichtplanung();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+async function deleteShiftPlan(planId) {
+  document.querySelectorAll('.shift-dropdown').forEach(d => d.remove());
+  try {
+    await api(`/turnos/planes/${planId}`, { method: 'DELETE' });
+    await loadSchichtplanung();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+function openTurnoModelModal(model) {
+  model = model || null;
+  editTurnoModelId = model?.id || null;
+  document.getElementById('turnoModelModalTitle').textContent = model ? 'Schichtmodell bearbeiten' : 'Schichtmodell hinzufügen';
+  document.getElementById('tmCodigo').value = model?.codigo || '';
+  document.getElementById('tmNombre').value = model?.nombre || '';
+  document.getElementById('tmHoraInicio').value = model?.hora_inicio || '';
+  document.getElementById('tmHoraFin').value = model?.hora_fin || '';
+  document.getElementById('tmHoras').value = model?.horas_por_dia || '';
+  document.getElementById('tmColor').value = model?.color || '#3B82F6';
+  document.getElementById('turnoModelModalAlert').innerHTML = '';
+  document.getElementById('turnoModelModalAlert').classList.add('hidden');
+  const delBtn = document.getElementById('tmDeleteBtn');
+  if (model?.id) { delBtn.style.display = ''; } else { delBtn.style.display = 'none'; }
+  openModal('turnoModelModal');
+}
+
+async function saveTurnoModel() {
+  const codigo = document.getElementById('tmCodigo').value.trim();
+  const nombre = document.getElementById('tmNombre').value.trim();
+  if (!codigo || !nombre) {
+    showModalAlert('turnoModelModalAlert', 'error', 'Kürzel und Name sind Pflichtfelder');
+    return;
+  }
+  const body = {
+    codigo, nombre,
+    hora_inicio: document.getElementById('tmHoraInicio').value || null,
+    hora_fin: document.getElementById('tmHoraFin').value || null,
+    color: document.getElementById('tmColor').value,
+    horas_por_dia: parseFloat(document.getElementById('tmHoras').value) || null
+  };
+  try {
+    if (editTurnoModelId) {
+      await api(`/turnos/modelos/${editTurnoModelId}`, { method: 'PUT', body: JSON.stringify(body) });
+      showGlobalAlert('success', `✓ Schichtmodell "${nombre}" aktualisiert`);
+    } else {
+      await api('/turnos/modelos', { method: 'POST', body: JSON.stringify(body) });
+      showGlobalAlert('success', `✓ Schichtmodell "${nombre}" erstellt`);
+    }
+    closeModal('turnoModelModal');
+    const res = await api('/turnos/modelos');
+    turnoModelos = res.data || res || [];
+    renderSchichtLegend();
+    await loadSchichtplanung();
+  } catch(e) { showModalAlert('turnoModelModalAlert', 'error', 'Fehler: ' + e.message); }
+}
+
+async function deleteTurnoModel() {
+  if (!editTurnoModelId) return;
+  const name = document.getElementById('tmNombre').value;
+  if (!confirm(`Schichtmodell "${name}" wirklich löschen?`)) return;
+  try {
+    await api(`/turnos/modelos/${editTurnoModelId}`, { method: 'DELETE' });
+    closeModal('turnoModelModal');
+    showGlobalAlert('success', `✓ Schichtmodell gelöscht`);
+    const res = await api('/turnos/modelos');
+    turnoModelos = res.data || res || [];
+    renderSchichtLegend();
+    await loadSchichtplanung();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+function openBulkModal() {
+  const sel = document.getElementById('bulkModelo');
+  sel.innerHTML = '<option value="">— bitte wählen —</option>';
+  turnoModelos.forEach(m => { sel.innerHTML += `<option value="${m.id}">${m.codigo} — ${m.nombre}</option>`; });
+
+  const empList = document.getElementById('bulkEmpList');
+  empList.innerHTML = employees.map(e => `
+    <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;border-radius:4px;font-size:13px">
+      <input type="checkbox" value="${e.id}" style="width:14px;height:14px"> #${e.id_nummer} ${e.nombre} ${e.apellido||''}
+    </label>
+  `).join('');
+
+  const from = spCurrentWeekStart ? spCurrentWeekStart.toISOString().slice(0,10) : '';
+  const to = spCurrentWeekStart ? new Date(spCurrentWeekStart.getTime() + 6*86400000).toISOString().slice(0,10) : '';
+  document.getElementById('bulkVon').value = from;
+  document.getElementById('bulkBis').value = to;
+  document.getElementById('bulkTurnoAlert').innerHTML = '';
+  document.getElementById('bulkTurnoAlert').classList.add('hidden');
+  openModal('bulkTurnoModal');
+}
+
+async function saveBulkTurno() {
+  const modeloId = document.getElementById('bulkModelo').value;
+  const von = document.getElementById('bulkVon').value;
+  const bis = document.getElementById('bulkBis').value;
+  if (!modeloId || !von || !bis) {
+    showModalAlert('bulkTurnoAlert', 'error', 'Schichtmodell und Datumsangaben sind Pflichtfelder');
+    return;
+  }
+  const checkboxes = document.querySelectorAll('#bulkEmpList input[type="checkbox"]:checked');
+  const empIds = checkboxes.length > 0
+    ? Array.from(checkboxes).map(cb => parseInt(cb.value))
+    : employees.map(e => e.id);
+  try {
+    await api('/turnos/planes/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ turno_modelo_id: parseInt(modeloId), fecha_inicio: von, fecha_fin: bis, empleado_ids: empIds })
+    });
+    closeModal('bulkTurnoModal');
+    showGlobalAlert('success', `✓ Schichten zugewiesen für ${empIds.length} Mitarbeiter`);
+    await loadSchichtplanung();
+  } catch(e) { showModalAlert('bulkTurnoAlert', 'error', 'Fehler: ' + e.message); }
+}
+
+// =====================================================================
+// KORREKTUREN
+// =====================================================================
+let allKorrekturen = [];
+let korrDetailId = null;
+
+async function loadKorrekturen() {
+  const tbody = document.getElementById('korrTbody');
+  const leer = document.getElementById('korrLeer');
+  tbody.innerHTML = '<tr><td colspan="8"><div class="loading">Lade Daten</div></td></tr>';
+  try {
+    const res = await api('/correcciones/');
+    allKorrekturen = res.data || res || [];
+
+    const pending = allKorrekturen.filter(k => k.estado === 'PENDIENTE' || k.estado === 'PROPUESTA').length;
+    document.getElementById('korrPendingBadge').textContent = `${pending} ausstehend`;
+
+    const empFilter = document.getElementById('korrEmpFilter');
+    const empNames = [...new Set(allKorrekturen.map(k => k.empleado_nombre).filter(Boolean))];
+    empFilter.innerHTML = '<option value="">Alle Mitarbeiter</option>';
+    empNames.forEach(n => { empFilter.innerHTML += `<option value="${n}">${n}</option>`; });
+
+    filterKorrekturen();
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="alert alert-error">Fehler: ${e.message}</div></td></tr>`;
+  }
+}
+
+function filterKorrekturen() {
+  const sf = document.getElementById('korrStatusFilter').value;
+  const ef = document.getElementById('korrEmpFilter').value;
+  let data = allKorrekturen;
+  if (sf) data = data.filter(k => k.estado === sf);
+  if (ef) data = data.filter(k => k.empleado_nombre === ef);
+  renderKorrekturen(data);
+}
+
+function renderKorrekturen(data) {
+  const tbody = document.getElementById('korrTbody');
+  const leer = document.getElementById('korrLeer');
+  if (data.length === 0) { tbody.innerHTML = ''; leer.classList.remove('hidden'); return; }
+  leer.classList.add('hidden');
+  tbody.innerHTML = data.map(k => {
+    let actions = `<button class="btn btn-sm btn-outline" onclick="openKorrDetail('${k.id}')">🔍</button> `;
+    if (k.estado === 'PENDIENTE') {
+      actions += `<button class="btn btn-sm btn-success" onclick="approveKorrektur('${k.id}',1)">✓ L1</button>
+        <button class="btn btn-sm btn-danger" onclick="openRejectKorrektur('${k.id}')">✗</button>`;
+    } else if (k.estado === 'PROPUESTA') {
+      actions += `<button class="btn btn-sm btn-success" onclick="approveKorrektur('${k.id}',2)">✓ L2</button>
+        <button class="btn btn-sm btn-danger" onclick="openRejectKorrektur('${k.id}')">✗</button>`;
+    }
+    const motivo = k.motivo || '';
+    return `<tr>
+      <td><b>${k.empleado_nombre||'—'}</b></td>
+      <td>${k.entrada_original ? fmtDateTime(k.entrada_original) : '—'}</td>
+      <td>${k.salida_original ? fmtDateTime(k.salida_original) : '—'}</td>
+      <td style="color:var(--blue);font-weight:600">${k.entrada_solicitada ? fmtDateTime(k.entrada_solicitada) : '—'}</td>
+      <td style="color:var(--blue);font-weight:600">${k.salida_solicitada ? fmtDateTime(k.salida_solicitada) : '—'}</td>
+      <td style="max-width:160px" title="${motivo}">${motivo ? motivo.substring(0,40)+(motivo.length>40?'…':'') : '—'}</td>
+      <td>${statusBadge(k.estado)}</td>
+      <td style="white-space:nowrap">${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function openKorrDetail(id) {
+  korrDetailId = id;
+  const content = document.getElementById('korrDetailContent');
+  content.innerHTML = '<div class="loading">Lade Details</div>';
+  openModal('korrDetailModal');
+  try {
+    const k = await api(`/correcciones/${id}`);
+    const approvers = [];
+    if (k.aprobado_por_nivel1) approvers.push(`Stufe 1: ${k.aprobado_por_nivel1}`);
+    if (k.aprobado_por_nivel2) approvers.push(`Stufe 2: ${k.aprobado_por_nivel2}`);
+    content.innerHTML = `
+      <div style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:15px;font-weight:700">${k.empleado_nombre||'—'}</span>
+          ${statusBadge(k.estado)}
+        </div>
+        ${approvers.length ? `<div style="font-size:12px;color:var(--muted)">${approvers.join(' · ')}</div>` : ''}
+      </div>
+      <div class="diff-grid">
+        <div class="diff-box original">
+          <h4>🕐 Original</h4>
+          <div class="diff-row"><span class="key">Eingang</span><span class="val">${k.entrada_original ? fmtDateTime(k.entrada_original) : '—'}</span></div>
+          <div class="diff-row"><span class="key">Ausgang</span><span class="val">${k.salida_original ? fmtDateTime(k.salida_original) : '—'}</span></div>
+        </div>
+        <div class="diff-box requested">
+          <h4>✏ Beantragt</h4>
+          <div class="diff-row"><span class="key">Eingang</span><span class="val">${k.entrada_solicitada ? fmtDateTime(k.entrada_solicitada) : '—'}</span></div>
+          <div class="diff-row"><span class="key">Ausgang</span><span class="val">${k.salida_solicitada ? fmtDateTime(k.salida_solicitada) : '—'}</span></div>
+        </div>
+      </div>
+      ${k.motivo ? `<div style="background:#f8fafc;border-radius:8px;padding:12px;margin-top:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Begründung</div>
+        <div style="font-size:14px">${k.motivo}</div>
+      </div>` : ''}
+      ${k.notas ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-top:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Notizen</div>
+        <div style="font-size:14px">${k.notas}</div>
+      </div>` : ''}
+    `;
+    const approveBtn = document.getElementById('korrDetailApproveBtn');
+    const rejectBtn = document.getElementById('korrDetailRejectBtn');
+    if (k.estado === 'PENDIENTE') {
+      approveBtn.textContent = '✓ L1 Genehmigen'; approveBtn.style.display = ''; rejectBtn.style.display = '';
+    } else if (k.estado === 'PROPUESTA') {
+      approveBtn.textContent = '✓ L2 Genehmigen'; approveBtn.style.display = ''; rejectBtn.style.display = '';
+    } else {
+      approveBtn.style.display = 'none'; rejectBtn.style.display = 'none';
+    }
+    // Store current status for detail actions
+    const k2 = allKorrekturen.find(x => x.id === id);
+    if (k2) k2.estado = k.estado;
+  } catch(e) {
+    content.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+async function approveKorrektur(id, level) {
+  const aprobador = prompt(`Genehmiger Name (Stufe ${level}):`);
+  if (!aprobador) return;
+  try {
+    const endpoint = level === 1 ? 'nivel1' : 'nivel2';
+    await api(`/aprobaciones/correccion/${id}/${endpoint}`, {
+      method: 'POST', body: JSON.stringify({ aprobado_por: aprobador, aprobar: true })
+    });
+    showGlobalAlert('success', `✓ Korrektur genehmigt (Stufe ${level})`);
+    loadKorrekturen();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+async function approveKorrekturFromDetail() {
+  const k = allKorrekturen.find(k => k.id === korrDetailId);
+  const level = k?.estado === 'PROPUESTA' ? 2 : 1;
+  const aprobador = prompt(`Genehmiger Name (Stufe ${level}):`);
+  if (!aprobador) return;
+  try {
+    const endpoint = level === 1 ? 'nivel1' : 'nivel2';
+    await api(`/aprobaciones/correccion/${korrDetailId}/${endpoint}`, {
+      method: 'POST', body: JSON.stringify({ aprobado_por: aprobador, aprobar: true })
+    });
+    closeModal('korrDetailModal');
+    showGlobalAlert('success', `✓ Korrektur genehmigt`);
+    loadKorrekturen();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+async function rejectKorrekturFromDetail() {
+  const motivo = prompt('Begründung für Ablehnung:');
+  if (!motivo) return;
+  const k = allKorrekturen.find(k => k.id === korrDetailId);
+  const endpoint = k?.estado === 'PROPUESTA' ? 'nivel2' : 'nivel1';
+  try {
+    await api(`/aprobaciones/correccion/${korrDetailId}/${endpoint}`, {
+      method: 'POST', body: JSON.stringify({ aprobado_por: 'Admin', aprobar: false, notas: motivo })
+    });
+    closeModal('korrDetailModal');
+    showGlobalAlert('success', '✓ Korrektur abgelehnt');
+    loadKorrekturen();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+// =====================================================================
+// GENEHMIGUNGEN
+// =====================================================================
+async function loadGenehmigungen() {
+  const content = document.getElementById('genehmigungContent');
+  content.innerHTML = '<div class="loading">Lade ausstehende Genehmigungen</div>';
+  try {
+    const res = await api('/aprobaciones/pendientes');
+    const pending = res.data || res || [];
+
+    const pill = document.getElementById('pill-genehmigungen');
+    if (pending.length > 0) {
+      pill.textContent = pending.length;
+      pill.classList.remove('hidden');
+    } else {
+      pill.classList.add('hidden');
+    }
+
+    if (pending.length === 0) {
+      content.innerHTML = `<div class="card"><div class="empty" style="padding:60px 20px">
+        <div style="font-size:48px;margin-bottom:12px">✅</div>
+        <div style="font-size:18px;font-weight:700;margin-bottom:8px">Alles erledigt!</div>
+        <div style="color:var(--muted)">Keine ausstehenden Genehmigungen</div>
+      </div></div>`;
+      return;
+    }
+
+    const grouped = {};
+    pending.forEach(item => {
+      const type = item.tipo_entidad || 'sonstige';
+      if (!grouped[type]) grouped[type] = [];
+      grouped[type].push(item);
+    });
+
+    const typeLabels = { vacacion: '🌴 Urlaub', correccion: '📝 Korrekturen', saldo: '⏱ Saldo', turno: '🗓 Schicht' };
+
+    let html = '';
+    for (const [type, items] of Object.entries(grouped)) {
+      const label = typeLabels[type] || type;
+      html += `<div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+          <span class="card-title">${label}</span>
+          <span class="badge badge-amber">${items.length} ausstehend</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Mitarbeiter</th>
+              <th>Details</th>
+              <th>Status</th>
+              <th>Erstellt</th>
+              <th>Aktionen</th>
+            </tr></thead>
+            <tbody>
+              ${items.map(item => {
+                const level = item.estado === 'PROPUESTA' ? 2 : 1;
+                return `<tr>
+                  <td><b>${item.empleado_nombre||'—'}</b></td>
+                  <td style="font-size:13px;color:var(--muted)">${formatApprovalDetails(item)}</td>
+                  <td>${statusBadge(item.estado)}</td>
+                  <td style="font-size:12px;color:var(--muted)">${item.created_at ? fmtDate(item.created_at) : '—'}</td>
+                  <td style="white-space:nowrap">
+                    <button class="btn btn-sm btn-success" onclick="quickApprove('${type}','${item.id}',${level})">✓ L${level}</button>
+                    <button class="btn btn-sm btn-danger" onclick="quickReject('${type}','${item.id}',${level})">✗</button>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+    content.innerHTML = html;
+  } catch(e) {
+    content.innerHTML = `<div class="alert alert-error">Fehler beim Laden: ${e.message}</div>`;
+    document.getElementById('pill-genehmigungen').classList.add('hidden');
+  }
+}
+
+function formatApprovalDetails(item) {
+  if (item.tipo_entidad === 'vacacion') {
+    return item.fecha_inicio ? `${item.fecha_inicio} – ${item.fecha_fin||'?'} (${item.dias||'?'} Tage)` : '—';
+  }
+  if (item.tipo_entidad === 'correccion') {
+    const orig = item.entrada_original ? fmtDateTime(item.entrada_original) : '—';
+    const bea = item.entrada_solicitada ? fmtDateTime(item.entrada_solicitada) : '—';
+    return `${orig} → ${bea}`;
+  }
+  return item.descripcion || '—';
+}
+
+async function quickApprove(type, id, level) {
+  const aprobador = prompt(`Genehmiger Name (Stufe ${level}):`);
+  if (!aprobador) return;
+  try {
+    const endpoint = level === 1 ? 'nivel1' : 'nivel2';
+    await api(`/aprobaciones/${type}/${id}/${endpoint}`, {
+      method: 'POST', body: JSON.stringify({ aprobado_por: aprobador, aprobar: true })
+    });
+    showGlobalAlert('success', `✓ Genehmigt (${type}, Stufe ${level})`);
+    loadGenehmigungen();
+    if (type === 'vacacion') loadUrlaub();
+    if (type === 'correccion') { if (document.getElementById('page-korrekturen').classList.contains('active')) loadKorrekturen(); }
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+async function quickReject(type, id, level) {
+  const motivo = prompt('Begründung für Ablehnung:');
+  if (!motivo) return;
+  try {
+    const endpoint = level === 1 ? 'nivel1' : 'nivel2';
+    await api(`/aprobaciones/${type}/${id}/${endpoint}`, {
+      method: 'POST', body: JSON.stringify({ aprobado_por: 'Admin', aprobar: false, notas: motivo })
+    });
+    showGlobalAlert('success', `✓ Abgelehnt`);
+    loadGenehmigungen();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+// =====================================================================
+// EXPORT
+// =====================================================================
+let exportPreviewData = null;
+
+function initExport() {
+  populateYearSelect('exportYear');
+  const now = new Date();
+  document.getElementById('exportMonth').value = now.getMonth() + 1;
+}
+
+async function loadExportPreview() {
+  const month = document.getElementById('exportMonth').value;
+  const year = document.getElementById('exportYear').value;
+  const previewDiv = document.getElementById('exportPreview');
+  const previewTable = document.getElementById('exportPreviewTable');
+  const previewTitle = document.getElementById('exportPreviewTitle');
+  const previewBadge = document.getElementById('exportPreviewBadge');
+  const statusDiv = document.getElementById('exportStatus');
+  const statusContent = document.getElementById('exportStatusContent');
+  const btnDownload = document.getElementById('btnDownloadExcel');
+
+  previewTable.innerHTML = '<div class="loading">Lade Vorschau</div>';
+  previewDiv.classList.remove('hidden');
+  statusDiv.classList.remove('hidden');
+  btnDownload.disabled = true;
+  exportPreviewData = null;
+
+  try {
+    const data = await api(`/exportacion/excel/preview?mes=${month}&anio=${year}`);
+    exportPreviewData = data;
+
+    const monthName = new Date(year, month-1, 1).toLocaleDateString('de-DE', {month:'long', year:'numeric'});
+    previewTitle.textContent = `Vorschau — ${monthName}`;
+
+    const rows = data.empleados || data.rows || (Array.isArray(data) ? data : []);
+    const totalWithBalance = rows.filter(r => r.saldo_calculado !== undefined || r.horas_reales !== undefined || r.total_horas !== undefined).length;
+    previewBadge.textContent = `${rows.length} Mitarbeiter`;
+
+    statusContent.innerHTML = `
+      <div class="grid-3" style="gap:12px">
+        <div class="stat-card accent-green">
+          <div class="stat-label">Mitarbeiter mit Daten</div>
+          <div class="stat-value">${totalWithBalance}</div>
+          <div class="stat-sub">von ${rows.length} gesamt</div>
+        </div>
+        <div class="stat-card accent-blue">
+          <div class="stat-label">Zeitraum</div>
+          <div style="font-size:18px;font-weight:700">${monthName}</div>
+        </div>
+        <div class="stat-card ${totalWithBalance > 0 ? 'accent-green' : 'accent-amber'}">
+          <div class="stat-label">Exportbereit</div>
+          <div class="stat-value">${totalWithBalance > 0 ? '✓' : '—'}</div>
+        </div>
+      </div>`;
+
+    if (rows.length === 0) {
+      previewTable.innerHTML = '<div class="empty">Keine Daten für diesen Zeitraum</div>';
+      return;
+    }
+
+    const headers = Object.keys(rows[0] || {}).filter(k => !k.startsWith('_'));
+    previewTable.innerHTML = `<table>
+      <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map(row => `<tr>${headers.map(h => `<td style="font-size:12px">${row[h] != null ? row[h] : '—'}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table>`;
+
+    btnDownload.disabled = false;
+  } catch(e) {
+    previewTable.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+    statusContent.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+async function downloadExcel() {
+  const month = document.getElementById('exportMonth').value;
+  const year = document.getElementById('exportYear').value;
+  const btn = document.getElementById('btnDownloadExcel');
+  btn.disabled = true;
+  btn.textContent = '⏳ Wird generiert…';
+  try {
+    const response = await fetch(API + `/exportacion/excel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mes: parseInt(month), anio: parseInt(year) })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || `HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    const filename = `hagemann_${year}_${String(month).padStart(2,'0')}.xlsx`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    showGlobalAlert('success', `✓ Export "${filename}" heruntergeladen`);
+  } catch(e) {
+    showGlobalAlert('error', 'Export-Fehler: ' + e.message);
+  } finally {
+    btn.disabled = !exportPreviewData;
+    btn.textContent = '📥 Excel herunterladen';
+  }
+}
+
+// =====================================================================
+// MITARBEITER ERWEITERT
+// =====================================================================
+let editEmpId = null;
+let allGrupos = [];
+
+async function loadGruposIntoSelect(selectId) {
+  if (allGrupos.length === 0) {
+    try {
+      const res = await api('/grupos/');
+      allGrupos = res.data || res || [];
+    } catch(e) { allGrupos = []; }
+  }
+  const sel = document.getElementById(selectId);
+  if (sel) {
+    sel.innerHTML = '<option value="">— keine —</option>';
+    allGrupos.forEach(g => { sel.innerHTML += `<option value="${g.id}">${g.nombre}</option>`; });
+  }
+}
+
+function openNewEmpModal(emp) {
+  emp = emp || null;
+  editEmpId = emp?.id || null;
+  document.getElementById('newEmpModalTitle').textContent = emp ? 'Mitarbeiter bearbeiten' : 'Neuer Mitarbeiter';
+  document.getElementById('neNombre').value = emp?.nombre || '';
+  document.getElementById('neApellido').value = emp?.apellido || '';
+  document.getElementById('neIdNummer').value = emp?.id_nummer || '';
+  document.getElementById('neMonthlyHours').value = emp?.monthly_hours || 160;
+  document.getElementById('nePin').value = emp?.pin || '';
+  document.getElementById('neNfc').value = emp?.nfc_tag || '';
+  document.getElementById('newEmpModalAlert').innerHTML = '';
+  document.getElementById('newEmpModalAlert').classList.add('hidden');
+  loadGruposIntoSelect('neGrupo').then(() => {
+    if (emp?.grupo_id) document.getElementById('neGrupo').value = emp.grupo_id;
+  });
+  openModal('newEmpModal');
+}
+
+async function saveEmployee() {
+  const nombre = document.getElementById('neNombre').value.trim();
+  const apellido = document.getElementById('neApellido').value.trim();
+  const id_nummer = parseInt(document.getElementById('neIdNummer').value);
+  const monthly_hours = parseFloat(document.getElementById('neMonthlyHours').value);
+  const pin = document.getElementById('nePin').value.trim();
+  const nfc_tag = document.getElementById('neNfc').value.trim();
+  const grupo_id = document.getElementById('neGrupo').value || null;
+
+  if (!nombre || !id_nummer || !monthly_hours) {
+    showModalAlert('newEmpModalAlert', 'error', 'Vorname, Nr. und Stunden sind Pflichtfelder');
+    return;
+  }
+  const body = { nombre, apellido, id_nummer, monthly_hours };
+  if (pin) body.pin = pin;
+  if (nfc_tag) body.nfc_tag = nfc_tag;
+  if (grupo_id) body.grupo_id = parseInt(grupo_id);
+
+  try {
+    if (editEmpId) {
+      await api(`/empleados/${editEmpId}`, { method: 'PUT', body: JSON.stringify(body) });
+      showGlobalAlert('success', `✓ Mitarbeiter "${nombre}" aktualisiert`);
+    } else {
+      await api('/empleados/', { method: 'POST', body: JSON.stringify(body) });
+      showGlobalAlert('success', `✓ Mitarbeiter "${nombre}" erstellt`);
+    }
+    closeModal('newEmpModal');
+    allEmployeesAll = [];
+    const [res, activeRes] = await Promise.all([api('/empleados/'), api('/empleados/?activo=true')]);
+    allEmployeesAll = res.data || [];
+    employees = activeRes.data || [];
+    populateEmpDropdowns();
+    filterEmployees();
+  } catch(e) { showModalAlert('newEmpModalAlert', 'error', 'Fehler: ' + e.message); }
+}
+
+function openNfcModal(empId, empName) {
+  document.getElementById('nfcEmpId').value = empId;
+  document.getElementById('nfcEmpName').textContent = empName;
+  document.getElementById('nfcTagValue').value = '';
+  document.getElementById('nfcModalAlert').innerHTML = '';
+  document.getElementById('nfcModalAlert').classList.add('hidden');
+  openModal('nfcModal');
+}
+
+async function saveNfc() {
+  const empId = document.getElementById('nfcEmpId').value;
+  const nfc_tag = document.getElementById('nfcTagValue').value.trim();
+  if (!nfc_tag) { showModalAlert('nfcModalAlert', 'error', 'Bitte NFC Tag eingeben'); return; }
+  try {
+    await api(`/empleados/${empId}/nfc`, { method: 'PUT', body: JSON.stringify({ nfc_tag }) });
+    closeModal('nfcModal');
+    showGlobalAlert('success', '✓ NFC Tag aktualisiert');
+    allEmployeesAll = [];
+    renderEmployees();
+  } catch(e) { showModalAlert('nfcModalAlert', 'error', 'Fehler: ' + e.message); }
+}
+
+async function deactivateEmployee(id, name) {
+  if (!confirm(`Mitarbeiter "${name}" wirklich deaktivieren?`)) return;
+  try {
+    await api(`/empleados/${id}`, { method: 'DELETE' });
+    showGlobalAlert('success', `✓ Mitarbeiter "${name}" deaktiviert`);
+    allEmployeesAll = [];
+    const [res, activeRes] = await Promise.all([api('/empleados/'), api('/empleados/?activo=true')]);
+    allEmployeesAll = res.data || [];
+    employees = activeRes.data || [];
+    populateEmpDropdowns();
+    filterEmployees();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+async function reactivateEmployee(id, name) {
+  if (!confirm(`Mitarbeiter "${name}" wirklich reaktivieren?`)) return;
+  try {
+    await api(`/empleados/${id}/reactivar`, { method: 'POST' });
+    showGlobalAlert('success', `✓ Mitarbeiter "${name}" reaktiviert`);
+    allEmployeesAll = [];
+    const [res, activeRes] = await Promise.all([api('/empleados/'), api('/empleados/?activo=true')]);
+    allEmployeesAll = res.data || [];
+    employees = activeRes.data || [];
+    populateEmpDropdowns();
+    filterEmployees();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+// =====================================================================
+// START
+// =====================================================================
+init();
+</script>
+</body>
+</html>

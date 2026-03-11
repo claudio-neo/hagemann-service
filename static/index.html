@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hagemann — Zeiterfassung</title>
+<style>
+:root {
+  --blue: #3B82F6; --green: #10B981; --amber: #F59E0B; --red: #EF4444;
+  --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --muted: #64748b;
+  --border: #e2e8f0; --radius: 12px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* NAV */
+nav { background: var(--text); color: white; padding: 0 24px; display: flex; align-items: center; height: 56px; gap: 24px; }
+nav .logo { font-weight: 700; font-size: 18px; }
+nav a { color: #94a3b8; text-decoration: none; font-size: 14px; padding: 16px 0; border-bottom: 2px solid transparent; transition: .2s; }
+nav a:hover, nav a.active { color: white; border-color: var(--blue); }
+
+/* LAYOUT */
+.container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+@media (max-width: 768px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+/* CARDS */
+.card { background: var(--card); border-radius: var(--radius); padding: 24px; border: 1px solid var(--border); }
+.card h2 { font-size: 16px; color: var(--muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+.card .big-number { font-size: 36px; font-weight: 700; }
+.card .label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+/* STAT CARDS */
+.stat { text-align: center; padding: 20px; }
+.stat .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+
+/* TABLE */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--border); color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+tr:hover td { background: #f1f5f9; }
+
+/* BADGE */
+.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.badge-green { background: #d1fae5; color: #065f46; }
+.badge-amber { background: #fef3c7; color: #92400e; }
+.badge-red { background: #fee2e2; color: #991b1b; }
+.badge-blue { background: #dbeafe; color: #1e40af; }
+
+/* BUTTONS */
+.btn { padding: 10px 20px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: .2s; display: inline-flex; align-items: center; gap: 8px; }
+.btn-primary { background: var(--blue); color: white; }
+.btn-primary:hover { background: #2563eb; }
+.btn-success { background: var(--green); color: white; }
+.btn-success:hover { background: #059669; }
+.btn-danger { background: var(--red); color: white; }
+.btn-danger:hover { background: #dc2626; }
+.btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn-outline:hover { background: #f1f5f9; }
+.btn-lg { padding: 16px 32px; font-size: 18px; border-radius: 12px; }
+
+/* FICHAJE SCREEN */
+.fichaje-screen { text-align: center; padding: 40px 20px; }
+.fichaje-screen .clock { font-size: 64px; font-weight: 200; margin: 20px 0; font-variant-numeric: tabular-nums; }
+.fichaje-screen .date { font-size: 18px; color: var(--muted); }
+.employee-select { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin: 24px 0; }
+.emp-card { background: var(--card); border: 2px solid var(--border); border-radius: 12px; padding: 16px; cursor: pointer; transition: .2s; text-align: center; }
+.emp-card:hover { border-color: var(--blue); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+.emp-card.selected { border-color: var(--blue); background: #eff6ff; }
+.emp-card .emp-id { font-size: 12px; color: var(--muted); }
+.emp-card .emp-name { font-size: 15px; font-weight: 600; margin-top: 4px; }
+.emp-card .emp-status { margin-top: 8px; }
+
+.cc-select { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 20px 0; }
+.cc-btn { padding: 14px 24px; border-radius: 10px; border: 2px solid var(--border); background: white; cursor: pointer; font-size: 15px; font-weight: 600; transition: .2s; min-width: 140px; }
+.cc-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+.cc-btn.selected { color: white; border-color: transparent; }
+
+.result-msg { padding: 20px; border-radius: 12px; margin: 20px auto; max-width: 500px; font-size: 18px; font-weight: 600; }
+.result-msg.success { background: #d1fae5; color: #065f46; }
+.result-msg.error { background: #fee2e2; color: #991b1b; }
+
+/* TABS */
+.tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+.tab { padding: 8px 16px; border-radius: 8px; border: none; background: transparent; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--muted); }
+.tab.active { background: var(--blue); color: white; }
+
+/* BAR CHART */
+.bar-row { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
+.bar-label { width: 120px; font-size: 13px; font-weight: 500; text-align: right; }
+.bar-track { flex: 1; height: 28px; background: #f1f5f9; border-radius: 6px; overflow: hidden; position: relative; }
+.bar-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; padding: 0 10px; color: white; font-size: 12px; font-weight: 600; min-width: fit-content; transition: width .5s; }
+.bar-value { width: 60px; font-size: 13px; font-weight: 600; }
+
+/* HIDE */
+.hidden { display: none !important; }
+
+/* SELECT */
+select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: white; }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">⏱ Hagemann</span>
+  <a href="#" onclick="showPage('fichaje')" id="nav-fichaje" class="active">Zeiterfassung</a>
+  <a href="#" onclick="showPage('dashboard')" id="nav-dashboard">Dashboard</a>
+  <a href="#" onclick="showPage('reportes')" id="nav-reportes">Berichte</a>
+  <a href="#" onclick="showPage('empleados')" id="nav-empleados">Mitarbeiter</a>
+  <span style="flex:1"></span>
+  <a href="static/terminal.html" style="color:#94a3b8;font-size:12px;text-decoration:none;opacity:.7">📱 Terminal</a>
+  <a href="static/admin.html" style="color:#94a3b8;font-size:12px;text-decoration:none;opacity:.7">⚙ Admin</a>
+</nav>
+
+<!-- ===== FICHAJE ===== -->
+<div id="page-fichaje" class="container">
+  <div class="fichaje-screen">
+    <div class="date" id="currentDate"></div>
+    <div class="clock" id="currentTime"></div>
+
+    <div id="step-employee">
+      <h2 style="margin-bottom:16px; color:var(--muted)">Mitarbeiter auswählen</h2>
+      <div class="employee-select" id="employeeGrid"></div>
+    </div>
+
+    <div id="step-action" class="hidden">
+      <div id="selectedEmpInfo" style="margin-bottom:20px;"></div>
+      <div id="actionButtons"></div>
+    </div>
+
+    <div id="step-cc" class="hidden">
+      <h2 style="margin-bottom:12px; color:var(--muted)">Abteilung / Kostenstelle wählen</h2>
+      <div class="cc-select" id="ccGrid"></div>
+      <button class="btn btn-outline" onclick="backToAction()" style="margin-top:12px">← Zurück</button>
+    </div>
+
+    <div id="step-result" class="hidden">
+      <div id="resultMessage"></div>
+      <button class="btn btn-outline btn-lg" onclick="resetFichaje()" style="margin-top:24px">✓ Fertig</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DASHBOARD ===== -->
+<div id="page-dashboard" class="container hidden">
+  <h1 style="margin-bottom:20px">Dashboard</h1>
+  <div class="grid-4" id="statsCards"></div>
+  <div class="card" style="margin-top:20px">
+    <h2>Aktuell anwesend</h2>
+    <table>
+      <thead><tr><th>Nr.</th><th>Name</th><th>Eingang</th><th>Abteilung</th><th>Dauer</th></tr></thead>
+      <tbody id="presentTable"></tbody>
+    </table>
+    <p id="noPresentMsg" class="hidden" style="padding:20px; color:var(--muted); text-align:center">Keine Mitarbeiter anwesend</p>
+  </div>
+</div>
+
+<!-- ===== REPORTES ===== -->
+<div id="page-reportes" class="container hidden">
+  <h1 style="margin-bottom:20px">Berichte</h1>
+  <div class="card" style="margin-bottom:20px">
+    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+      <div class="tabs">
+        <button class="tab active" onclick="switchReportTab('cc')" id="tab-cc">Nach Kostenstelle</button>
+        <button class="tab" onclick="switchReportTab('emp')" id="tab-emp">Nach Mitarbeiter</button>
+      </div>
+      <div>
+        <label style="font-size:13px; color:var(--muted)">Von:</label>
+        <input type="date" id="reportFrom" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px">
+        <label style="font-size:13px; color:var(--muted); margin-left:8px">Bis:</label>
+        <input type="date" id="reportTo" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px">
+        <button class="btn btn-primary" onclick="loadReport()" style="margin-left:8px">Laden</button>
+      </div>
+    </div>
+  </div>
+  <div id="reportContent"></div>
+</div>
+
+<!-- ===== EMPLEADOS ===== -->
+<div id="page-empleados" class="container hidden">
+  <h1 style="margin-bottom:20px">Mitarbeiter</h1>
+  <div class="card">
+    <table>
+      <thead><tr><th>Nr.</th><th>Name</th><th>Gruppe</th><th>Std./Monat</th><th>Status</th></tr></thead>
+      <tbody id="empTable"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// Auto-detect base path (works behind reverse proxy /hagemann/ or direct :8013)
+const basePath = window.location.pathname.replace(/\/+$/, '');
+const API = window.location.origin + basePath + '/api/v1';
+let employees = [], costCenters = [], selectedEmp = null, selectedCC = null;
+
+// === CLOCK ===
+function updateClock() {
+  const now = new Date();
+  document.getElementById('currentTime').textContent = now.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  document.getElementById('currentDate').textContent = now.toLocaleDateString('de-DE', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// === NAVIGATION ===
+function showPage(page) {
+  document.querySelectorAll('[id^="page-"]').forEach(p => p.classList.add('hidden'));
+  document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('page-' + page).classList.remove('hidden');
+  document.getElementById('nav-' + page).classList.add('active');
+  if (page === 'dashboard') loadDashboard();
+  if (page === 'reportes') loadReport();
+  if (page === 'empleados') loadEmpleados();
+  if (page === 'fichaje') loadFichaje();
+}
+
+// === DATA ===
+async function api(path, opts) {
+  const r = await fetch(API + path, {headers: {'Content-Type': 'application/json'}, ...opts});
+  return r.json();
+}
+
+async function loadInitialData() {
+  const [empRes, ccRes] = await Promise.all([api('/empleados/?activo=true'), api('/centros-coste/')]);
+  employees = empRes.data || [];
+  costCenters = ccRes.data || [];
+  // Set report date defaults (this month)
+  const now = new Date();
+  document.getElementById('reportFrom').value = now.toISOString().slice(0,8) + '01';
+  document.getElementById('reportTo').value = now.toISOString().slice(0,10);
+}
+
+// === FICHAJE ===
+async function loadFichaje() {
+  const openRes = await api('/fichajes/abiertos');
+  const openIds = new Set((openRes.data || []).map(f => f.empleado.id));
+
+  const grid = document.getElementById('employeeGrid');
+  grid.innerHTML = employees.map(e => {
+    const isOpen = openIds.has(e.id);
+    const open = isOpen ? (openRes.data || []).find(f => f.empleado.id === e.id) : null;
+    return `<div class="emp-card" onclick="selectEmployee('${e.id}')" data-id="${e.id}">
+      <div class="emp-id">#${e.id_nummer}</div>
+      <div class="emp-name">${e.nombre} ${e.apellido || ''}</div>
+      <div class="emp-status">${isOpen
+        ? `<span class="badge badge-green">● Anwesend</span><br><small style="color:var(--muted)">${open?.centro_coste_actual?.nombre || ''}</small>`
+        : '<span class="badge badge-amber">○ Abwesend</span>'
+      }</div>
+    </div>`;
+  }).join('');
+
+  resetSteps();
+}
+
+function resetSteps() {
+  document.getElementById('step-employee').classList.remove('hidden');
+  document.getElementById('step-action').classList.add('hidden');
+  document.getElementById('step-cc').classList.add('hidden');
+  document.getElementById('step-result').classList.add('hidden');
+  selectedEmp = null; selectedCC = null;
+}
+function resetFichaje() { loadFichaje(); }
+
+async function selectEmployee(id) {
+  selectedEmp = employees.find(e => e.id === id);
+  document.querySelectorAll('.emp-card').forEach(c => c.classList.toggle('selected', c.dataset.id === id));
+
+  const openRes = await api('/fichajes/abiertos');
+  const open = (openRes.data || []).find(f => f.empleado.id === id);
+
+  const info = document.getElementById('selectedEmpInfo');
+  info.innerHTML = `<div style="font-size:24px;font-weight:700">${selectedEmp.nombre} ${selectedEmp.apellido||''}</div>
+    <div style="color:var(--muted)">#${selectedEmp.id_nummer} — ${selectedEmp.grupo_nombre || ''}</div>`;
+
+  const btns = document.getElementById('actionButtons');
+  if (open) {
+    btns.innerHTML = `
+      <div style="margin-bottom:16px"><span class="badge badge-green">● Anwesend seit ${new Date(open.entrada).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span>
+      ${open.centro_coste_actual ? ` in <b>${open.centro_coste_actual.nombre}</b>` : ''}</div>
+      <button class="btn btn-primary btn-lg" onclick="showCCSelect('switch')" style="margin:4px">🔄 Abteilung wechseln</button>
+      <button class="btn btn-danger btn-lg" onclick="doPunchOut()" style="margin:4px">⬅ Ausgang</button>`;
+  } else {
+    btns.innerHTML = `<button class="btn btn-success btn-lg" onclick="showCCSelect('in')">➡ Eingang</button>`;
+  }
+
+  document.getElementById('step-employee').classList.add('hidden');
+  document.getElementById('step-action').classList.remove('hidden');
+}
+
+function showCCSelect(action) {
+  const grid = document.getElementById('ccGrid');
+  grid.innerHTML = costCenters.map(cc =>
+    `<button class="cc-btn" style="border-color:${cc.color}" onclick="doPunch('${action}','${cc.id}')" 
+      onmouseover="this.style.background='${cc.color}';this.style.color='white'"
+      onmouseout="this.style.background='white';this.style.color='var(--text)'"
+    ><span style="color:${cc.color};font-size:20px">●</span> ${cc.nombre}<br><small style="opacity:.6">${cc.codigo}</small></button>`
+  ).join('');
+  document.getElementById('step-action').classList.add('hidden');
+  document.getElementById('step-cc').classList.remove('hidden');
+}
+
+function backToAction() {
+  document.getElementById('step-cc').classList.add('hidden');
+  document.getElementById('step-action').classList.remove('hidden');
+}
+
+async function doPunch(action, ccId) {
+  let res;
+  try {
+    if (action === 'in') {
+      res = await api('/fichajes/entrada', {method:'POST', body: JSON.stringify({empleado_id: selectedEmp.id, centro_coste_id: ccId})});
+    } else {
+      res = await api('/fichajes/cambio-departamento', {method:'POST', body: JSON.stringify({empleado_id: selectedEmp.id, nuevo_centro_coste_id: ccId})});
+    }
+    showResult('success', action === 'in'
+      ? `✓ Eingang registriert<br>${res.centro_coste?.nombre || ''}<br><small>${res.hora}</small>`
+      : `✓ Abteilung gewechselt<br>${res.message}<br><small>${new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</small>`
+    );
+  } catch(e) {
+    showResult('error', 'Fehler: ' + (e.message || 'Unbekannt'));
+  }
+}
+
+async function doPunchOut() {
+  try {
+    const res = await api('/fichajes/salida', {method:'POST', body: JSON.stringify({empleado_id: selectedEmp.id})});
+    const segs = (res.segmentos || []).map(s => `${s.centro_coste_nombre}: ${s.minutos} min`).join('<br>');
+    showResult('success', `✓ Ausgang registriert<br><b>${res.total_formateado}</b> gearbeitet<br><small>${segs}</small>`);
+  } catch(e) { showResult('error', 'Fehler: ' + (e.message || 'Unbekannt')); }
+}
+
+function showResult(type, html) {
+  document.getElementById('step-cc').classList.add('hidden');
+  document.getElementById('step-action').classList.add('hidden');
+  const msg = document.getElementById('resultMessage');
+  msg.className = 'result-msg ' + type;
+  msg.innerHTML = html;
+  document.getElementById('step-result').classList.remove('hidden');
+}
+
+// === DASHBOARD ===
+async function loadDashboard() {
+  const [openRes, ccRes] = await Promise.all([api('/fichajes/abiertos'), api('/reportes/resumen-centros-coste?desde=2026-01-01&hasta=2026-12-31')]);
+  const open = openRes.data || [];
+  const ccs = ccRes.centros_coste || [];
+
+  // Stats
+  document.getElementById('statsCards').innerHTML = `
+    <div class="card stat"><div class="big-number" style="color:var(--green)">${open.length}</div><div class="label">Anwesend</div></div>
+    <div class="card stat"><div class="big-number">${employees.length}</div><div class="label">Mitarbeiter</div></div>
+    <div class="card stat"><div class="big-number">${costCenters.length}</div><div class="label">Kostenstellen</div></div>
+    <div class="card stat"><div class="big-number">${ccRes.total_formateado || '0:00'}</div><div class="label">Stunden gesamt</div></div>`;
+
+  // Present table
+  const tbody = document.getElementById('presentTable');
+  const noMsg = document.getElementById('noPresentMsg');
+  if (open.length === 0) { tbody.innerHTML = ''; noMsg.classList.remove('hidden'); return; }
+  noMsg.classList.add('hidden');
+  tbody.innerHTML = open.map(f => {
+    const entrada = new Date(f.entrada);
+    const now = new Date();
+    const mins = Math.round((now - entrada) / 60000);
+    return `<tr>
+      <td>${f.empleado.id_nummer}</td>
+      <td><b>${f.empleado.nombre}</b></td>
+      <td>${entrada.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</td>
+      <td>${f.centro_coste_actual ? `<span class="badge" style="background:${costCenters.find(c=>c.id===f.centro_coste_actual.id)?.color||'#ddd'}20;color:${costCenters.find(c=>c.id===f.centro_coste_actual.id)?.color||'#333'}">${f.centro_coste_actual.nombre}</span>` : '-'}</td>
+      <td>${Math.floor(mins/60)}h ${mins%60}min</td>
+    </tr>`;
+  }).join('');
+}
+
+// === REPORTES ===
+let reportTab = 'cc';
+function switchReportTab(tab) {
+  reportTab = tab;
+  document.getElementById('tab-cc').classList.toggle('active', tab==='cc');
+  document.getElementById('tab-emp').classList.toggle('active', tab==='emp');
+  loadReport();
+}
+
+async function loadReport() {
+  const from = document.getElementById('reportFrom').value;
+  const to = document.getElementById('reportTo').value;
+  if (!from || !to) return;
+
+  const content = document.getElementById('reportContent');
+  if (reportTab === 'cc') {
+    const res = await api(`/reportes/resumen-centros-coste?desde=${from}&hasta=${to}`);
+    const maxMin = Math.max(...(res.centros_coste||[]).map(c=>c.total_minutos), 1);
+    content.innerHTML = `
+      <div class="card">
+        <h2>Stunden nach Kostenstelle — ${res.total_formateado || '0:00'} gesamt</h2>
+        ${(res.centros_coste||[]).map(cc => `
+          <div class="bar-row">
+            <div class="bar-label">${cc.nombre}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:${Math.max(cc.total_minutos/maxMin*100,2)}%;background:${cc.color||'var(--blue)'}">
+                ${cc.total_formateado}
+              </div>
+            </div>
+            <div class="bar-value">${cc.empleados_count} MA</div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="grid-2" style="margin-top:20px">
+        ${await Promise.all((res.centros_coste||[]).filter(cc=>cc.total_minutos>0).map(async cc => {
+          const det = await api(`/reportes/horas-centro-coste?centro_coste_id=${cc.id}&desde=${from}&hasta=${to}`);
+          return `<div class="card">
+            <h2 style="color:${cc.color||'var(--blue)'}">● ${cc.nombre} (${cc.codigo})</h2>
+            <table><thead><tr><th>Nr.</th><th>Name</th><th>Stunden</th><th>%</th></tr></thead>
+            <tbody>${(det.por_empleado||[]).map(e => `
+              <tr><td>${e.id_nummer}</td><td>${e.nombre}</td><td>${e.formateado}</td><td>${e.porcentaje}%</td></tr>
+            `).join('')}</tbody></table>
+          </div>`;
+        })).then(cards => cards.join(''))}
+      </div>`;
+  } else {
+    content.innerHTML = `<div class="grid-2">${await Promise.all(employees.map(async emp => {
+      const det = await api(`/reportes/horas-empleado?empleado_id=${emp.id}&desde=${from}&hasta=${to}`);
+      if (!det.total_minutos) return '';
+      return `<div class="card">
+        <h2>#${emp.id_nummer} ${emp.nombre} ${emp.apellido||''}</h2>
+        <div style="font-size:24px;font-weight:700;margin-bottom:12px">${det.total_formateado}</div>
+        ${(det.por_centro_coste||[]).map(cc => {
+          const color = costCenters.find(c=>c.id===cc.centro_coste_id)?.color||'var(--blue)';
+          return `<div class="bar-row">
+            <div class="bar-label">${cc.nombre}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${cc.porcentaje}%;background:${color}">${cc.formateado}</div></div>
+            <div class="bar-value">${cc.porcentaje}%</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    })).then(cards => cards.filter(Boolean).join(''))}</div>`;
+  }
+}
+
+// === EMPLEADOS ===
+async function loadEmpleados() {
+  const res = await api('/empleados/');
+  document.getElementById('empTable').innerHTML = (res.data||[]).map(e => `
+    <tr>
+      <td><b>${e.id_nummer}</b></td>
+      <td>${e.nombre} ${e.apellido||''}</td>
+      <td>${e.grupo_nombre || '-'}</td>
+      <td>${e.monthly_hours}h</td>
+      <td>${e.activo ? '<span class="badge badge-green">Aktiv</span>' : '<span class="badge badge-red">Inaktiv</span>'}</td>
+    </tr>
+  `).join('');
+}
+
+// === INIT ===
+loadInitialData().then(() => loadFichaje());
+</script>
+</body>
+</html>
