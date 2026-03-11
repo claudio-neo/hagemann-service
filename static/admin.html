@@ -1969,7 +1969,7 @@ async function loadSchichtplanung() {
     const res = await api(`/turnos/planes?desde=${fromStr}&hasta=${toStr}`);
     const planes = res.data || res || [];
     turnoPlanes = {};
-    planes.forEach(p => { turnoPlanes[`${p.empleado_id}_${p.fecha}`] = p; });
+    planes.forEach(p => { turnoPlanes[`${p.empleado_id}_${p.fecha_plan}`] = p; });
 
     const grupoFilter = document.getElementById('spGruppe')?.value || '';
     let emps = employees;
@@ -1996,7 +1996,7 @@ async function loadSchichtplanung() {
       const cells = days.map(d => {
         const ds = d.toISOString().slice(0,10);
         const plan = turnoPlanes[`${emp.id}_${ds}`];
-        const modelo = plan ? turnoModelos.find(m => m.id === plan.turno_modelo_id) : null;
+        const modelo = plan ? turnoModelos.find(m => m.id === plan.modelo_turno_id) : null;
         const isToday = ds === today;
         const tdStyle = isToday ? 'background:#eff6ff' : '';
         if (modelo) {
@@ -2181,12 +2181,17 @@ async function saveBulkTurno() {
   }
   const checkboxes = document.querySelectorAll('#bulkEmpList input[type="checkbox"]:checked');
   const empIds = checkboxes.length > 0
-    ? Array.from(checkboxes).map(cb => parseInt(cb.value))
+    ? Array.from(checkboxes).map(cb => cb.value)
     : employees.map(e => e.id);
+  // Build dates array from von to bis
+  const fechas = [];
+  const cur = new Date(von);
+  const end = new Date(bis);
+  while (cur <= end) { fechas.push(cur.toISOString().slice(0,10)); cur.setDate(cur.getDate()+1); }
   try {
     await api('/turnos/planes/bulk', {
       method: 'POST',
-      body: JSON.stringify({ turno_modelo_id: parseInt(modeloId), fecha_inicio: von, fecha_fin: bis, empleado_ids: empIds })
+      body: JSON.stringify({ modelo_turno_id: modeloId, fechas, empleado_ids: empIds })
     });
     closeModal('bulkTurnoModal');
     showGlobalAlert('success', `✓ Schichten zugewiesen für ${empIds.length} Mitarbeiter`);
