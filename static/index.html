@@ -191,7 +191,10 @@ select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
 
 <script>
 // Auto-detect base path (works behind reverse proxy /hagemann/ or direct :8013)
-const basePath = window.location.pathname.replace(/\/+$/, '');
+const basePath = window.location.pathname
+  .replace(/\/index\.html.*$/, '')
+  .replace(/\/static\/?$/, '')
+  .replace(/\/+$/, '');
 const API = window.location.origin + basePath + '/api/v1';
 let employees = [], costCenters = [], selectedEmp = null, selectedCC = null;
 
