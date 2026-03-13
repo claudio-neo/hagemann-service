@@ -1,5 +1,5 @@
 """
-API de Reportes — doble vista empleado↔departamento
+API de Reportes — doble vista empleado↔departamento + horas por tipo de turno
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from datetime import date, datetime
 from ..database import get_db
 from ..models.empleado import Empleado, CentroCoste
 from ..models.fichaje import Fichaje, SegmentoTiempo
+from ..models.turno import PlanTurno, ModeloTurno
 
 router = APIRouter(prefix="/reportes", tags=["Reportes"])
 
@@ -230,4 +231,147 @@ def resumen_centros_coste(
         ],
         "total_minutos": grand_total,
         "total_formateado": f"{grand_total // 60}:{grand_total % 60:02d}",
+    }
+
+
+# ---------------------------------------------------------------------------
+# HG-22: Horas por tipo de turno (Nachtzuschlag-Übersicht)
+# ---------------------------------------------------------------------------
+
+def _fmt(minutes: int) -> str:
+    """Format minutes as H:MM"""
+    h, m = divmod(abs(minutes), 60)
+    return f"{h}:{m:02d}"
+
+
+@router.get("/horas-por-turno")
+def horas_por_turno(
+    desde: date = Query(...),
+    hasta: date = Query(...),
+    empleado_id: Optional[UUID] = Query(None, description="Filtrar por empleado"),
+    db: Session = Depends(get_db),
+):
+    """
+    HG-22: Horas reales trabajadas por empleado desglosadas por tipo de turno.
+    Cruza Fichaje (horas reales) con PlanTurno (modelo asignado ese día).
+
+    Útil para calcular Nachtzuschläge, Frühschicht-Zulagen, etc.
+    """
+    desde_dt = datetime.combine(desde, datetime.min.time())
+    hasta_dt = datetime.combine(hasta, datetime.max.time())
+
+    # Cargar todos los modelos de turno (para el resumen de columnas)
+    modelos = db.query(ModeloTurno).filter(ModeloTurno.activo == True).order_by(ModeloTurno.codigo).all()
+    modelo_map = {str(m.id): m for m in modelos}
+
+    # Cargar fichajes cerrados del periodo
+    q = db.query(Fichaje).filter(
+        Fichaje.fecha_entrada >= desde_dt,
+        Fichaje.fecha_entrada <= hasta_dt,
+        Fichaje.fecha_salida.isnot(None),
+    )
+    if empleado_id:
+        q = q.filter(Fichaje.empleado_id == empleado_id)
+    fichajes = q.order_by(Fichaje.empleado_id, Fichaje.fecha_entrada).all()
+
+    if not fichajes:
+        return {
+            "periodo": {"desde": desde.isoformat(), "hasta": hasta.isoformat()},
+            "modelos": [{"id": str(m.id), "codigo": m.codigo, "nombre": m.nombre, "color": m.color} for m in modelos],
+            "empleados": [],
+            "totales": {},
+        }
+
+    # Cargar planes del periodo (bulk, luego indexar en Python)
+    planes_q = db.query(PlanTurno).filter(
+        PlanTurno.fecha_plan >= desde,
+        PlanTurno.fecha_plan <= hasta,
+    )
+    if empleado_id:
+        planes_q = planes_q.filter(PlanTurno.empleado_id == empleado_id)
+    planes = planes_q.all()
+    # Index: (empleado_id_str, fecha_iso) → PlanTurno
+    plan_idx = {(str(p.empleado_id), p.fecha_plan.isoformat()): p for p in planes}
+
+    # Cargar datos de empleados
+    emp_ids = list({f.empleado_id for f in fichajes})
+    emps = db.query(Empleado).filter(Empleado.id.in_(emp_ids)).all()
+    emp_map = {str(e.id): e for e in emps}
+
+    # Agrupar por empleado
+    from collections import defaultdict
+    emp_data: dict = defaultdict(lambda: {
+        "por_modelo": defaultdict(int),   # modelo_id → minutos
+        "sin_plan": 0,                     # horas sin plan de turno
+        "total": 0,
+        "dias": [],
+    })
+
+    for f in fichajes:
+        emp_id_str = str(f.empleado_id)
+        fecha_iso = f.fecha_entrada.date().isoformat()
+        duracion = f.minutos_trabajados or 0
+
+        # Buscar plan de turno para ese día
+        plan = plan_idx.get((emp_id_str, fecha_iso))
+
+        emp_data[emp_id_str]["total"] += duracion
+        emp_data[emp_id_str]["dias"].append({
+            "fecha": fecha_iso,
+            "entrada": f.fecha_entrada.strftime("%H:%M"),
+            "salida": f.fecha_salida.strftime("%H:%M") if f.fecha_salida else None,
+            "minutos": duracion,
+            "modelo_codigo": plan.modelo_turno.codigo if plan and plan.modelo_turno else None,
+            "modelo_nombre": plan.modelo_turno.nombre if plan and plan.modelo_turno else "Ohne Plan",
+            "modelo_color": plan.modelo_turno.color if plan and plan.modelo_turno else "#9ca3af",
+        })
+
+        if plan and plan.modelo_turno_id:
+            emp_data[emp_id_str]["por_modelo"][str(plan.modelo_turno_id)] += duracion
+        else:
+            emp_data[emp_id_str]["sin_plan"] += duracion
+
+    # Construir respuesta
+    empleados_out = []
+    totales: dict = defaultdict(int)
+    totales["sin_plan"] = 0
+    totales["total"] = 0
+
+    for emp_id_str, data in sorted(
+        emp_data.items(),
+        key=lambda x: emp_map[x[0]].id_nummer if x[0] in emp_map else 0
+    ):
+        emp = emp_map.get(emp_id_str)
+        por_modelo_out = {}
+        for m in modelos:
+            mins = data["por_modelo"].get(str(m.id), 0)
+            por_modelo_out[m.codigo] = {"minutos": mins, "formateado": _fmt(mins), "modelo_id": str(m.id)}
+            totales[m.codigo] = totales.get(m.codigo, 0) + mins
+
+        totales["sin_plan"] += data["sin_plan"]
+        totales["total"] += data["total"]
+
+        empleados_out.append({
+            "empleado_id": emp_id_str,
+            "id_nummer": emp.id_nummer if emp else None,
+            "nombre": f"{emp.nombre} {emp.apellido or ''}".strip() if emp else emp_id_str,
+            "por_modelo": por_modelo_out,
+            "sin_plan_minutos": data["sin_plan"],
+            "sin_plan_formateado": _fmt(data["sin_plan"]),
+            "total_minutos": data["total"],
+            "total_formateado": _fmt(data["total"]),
+            "detalle_diario": sorted(data["dias"], key=lambda d: d["fecha"]),
+        })
+
+    # Formatear totales
+    totales_out = {k: {"minutos": v, "formateado": _fmt(v)} for k, v in totales.items()}
+
+    return {
+        "periodo": {"desde": desde.isoformat(), "hasta": hasta.isoformat()},
+        "modelos": [
+            {"id": str(m.id), "codigo": m.codigo, "nombre": m.nombre, "color": m.color or "#6b7280"}
+            for m in modelos
+        ],
+        "empleados": empleados_out,
+        "totales": totales_out,
     }
