@@ -46,6 +46,7 @@ from .routes.gruppen import router as gruppen_router
 from .routes.zeitgruppen import router as zeitgruppen_router
 from .routes.audit import router as audit_router
 from .routes.import_export import router as import_export_router
+from .routes.usuarios import router as usuarios_router
 
 settings = get_settings()
 
@@ -149,6 +150,7 @@ app.include_router(datev_router, prefix="/api/v1")
 app.include_router(gruppen_router, prefix="/api/v1")
 app.include_router(zeitgruppen_router, prefix="/api/v1")
 app.include_router(audit_router, prefix="/api/v1")
+app.include_router(usuarios_router, prefix="/api/v1")
 app.include_router(import_export_router, prefix="/api/v1")
 
 

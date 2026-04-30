@@ -280,6 +280,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
   <button class="nav-btn" onclick="showPage('importieren')" id="nav-importieren">📤 Import</button>
   <button class="nav-btn" onclick="showPage('protokoll')" id="nav-protokoll">📜 Protokoll</button>
   <button class="nav-btn" onclick="showPage('mitarbeiter')" id="nav-mitarbeiter">👥 Mitarbeiter</button>
+  <button class="nav-btn hidden" onclick="showPage('benutzerverwaltung')" id="nav-benutzerverwaltung">🔐 Benutzer</button>
   <div class="nav-spacer"></div>
   <a class="nav-back" href="index.html">← Zurück zur App</a>
 </nav>
@@ -1076,6 +1077,105 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
   </div>
 </div>
 
+<!-- ===== BENUTZERVERWALTUNG ===== -->
+<div id="page-benutzerverwaltung" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Benutzerverwaltung</h1><p>Systembenutzer, Rollen und Zugangsdaten verwalten</p></div>
+      <button class="btn btn-primary" onclick="openUserModal()">+ Neuer Benutzer</button>
+    </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Benutzername</th>
+            <th>E-Mail</th>
+            <th>Rolle</th>
+            <th>Mitarbeiter</th>
+            <th>Letzter Login</th>
+            <th>Status</th>
+            <th style="width:140px"></th>
+          </tr>
+        </thead>
+        <tbody id="benutzerverwaltungTbody">
+          <tr><td colspan="7"><div class="loading">Lade Daten…</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Benutzer erstellen / bearbeiten -->
+<div class="modal-overlay hidden" id="userModal">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <h2 id="userModalTitle">Neuer Benutzer</h2>
+      <button class="modal-close" onclick="closeModal('userModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="userModalId">
+      <div class="form-group">
+        <label>Benutzername (nick) *</label>
+        <input type="text" id="userNick" class="form-control" placeholder="max.mustermann">
+      </div>
+      <div class="form-group">
+        <label>E-Mail</label>
+        <input type="email" id="userEmail" class="form-control" placeholder="max@hagemann.de">
+      </div>
+      <div class="form-group">
+        <label>Rolle *</label>
+        <select id="userRole" class="form-control">
+          <option value="1">Admin</option>
+          <option value="2">Schichtführer</option>
+          <option value="3">Stv. Schichtführer</option>
+          <option value="4" selected>Benutzer</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Verknüpfter Mitarbeiter</label>
+        <select id="userEmpleado" class="form-control">
+          <option value="">— kein Mitarbeiter —</option>
+        </select>
+      </div>
+      <div class="form-group" id="userPassGroup">
+        <label>Passwort *</label>
+        <input type="password" id="userPass" class="form-control" placeholder="Mindestens 6 Zeichen">
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="userActivo" checked> Aktiv
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('userModal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="saveUser()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Passwort zurücksetzen -->
+<div class="modal-overlay hidden" id="resetPassModal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h2>Passwort zurücksetzen</h2>
+      <button class="modal-close" onclick="closeModal('resetPassModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="resetPassUserId">
+      <p id="resetPassInfo" style="margin-bottom:16px;color:var(--muted)"></p>
+      <div class="form-group">
+        <label>Neues Passwort *</label>
+        <input type="password" id="resetPassValue" class="form-control" placeholder="Mindestens 6 Zeichen">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('resetPassModal')">Abbrechen</button>
+      <button class="btn btn-danger" onclick="doResetPassword()">Zurücksetzen</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // =====================================================================
 // API SETUP
@@ -1239,6 +1339,7 @@ function showPage(page) {
   if (page === 'importieren') { /* static page */ }
   if (page === 'protokoll') loadProtokoll();
   if (page === 'mitarbeiter') renderEmployees();
+  if (page === 'benutzerverwaltung') loadBenutzerverwaltung();
 }
 
 // =====================================================================
@@ -1251,12 +1352,19 @@ async function init() {
   populateYearSelect('exportYear');
 
   try {
-    const [empRes, ccRes] = await Promise.all([
+    const [empRes, ccRes, meRes] = await Promise.all([
       api('/empleados/?activo=true'),
-      api('/centros-coste/')
+      api('/centros-coste/'),
+      api('/auth/me'),
     ]);
     employees = empRes.data || [];
     costCenters = ccRes.data || [];
+
+    // Show admin-only nav items based on permissions
+    const perms = meRes.permissions || [];
+    if (perms.includes('users:admin')) {
+      document.getElementById('nav-benutzerverwaltung').classList.remove('hidden');
+    }
 
     // Populate employee dropdowns
     populateEmpDropdowns();
@@ -3297,6 +3405,128 @@ async function loadProtokoll() {
   } catch(e) {
     tbody.innerHTML = `<tr><td colspan="5"><div class="alert alert-error">Fehler: ${e.message}</div></td></tr>`;
   }
+}
+
+// =====================================================================
+// BENUTZERVERWALTUNG
+// =====================================================================
+const ROLE_LABELS = {1:'Admin', 2:'Schichtführer', 3:'Stv. Schichtführer', 4:'Benutzer'};
+const ROLE_BADGE  = {1:'badge-red', 2:'badge-blue', 3:'badge-purple', 4:'badge-gray'};
+let _userEditId = null;
+
+async function loadBenutzerverwaltung() {
+  const tbody = document.getElementById('benutzerverwaltungTbody');
+  tbody.innerHTML = '<tr><td colspan="7"><div class="loading">Lade Daten…</div></td></tr>';
+  try {
+    const res = await api('/usuarios/');
+    const users = res.data || [];
+    if (!users.length) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty">Keine Benutzer</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = users.map(u => {
+      const lastLogin = u.last_login ? new Date(u.last_login).toLocaleString('de-DE') : '—';
+      return `<tr style="${!u.activo ? 'opacity:.5' : ''}">
+        <td><b>${u.nick}</b></td>
+        <td>${u.email || '—'}</td>
+        <td><span class="badge ${ROLE_BADGE[u.role] || 'badge-gray'}">${u.role_label}</span></td>
+        <td>${u.empleado_nombre || '—'}</td>
+        <td style="font-size:12px">${lastLogin}</td>
+        <td>${u.activo ? '<span class="badge badge-green">Aktiv</span>' : '<span class="badge badge-red">Inaktiv</span>'}</td>
+        <td style="display:flex;gap:6px">
+          <button class="btn btn-outline" style="padding:5px 10px;font-size:12px" onclick="openUserModal('${u.id}')">✏ Bearbeiten</button>
+          <button class="btn btn-outline" style="padding:5px 10px;font-size:12px" onclick="openResetPass('${u.id}','${u.nick}')">🔑</button>
+          ${u.activo ? `<button class="btn btn-outline" style="padding:5px 10px;font-size:12px;color:var(--red)" onclick="deactivateUser('${u.id}','${u.nick}')">✕</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="alert alert-error">Fehler: ${e.message}</div></td></tr>`;
+  }
+}
+
+async function openUserModal(userId) {
+  _userEditId = userId || null;
+  document.getElementById('userModalTitle').textContent = userId ? 'Benutzer bearbeiten' : 'Neuer Benutzer';
+  document.getElementById('userModalId').value = userId || '';
+  document.getElementById('userNick').value = '';
+  document.getElementById('userEmail').value = '';
+  document.getElementById('userRole').value = '4';
+  document.getElementById('userEmpleado').value = '';
+  document.getElementById('userPass').value = '';
+  document.getElementById('userActivo').checked = true;
+  document.getElementById('userPassGroup').querySelector('label').textContent =
+    userId ? 'Passwort (leer lassen = unverändert)' : 'Passwort *';
+
+  // Populate employee dropdown
+  const sel = document.getElementById('userEmpleado');
+  sel.innerHTML = '<option value="">— kein Mitarbeiter —</option>' +
+    employees.map(e => `<option value="${e.id}">#${e.id_nummer} ${e.nombre} ${e.apellido||''}</option>`).join('');
+
+  if (userId) {
+    try {
+      const u = await api(`/usuarios/${userId}`);
+      document.getElementById('userNick').value = u.nick;
+      document.getElementById('userEmail').value = u.email || '';
+      document.getElementById('userRole').value = u.role;
+      document.getElementById('userEmpleado').value = u.empleado_id || '';
+      document.getElementById('userActivo').checked = u.activo;
+    } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); return; }
+  }
+  document.getElementById('userModal').classList.remove('hidden');
+}
+
+async function saveUser() {
+  const userId = document.getElementById('userModalId').value;
+  const nick = document.getElementById('userNick').value.trim();
+  const email = document.getElementById('userEmail').value.trim() || null;
+  const role = parseInt(document.getElementById('userRole').value);
+  const empleado_id = document.getElementById('userEmpleado').value || null;
+  const pass = document.getElementById('userPass').value;
+  const activo = document.getElementById('userActivo').checked;
+
+  if (!nick) { showGlobalAlert('error', 'Benutzername ist Pflichtfeld'); return; }
+  if (!userId && !pass) { showGlobalAlert('error', 'Passwort ist Pflichtfeld für neue Benutzer'); return; }
+
+  try {
+    if (userId) {
+      const body = {nick, email, role, empleado_id, activo};
+      await api(`/usuarios/${userId}`, {method:'PUT', body: JSON.stringify(body)});
+      if (pass) await api(`/usuarios/${userId}/reset-password`, {method:'POST', body: JSON.stringify({password: pass})});
+    } else {
+      await api('/usuarios/', {method:'POST', body: JSON.stringify({nick, email, password: pass, role, empleado_id, activo})});
+    }
+    closeModal('userModal');
+    showGlobalAlert('success', userId ? '✓ Benutzer aktualisiert' : '✓ Benutzer erstellt');
+    loadBenutzerverwaltung();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+function openResetPass(userId, nick) {
+  document.getElementById('resetPassUserId').value = userId;
+  document.getElementById('resetPassInfo').textContent = `Neues Passwort für Benutzer "${nick}" setzen:`;
+  document.getElementById('resetPassValue').value = '';
+  document.getElementById('resetPassModal').classList.remove('hidden');
+}
+
+async function doResetPassword() {
+  const userId = document.getElementById('resetPassUserId').value;
+  const pass = document.getElementById('resetPassValue').value;
+  if (!pass) { showGlobalAlert('error', 'Passwort eingeben'); return; }
+  try {
+    await api(`/usuarios/${userId}/reset-password`, {method:'POST', body: JSON.stringify({password: pass})});
+    closeModal('resetPassModal');
+    showGlobalAlert('success', '✓ Passwort zurückgesetzt');
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+async function deactivateUser(userId, nick) {
+  if (!confirm(`Benutzer "${nick}" deaktivieren?`)) return;
+  try {
+    await api(`/usuarios/${userId}`, {method:'DELETE'});
+    showGlobalAlert('success', `✓ Benutzer "${nick}" deaktiviert`);
+    loadBenutzerverwaltung();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
 }
 </script>
 </body>
