@@ -10,12 +10,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.usuario import Usuario
+from ..models.usuario import Usuario, ROLE_LABELS
 from ..auth import (
     verify_password, hash_password,
     create_access_token, decode_token,
     get_current_user,
 )
+from ..permisos import permisos_efectivos, PERMISOS_DELEGADOS_SCHICHTFUEHRER
+from ..models.usuario import ROLE_STV_SCHICHTFUEHRER
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
@@ -30,6 +32,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: int
+    role_name: str
     nick: str
 
 class RefreshRequest(BaseModel):
@@ -38,36 +41,24 @@ class RefreshRequest(BaseModel):
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
-_ROLE_NAMES = {1: "Admin", 2: "Abteilungsleiter", 3: "Mitarbeiter"}
-
-
-def _user_dict(u: Usuario) -> dict:
+def _user_dict(u: Usuario, db) -> dict:
+    efectivos = permisos_efectivos(u, db)
+    sustituyendo = (
+        u.role == ROLE_STV_SCHICHTFUEHRER
+        and bool(PERMISOS_DELEGADOS_SCHICHTFUEHRER & efectivos)
+    )
     return {
         "id": str(u.id),
         "nick": u.nick,
         "email": u.email,
         "role": u.role,
-        "role_name": _ROLE_NAMES.get(u.role, "Desconocido"),
+        "role_name": ROLE_LABELS.get(u.role, "Unbekannt"),
         "empleado_id": str(u.empleado_id) if u.empleado_id else None,
         "activo": u.activo,
         "last_login": u.last_login.isoformat() + "Z" if u.last_login else None,
-        "permisos": _get_permisos(u.role),
+        "permisos": sorted(efectivos),
+        "sustituyendo": sustituyendo,
     }
-
-
-def _get_permisos(role: int) -> list[str]:
-    permisos_base = ["fichajes:leer", "turnos:leer", "perfil:leer"]
-    if role <= 2:  # Abteilungsleiter y Admin
-        permisos_base += [
-            "turnos:escribir", "correcciones:revisar",
-            "aprobaciones:nivel1", "reportes:ver",
-        ]
-    if role == 1:  # Solo Admin
-        permisos_base += [
-            "usuarios:admin", "aprobaciones:nivel2",
-            "fichajes:editar", "exportar",
-        ]
-    return permisos_base
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
@@ -87,7 +78,6 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Actualizar last_login
     user.last_login = datetime.utcnow()
     db.commit()
 
@@ -95,6 +85,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     return TokenResponse(
         access_token=token,
         role=user.role,
+        role_name=ROLE_LABELS.get(user.role, "Unbekannt"),
         nick=user.nick,
     )
 
@@ -115,26 +106,27 @@ def refresh_token(data: RefreshRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me")
-def get_me(current_user: Usuario = Depends(get_current_user)):
-    """Datos del usuario autenticado + permisos."""
-    return _user_dict(current_user)
+def get_me(
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Datos del usuario autenticado + permisos efectivos."""
+    return _user_dict(current_user, db)
 
 
 # ─── Seed ────────────────────────────────────────────────────────────────────
 
 def seed_usuarios(db: Session):
-    """
-    Crea los usuarios iniciales si no existen.
-    Llamar una vez al arrancar la app.
-    """
+    """Crea los usuarios de demo si no existen. Idempotente."""
+    from ..models.usuario import ROLE_ADMIN, ROLE_SCHICHTFUEHRER, ROLE_STV_SCHICHTFUEHRER, ROLE_BENUTZER
     seeds = [
-        {"nick": "admin",     "email": "admin@hagemann.de",    "password": "admin123",   "role": 1},
-        {"nick": "jefe1",     "email": "jefe1@hagemann.de",    "password": "jefe123",    "role": 2},
-        {"nick": "empleado1", "email": "emp1@hagemann.de",     "password": "emp123",     "role": 3},
+        {"nick": "admin",    "email": "admin@hagemann.de",  "password": "admin123",  "role": ROLE_ADMIN},
+        {"nick": "schicht1", "email": "schicht1@hagemann.de","password": "schicht123","role": ROLE_SCHICHTFUEHRER},
+        {"nick": "stv1",     "email": "stv1@hagemann.de",   "password": "stv123",    "role": ROLE_STV_SCHICHTFUEHRER},
+        {"nick": "emp1",     "email": "emp1@hagemann.de",   "password": "emp123",    "role": ROLE_BENUTZER},
     ]
     for s in seeds:
-        exists = db.query(Usuario).filter(Usuario.nick == s["nick"]).first()
-        if not exists:
+        if not db.query(Usuario).filter(Usuario.nick == s["nick"]).first():
             db.add(Usuario(
                 nick=s["nick"],
                 email=s["email"],

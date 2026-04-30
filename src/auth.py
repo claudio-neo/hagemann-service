@@ -1,9 +1,10 @@
 """
-Autenticación JWT y control de roles (HG-13)
+Autenticación JWT y control de acceso granular — Hagemann
 Proporciona:
   - create_access_token(data) → str
   - get_current_user(token) → Usuario (dependency)
-  - require_role(min_role) → dependency factory
+  - require_permission(permiso) → dependency factory  ← principal
+  - require_role(min_role) → dependency factory       ← legacy, mantener compatibilidad
 """
 from datetime import datetime, timedelta
 from typing import Optional
@@ -83,16 +84,38 @@ def get_current_user(
 
 
 def require_role(min_role: int):
-    """
-    Factory que devuelve una dependency que exige role <= min_role.
-    Roles: 1=Admin (más privilegiado), 2=Abteilungsleiter, 3=Mitarbeiter
-    Un Admin (1) puede todo; Abteilungsleiter (2) puede lo suyo y lo de Mitarbeiter.
-    """
+    """Legacy: exige role <= min_role. Usar require_permission() para código nuevo."""
     def _check(current_user: Usuario = Depends(get_current_user)) -> Usuario:
         if current_user.role > min_role:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
-                f"Se requiere rol ≤ {min_role} (tienes {current_user.role})",
+                f"Erforderliche Rolle ≤ {min_role} (Ihre Rolle: {current_user.role})",
+            )
+        return current_user
+    return _check
+
+
+def require_permission(permiso: str):
+    """
+    Dependency factory que verifica un permiso granular.
+    Resuelve delegación automática para Stv. Schichtführer.
+
+    Uso:
+        @router.post("/horas/liberar")
+        def liberar(u = Depends(require_permission(HORAS_LIBERAR_EQUIPO))):
+            ...
+    """
+    from .permisos import permisos_efectivos
+
+    def _check(
+        current_user: Usuario = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> Usuario:
+        efectivos = permisos_efectivos(current_user, db)
+        if permiso not in efectivos:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                f"Fehlende Berechtigung: {permiso}",
             )
         return current_user
     return _check
