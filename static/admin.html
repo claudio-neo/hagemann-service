@@ -247,6 +247,9 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
   <button class="nav-btn" onclick="showPage('korrekturen')" id="nav-korrekturen">📝 Korrekturen</button>
   <button class="nav-btn" onclick="showPage('genehmigungen')" id="nav-genehmigungen">✅ Genehmigungen<span id="pill-genehmigungen" class="pill hidden">0</span></button>
   <button class="nav-btn" onclick="showPage('export')" id="nav-export">📥 Export</button>
+  <button class="nav-btn" onclick="showPage('stammdaten')" id="nav-stammdaten">⚙ Stammdaten</button>
+  <button class="nav-btn" onclick="showPage('importieren')" id="nav-importieren">📤 Import</button>
+  <button class="nav-btn" onclick="showPage('protokoll')" id="nav-protokoll">📜 Protokoll</button>
   <button class="nav-btn" onclick="showPage('mitarbeiter')" id="nav-mitarbeiter">👥 Mitarbeiter</button>
   <div class="nav-spacer"></div>
   <a class="nav-back" href="index.html">← Zurück zur App</a>
@@ -465,6 +468,106 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     </div>
 
     <div id="skContent"><div class="empty">Mitarbeiter und Jahr auswählen</div></div>
+  </div>
+</div>
+
+<!-- ===== PAGE: STAMMDATEN ===== -->
+<div id="page-stammdaten" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Stammdaten</h1><p>Abteilungen, Kostenstellen und Zeitgruppen verwalten</p></div>
+    </div>
+
+    <div class="tab-bar" style="margin-bottom:20px">
+      <button class="tab-btn active" onclick="switchStammdatenTab('abt')" id="stab-abt">Abteilungen</button>
+      <button class="tab-btn" onclick="switchStammdatenTab('ks')" id="stab-ks">Kostenstellen</button>
+      <button class="tab-btn" onclick="switchStammdatenTab('zg')" id="stab-zg">Zeitgruppen</button>
+    </div>
+
+    <div id="stammdatenContent"></div>
+  </div>
+</div>
+
+<!-- ===== PAGE: IMPORTIEREN ===== -->
+<div id="page-importieren" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Import</h1><p>Mitarbeiter aus Excel/CSV importieren</p></div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title" style="margin-bottom:16px">📤 Datei hochladen</div>
+      <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap">
+        <div class="form-group" style="margin-bottom:0;flex:1;min-width:250px">
+          <label>Excel (.xlsx) oder CSV (.csv)</label>
+          <input type="file" id="importFile" accept=".xlsx,.csv" class="form-control">
+        </div>
+        <button class="btn btn-outline" onclick="runImport(true)">👁 Vorschau</button>
+        <button class="btn btn-primary" onclick="runImport(false)">⬆ Importieren</button>
+      </div>
+    </div>
+
+    <div id="importResult"></div>
+
+    <div class="card" style="margin-top:20px">
+      <div class="card-title" style="margin-bottom:12px">🗄 Backup</div>
+      <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Telegram Chat-ID</label>
+          <input type="text" id="backupChatId" class="form-control" style="width:200px" placeholder="z.B. 140223355">
+        </div>
+        <button class="btn btn-primary" onclick="runBackup()">📦 Backup senden</button>
+      </div>
+      <div id="backupResult" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAGE: PROTOKOLL ===== -->
+<div id="page-protokoll" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>Protokoll</h1><p>Änderungshistorie aller Verwaltungsaktionen</p></div>
+      <button class="btn btn-outline" onclick="loadProtokoll()">🔄 Aktualisieren</button>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Von</label>
+          <input type="date" id="auditFrom" class="form-control" style="width:auto">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Bis</label>
+          <input type="date" id="auditTo" class="form-control" style="width:auto">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Aktion</label>
+          <select id="auditAction" class="form-control" style="width:auto">
+            <option value="">Alle</option>
+            <option value="CREATE">Erstellen</option>
+            <option value="UPDATE">Ändern</option>
+            <option value="DELETE">Löschen</option>
+            <option value="IMPORT">Import</option>
+            <option value="BACKUP">Backup</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="loadProtokoll()">Laden</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Zeitpunkt</th><th>Benutzer</th><th>Aktion</th><th>Entität</th><th>Details</th></tr>
+          </thead>
+          <tbody id="protokollTbody">
+            <tr><td colspan="5"><div class="empty">Keine Einträge</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1061,6 +1164,9 @@ function showPage(page) {
   if (page === 'korrekturen') loadKorrekturen();
   if (page === 'genehmigungen') loadGenehmigungen();
   if (page === 'export') initExport();
+  if (page === 'stammdaten') initStammdaten();
+  if (page === 'importieren') { /* static page */ }
+  if (page === 'protokoll') loadProtokoll();
   if (page === 'mitarbeiter') renderEmployees();
 }
 
@@ -2806,6 +2912,263 @@ async function reactivateEmployee(id, name) {
 // START
 // =====================================================================
 init();
+// =====================================================================
+// STAMMDATEN (Abteilungen, Kostenstellen, Zeitgruppen)
+// =====================================================================
+let stammdatenTab = 'abt';
+
+function switchStammdatenTab(tab) {
+  stammdatenTab = tab;
+  document.getElementById('stab-abt').classList.toggle('active', tab === 'abt');
+  document.getElementById('stab-ks').classList.toggle('active', tab === 'ks');
+  document.getElementById('stab-zg').classList.toggle('active', tab === 'zg');
+  initStammdaten();
+}
+
+async function initStammdaten() {
+  const content = document.getElementById('stammdatenContent');
+  content.innerHTML = '<div class="loading">Lade Daten</div>';
+
+  try {
+    if (stammdatenTab === 'abt') {
+      const res = await api('/abteilungen/');
+      const items = res.data || [];
+      content.innerHTML = `
+        <div class="card">
+          <div class="card-header" style="margin-bottom:12px">
+            <span class="card-title">Abteilungen</span>
+            <button class="btn btn-primary btn-sm" onclick="promptStamm('abt')">+ Hinzufügen</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Name</th><th>Beschreibung</th><th>Status</th><th>Aktion</th></tr></thead>
+            <tbody>${items.map(g => `<tr>
+              <td><b>${g.nombre}</b></td>
+              <td>${g.descripcion||'—'}</td>
+              <td>${g.activo ? '<span class="badge badge-green">Aktiv</span>' : '<span class="badge badge-gray">Inaktiv</span>'}</td>
+              <td><button class="btn btn-sm btn-outline" onclick="editStamm('abt','${g.id}','${g.nombre.replace(/'/g,"\\'")}','${(g.descripcion||'').replace(/'/g,"\\'")}')">✎</button></td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+        </div>`;
+
+    } else if (stammdatenTab === 'ks') {
+      const res = await api('/kostenstellen/');
+      const items = res.data || [];
+      content.innerHTML = `
+        <div class="card">
+          <div class="card-header" style="margin-bottom:12px">
+            <span class="card-title">Kostenstellen</span>
+            <button class="btn btn-primary btn-sm" onclick="promptStamm('ks')">+ Hinzufügen</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Code</th><th>Name</th><th>Farbe</th><th>Status</th><th>Aktion</th></tr></thead>
+            <tbody>${items.map(k => `<tr>
+              <td><b>${k.codigo}</b></td>
+              <td>${k.nombre}</td>
+              <td><span style="display:inline-block;width:16px;height:16px;border-radius:4px;background:${k.color||'#ccc'}"></span> ${k.color||'—'}</td>
+              <td>${k.activo ? '<span class="badge badge-green">Aktiv</span>' : '<span class="badge badge-gray">Inaktiv</span>'}</td>
+              <td><button class="btn btn-sm btn-outline" onclick="editStammKs('${k.id}','${k.codigo.replace(/'/g,"\\'")}','${k.nombre.replace(/'/g,"\\'")}','${k.color||''}')">✎</button></td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+        </div>`;
+
+    } else if (stammdatenTab === 'zg') {
+      const res = await api('/zeitgruppen/');
+      const items = res.data || [];
+      const tipoLabel = {GLEITZEIT:'Gleitzeit',VERWALTUNG:'Verwaltung',SCHICHT:'Schicht'};
+      content.innerHTML = `
+        <div class="card">
+          <div class="card-header" style="margin-bottom:12px">
+            <span class="card-title">Zeitgruppen</span>
+            <button class="btn btn-primary btn-sm" onclick="promptStamm('zg')">+ Hinzufügen</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Name</th><th>Typ</th><th>Min. Startzeit</th><th>Turnus-Start</th><th>Wochenrotation</th><th>Aktion</th></tr></thead>
+            <tbody>${items.map(z => `<tr>
+              <td><b>${z.nombre}</b></td>
+              <td><span class="badge badge-blue">${tipoLabel[z.tipo]||z.tipo}</span></td>
+              <td>${z.hora_minima_inicio||'—'}</td>
+              <td>${z.usar_inicio_turno ? '✓' : '—'}</td>
+              <td>${z.rotacion_semanal ? '✓' : '—'}</td>
+              <td><button class="btn btn-sm btn-outline" onclick="editStammZg('${z.id}','${z.nombre.replace(/'/g,"\\'")}','${z.tipo}','${z.hora_minima_inicio||''}',${z.usar_inicio_turno},${z.rotacion_semanal})">✎</button></td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+        </div>`;
+    }
+  } catch(e) {
+    content.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+async function promptStamm(type) {
+  const name = prompt(type==='ks' ? 'Neuer Code:' : 'Neuer Name:');
+  if (!name) return;
+  try {
+    if (type === 'abt') await api('/abteilungen/', {method:'POST', body: JSON.stringify({nombre: name})});
+    else if (type === 'ks') {
+      const nombre = prompt('Name:');
+      await api('/kostenstellen/', {method:'POST', body: JSON.stringify({codigo: name, nombre: nombre||name})});
+    } else if (type === 'zg') {
+      const tipo = prompt('Typ (GLEITZEIT/VERWALTUNG/SCHICHT):', 'GLEITZEIT');
+      await api('/zeitgruppen/', {method:'POST', body: JSON.stringify({nombre: name, tipo: tipo||'GLEITZEIT'})});
+    }
+    showGlobalAlert('success', '✓ Erstellt');
+    initStammdaten();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+async function editStamm(type, id, name, desc) {
+  const newName = prompt('Name:', name);
+  if (newName === null) return;
+  const newDesc = prompt('Beschreibung:', desc);
+  try {
+    await api(`/abteilungen/${id}`, {method:'PUT', body: JSON.stringify({nombre: newName, descripcion: newDesc})});
+    showGlobalAlert('success', '✓ Aktualisiert');
+    initStammdaten();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+async function editStammKs(id, code, name, color) {
+  const newCode = prompt('Code:', code);
+  if (newCode === null) return;
+  const newName = prompt('Name:', name);
+  const newColor = prompt('Farbe (#hex):', color);
+  try {
+    await api(`/kostenstellen/${id}`, {method:'PUT', body: JSON.stringify({codigo: newCode, nombre: newName||name, color: newColor||null})});
+    showGlobalAlert('success', '✓ Aktualisiert');
+    initStammdaten();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+async function editStammZg(id, name, tipo, minStart, useTurno, weekRot) {
+  const newName = prompt('Name:', name);
+  if (newName === null) return;
+  const newTipo = prompt('Typ (GLEITZEIT/VERWALTUNG/SCHICHT):', tipo);
+  const newMin = prompt('Min. Startzeit (HH:MM, leer=keine):', minStart);
+  try {
+    await api(`/zeitgruppen/${id}`, {method:'PUT', body: JSON.stringify({
+      nombre: newName, tipo: newTipo||tipo,
+      hora_minima_inicio: newMin||null,
+    })});
+    showGlobalAlert('success', '✓ Aktualisiert');
+    initStammdaten();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+// =====================================================================
+// IMPORT
+// =====================================================================
+async function runImport(dryRun) {
+  const fileInput = document.getElementById('importFile');
+  const resultDiv = document.getElementById('importResult');
+  if (!fileInput.files.length) {
+    showGlobalAlert('error', 'Bitte eine Datei auswählen');
+    return;
+  }
+  resultDiv.innerHTML = '<div class="loading">Wird verarbeitet…</div>';
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  try {
+    const url = API + `/import/mitarbeiter?dry_run=${dryRun}`;
+    const r = await fetch(url, {method:'POST', body: formData});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || data.message || 'Fehler');
+
+    const fehlerRows = (data.fehler||[]).map(f =>
+      `<tr><td>${f.zeile}</td><td class="alert-error">${f.fehler}</td></tr>`
+    ).join('');
+
+    resultDiv.innerHTML = `
+      <div class="card">
+        <div class="card-header" style="margin-bottom:12px">
+          <span class="card-title">${dryRun ? '👁 Vorschau' : '✓ Import abgeschlossen'}</span>
+          ${dryRun ? '<span class="badge badge-amber">Nur Vorschau — keine Änderungen</span>' : '<span class="badge badge-green">Gespeichert</span>'}
+        </div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px">
+          <div><b>${data.gesamt}</b> Gesamt</div>
+          <div style="color:var(--green)"><b>${data.erstellt}</b> Erstellt</div>
+          <div style="color:var(--blue)"><b>${data.aktualisiert}</b> Aktualisiert</div>
+          <div style="color:var(--red)"><b>${(data.fehler||[]).length}</b> Fehler</div>
+        </div>
+        ${fehlerRows ? `<div class="table-wrap"><table>
+          <thead><tr><th>Zeile</th><th>Fehler</th></tr></thead>
+          <tbody>${fehlerRows}</tbody>
+        </table></div>` : ''}
+      </div>`;
+
+    if (!dryRun && data.erstellt + data.aktualisiert > 0) {
+      await init();
+    }
+  } catch(e) {
+    resultDiv.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+async function runBackup() {
+  const chatId = document.getElementById('backupChatId').value.trim();
+  const resultDiv = document.getElementById('backupResult');
+  if (!chatId) {
+    showGlobalAlert('error', 'Bitte Chat-ID eingeben');
+    return;
+  }
+  resultDiv.innerHTML = '<div class="loading">Backup wird erstellt…</div>';
+  try {
+    const res = await api(`/backup/telegram?chat_id=${chatId}`, {method:'POST'});
+    resultDiv.innerHTML = `<div class="alert" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">
+      ✓ Backup gesendet: <b>${res.datei}</b></div>`;
+  } catch(e) {
+    resultDiv.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+// =====================================================================
+// PROTOKOLL (Audit Log)
+// =====================================================================
+async function loadProtokoll() {
+  const tbody = document.getElementById('protokollTbody');
+  tbody.innerHTML = '<tr><td colspan="5"><div class="loading">Lade Daten</div></td></tr>';
+
+  let params = '?limit=100';
+  const from = document.getElementById('auditFrom')?.value;
+  const to = document.getElementById('auditTo')?.value;
+  const accion = document.getElementById('auditAction')?.value;
+  if (from) params += `&desde=${from}`;
+  if (to) params += `&hasta=${to}`;
+  if (accion) params += `&accion=${accion}`;
+
+  try {
+    const res = await api(`/audit/${params}`);
+    const items = res.data || [];
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty">Keine Einträge</div></td></tr>';
+      return;
+    }
+
+    const actionBadge = {
+      CREATE: 'badge-green', UPDATE: 'badge-blue', DELETE: 'badge-red',
+      IMPORT: 'badge-purple', BACKUP: 'badge-amber', LOGIN: 'badge-gray',
+    };
+
+    tbody.innerHTML = items.map(e => {
+      const dt = e.created_at ? new Date(e.created_at).toLocaleString('de-DE') : '—';
+      const badge = actionBadge[e.accion] || 'badge-gray';
+      let details = e.descripcion || '';
+      if (e.cambios && Object.keys(e.cambios).length) {
+        details += '<br>' + Object.entries(e.cambios).map(([k,v]) =>
+          `<small>${k}: ${v.vorher||'—'} → ${v.nachher||'—'}</small>`
+        ).join('<br>');
+      }
+      return `<tr>
+        <td style="white-space:nowrap">${dt}</td>
+        <td>${e.usuario_nick||'System'}</td>
+        <td><span class="badge ${badge}">${e.accion}</span></td>
+        <td><b>${e.entidad_tipo}</b><br><small>${e.entidad_label||e.entidad_id||'—'}</small></td>
+        <td style="font-size:12px">${details||'—'}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="alert alert-error">Fehler: ${e.message}</div></td></tr>`;
+  }
+}
 </script>
 </body>
 </html>

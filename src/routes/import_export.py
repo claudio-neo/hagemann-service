@@ -1,34 +1,54 @@
 """
-Import/Export de empleados via Excel/CSV + Backup Telegram (HG-Plan E, H)
+Import masivo de empleados via Excel/CSV — HG-Plan E
+Backup a Telegram — HG-Plan H
 """
-import csv
 import io
-import os
+import csv
+import json
+import httpx
 import subprocess
-import tempfile
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 
 from ..database import get_db
 from ..models.empleado import Empleado, Grupo, CentroCoste, Zeitgruppe
+from ..models.audit import AuditLog
 from ..services.audit_service import log_action
 
-router = APIRouter(tags=["Import/Export"])
+router = APIRouter(tags=["Import / Export"])
 
-# ── Telegram Backup config ───────────────────────────────
-TELEGRAM_BOT_TOKEN = os.getenv(
-    "BACKUP_TELEGRAM_TOKEN",
-    "8631473423:AAFFeU426CXzYdDDQEdvmVhHL48U8cmLGTU"
-)
-TELEGRAM_CHAT_ID = os.getenv("BACKUP_TELEGRAM_CHAT_ID", "")
+TELEGRAM_BOT_TOKEN = "8631473423:AAFFeU426CXzYdDDQEdvmVhHL48U8cmLGTU"
+# Bot sends to itself (saved messages) — admin must /start the bot first
+# We'll use a configurable chat_id
+TELEGRAM_BACKUP_CHAT_ID = None  # Set via POST /backup/config
 
 
 # ── Import Excel/CSV ────────────────────────────────────
+
+IMPORT_FIELD_MAP = {
+    # Excel column → (model field, type)
+    "Systemnummer": ("id_nummer", int),
+    "Vorname": ("nombre", str),
+    "Nachname": ("apellido", str),
+    "Personalnummer": ("personalnummer", int),
+    "Benutzer-ID": ("benutzer_id", int),
+    "Transponder-ID": ("nfc_tag", str),
+    "Beginn der Berechnung": ("beginn_berechnung", "date"),
+    "Mandat": ("mandat", str),
+    "Firmenbereich": ("firmenbereich", str),
+}
+
+BENUTZERSTATUS_MAP = {
+    "Admin": 1,
+    "Schichtführer": 2,
+    "Stv. Schichtführer": 3,
+    "Benutzer": 4,
+}
+
+
 @router.post("/import/mitarbeiter")
 async def import_mitarbeiter(
     file: UploadFile = File(...),
@@ -36,11 +56,10 @@ async def import_mitarbeiter(
     db: Session = Depends(get_db),
 ):
     """
-    Importar empleados desde Excel (.xlsx) o CSV (.csv).
-    Formato esperado (Importvorlage Hagemann):
-      Systemnummer | Vorname | Nachname | Personalnummer | Benutzer-ID |
-      Benutzerstatus | Transponder-ID | Beginn der Berechnung | Zeitgruppe |
-      Abteilung | Kostenstelle | Mandat | Firmenbereich
+    Importiert Mitarbeiter aus Excel (.xlsx) oder CSV (.csv).
+    Erwartet Spalten: Systemnummer, Vorname, Nachname, Personalnummer,
+    Benutzer-ID, Benutzerstatus, Transponder-ID, Beginn der Berechnung,
+    Zeitgruppe, Abteilung, Kostenstelle, Mandat, Firmenbereich
     """
     filename = file.filename or ""
     content = await file.read()
@@ -55,240 +74,258 @@ async def import_mitarbeiter(
     if not rows:
         raise HTTPException(400, "Keine Daten in der Datei gefunden")
 
-    # Cache lookups
-    gruppen = {g.nombre: g for g in db.query(Grupo).all()}
+    # Pre-load lookups
+    grupos = {g.nombre: g for g in db.query(Grupo).all()}
     kostenstellen = {k.nombre: k for k in db.query(CentroCoste).all()}
-    zeitgruppen_db = {z.nombre: z for z in db.query(Zeitgruppe).all()}
-    existing_ids = {
-        e.id_nummer for e in
-        db.query(Empleado.id_nummer).all()
-    }
+    zeitgruppen = {z.nombre: z for z in db.query(Zeitgruppe).all()}
+    existing_ids = {e.id_nummer for e in db.query(Empleado.id_nummer).all()}
 
-    results = {"erstellt": 0, "aktualisiert": 0, "fehler": [], "details": []}
-    new_gruppen = set()
-    new_kostenstellen = set()
+    results = {"erstellt": 0, "aktualisiert": 0, "fehler": [], "gesamt": len(rows)}
 
     for i, row in enumerate(rows, start=2):
         try:
-            sys_nr = int(row.get("Systemnummer") or row.get("systemnummer", 0))
+            sys_nr = int(row.get("Systemnummer", 0))
             if not sys_nr:
-                results["fehler"].append(f"Zeile {i}: Systemnummer fehlt")
+                results["fehler"].append({"zeile": i, "fehler": "Systemnummer fehlt"})
                 continue
 
-            vorname = (row.get("Vorname") or row.get("vorname", "")).strip()
-            nachname = (row.get("Nachname") or row.get("nachname", "")).strip()
+            vorname = str(row.get("Vorname", "")).strip()
+            nachname = str(row.get("Nachname", "")).strip()
             if not vorname:
-                results["fehler"].append(f"Zeile {i}: Vorname fehlt")
+                results["fehler"].append({"zeile": i, "fehler": "Vorname fehlt"})
                 continue
 
-            personal_nr = _safe_int(row.get("Personalnummer") or row.get("personalnummer"))
-            benutzer_id = _safe_int(row.get("Benutzer-ID") or row.get("benutzer_id"))
-            transponder = (row.get("Transponder-ID") or row.get("transponder_id", "")).strip() or None
-            beginn = _parse_date(row.get("Beginn der Berechnung") or row.get("beginn_berechnung"))
-            abteilung_name = (row.get("Abteilung") or row.get("abteilung", "")).strip()
-            ks_name = (row.get("Kostenstelle") or row.get("kostenstelle", "")).strip()
-            zg_name = (row.get("Zeitgruppe") or row.get("zeitgruppe", "")).strip()
-            mandat = (row.get("Mandat") or row.get("mandat", "<Keine>")).strip()
-            firmenbereich = (row.get("Firmenbereich") or row.get("firmenbereich", "<Keine>")).strip()
-
-            # Auto-create Abteilung if needed
+            # Resolve Abteilung
+            abt_name = str(row.get("Abteilung", "")).strip()
             grupo = None
-            if abteilung_name and abteilung_name != "<Keine>":
-                if abteilung_name not in gruppen:
+            if abt_name and abt_name != "<Keine>":
+                if abt_name not in grupos:
+                    g = Grupo(nombre=abt_name)
                     if not dry_run:
-                        g = Grupo(nombre=abteilung_name)
                         db.add(g)
                         db.flush()
-                        gruppen[abteilung_name] = g
-                    new_gruppen.add(abteilung_name)
-                grupo = gruppen.get(abteilung_name)
+                    grupos[abt_name] = g
+                grupo = grupos[abt_name]
 
-            # Auto-create Kostenstelle if needed
+            # Resolve Kostenstelle
+            ks_name = str(row.get("Kostenstelle", "")).strip()
             ks = None
             if ks_name and ks_name != "<Keine>":
                 if ks_name not in kostenstellen:
+                    code = ks_name[:20].upper().replace(" ", "_")
+                    c = CentroCoste(codigo=code, nombre=ks_name)
                     if not dry_run:
-                        c = CentroCoste(codigo=ks_name[:20], nombre=ks_name)
                         db.add(c)
                         db.flush()
-                        kostenstellen[ks_name] = c
-                    new_kostenstellen.add(ks_name)
-                ks = kostenstellen.get(ks_name)
+                    kostenstellen[ks_name] = c
+                ks = kostenstellen[ks_name]
 
-            # Lookup Zeitgruppe
-            zg = zeitgruppen_db.get(zg_name)
+            # Resolve Zeitgruppe
+            zg_name = str(row.get("Zeitgruppe", "")).strip()
+            zg = None
+            if zg_name and zg_name != "<Keine>":
+                if zg_name not in zeitgruppen:
+                    tipo = "GLEITZEIT"
+                    if "schicht" in zg_name.lower():
+                        tipo = "SCHICHT"
+                    elif "verwaltung" in zg_name.lower():
+                        tipo = "VERWALTUNG"
+                    z = Zeitgruppe(nombre=zg_name, tipo=tipo)
+                    if not dry_run:
+                        db.add(z)
+                        db.flush()
+                    zeitgruppen[zg_name] = z
+                zg = zeitgruppen[zg_name]
+
+            # Parse dates
+            beginn = _parse_date(row.get("Beginn der Berechnung"))
+
+            # Build employee data
+            emp_data = {
+                "id_nummer": sys_nr,
+                "nombre": vorname,
+                "apellido": nachname,
+                "nfc_tag": str(row.get("Transponder-ID", "")).strip() or None,
+                "beginn_berechnung": beginn,
+                "mandat": str(row.get("Mandat", "<Keine>")).strip(),
+                "firmenbereich": str(row.get("Firmenbereich", "<Keine>")).strip(),
+            }
+
+            # Personalnummer / Benutzer-ID
+            pnr = row.get("Personalnummer")
+            if pnr:
+                emp_data["personalnummer"] = int(pnr)
+            bid = row.get("Benutzer-ID")
+            if bid:
+                emp_data["benutzer_id"] = int(bid)
 
             if sys_nr in existing_ids:
                 # Update existing
                 if not dry_run:
                     emp = db.query(Empleado).filter(Empleado.id_nummer == sys_nr).first()
-                    if emp:
-                        emp.nombre = vorname
-                        emp.apellido = nachname
-                        emp.personalnummer = personal_nr
-                        emp.benutzer_id = benutzer_id
-                        emp.nfc_tag = transponder
-                        emp.beginn_berechnung = beginn
-                        emp.grupo_id = grupo.id if grupo else emp.grupo_id
-                        emp.kostenstelle_id = ks.id if ks else emp.kostenstelle_id
-                        emp.zeitgruppe_id = zg.id if zg else emp.zeitgruppe_id
-                        emp.mandat = mandat
-                        emp.firmenbereich = firmenbereich
+                    for k, v in emp_data.items():
+                        if k != "id_nummer":
+                            setattr(emp, k, v)
+                    if grupo:
+                        emp.grupo_id = grupo.id
+                    if ks:
+                        emp.kostenstelle_id = ks.id
+                    if zg:
+                        emp.zeitgruppe_id = zg.id
                 results["aktualisiert"] += 1
-                results["details"].append(f"#{sys_nr} {vorname} {nachname} — aktualisiert")
             else:
                 # Create new
                 if not dry_run:
-                    emp = Empleado(
-                        id_nummer=sys_nr,
-                        personalnummer=personal_nr,
-                        benutzer_id=benutzer_id,
-                        nombre=vorname,
-                        apellido=nachname,
-                        nfc_tag=transponder,
-                        beginn_berechnung=beginn,
-                        grupo_id=grupo.id if grupo else None,
-                        kostenstelle_id=ks.id if ks else None,
-                        zeitgruppe_id=zg.id if zg else None,
-                        mandat=mandat,
-                        firmenbereich=firmenbereich,
-                        fecha_alta=beginn,
-                    )
+                    emp = Empleado(**emp_data, activo=True, fecha_alta=beginn)
+                    if grupo:
+                        emp.grupo_id = grupo.id
+                    if ks:
+                        emp.kostenstelle_id = ks.id
+                    if zg:
+                        emp.zeitgruppe_id = zg.id
                     db.add(emp)
-                    existing_ids.add(sys_nr)
                 results["erstellt"] += 1
-                results["details"].append(f"#{sys_nr} {vorname} {nachname} — erstellt")
+                existing_ids.add(sys_nr)
 
-        except Exception as e:
-            results["fehler"].append(f"Zeile {i}: {str(e)}")
+        except Exception as ex:
+            results["fehler"].append({"zeile": i, "fehler": str(ex)})
 
     if not dry_run:
-        log_action(
-            db, accion="IMPORT", entidad_tipo="empleado",
-            descripcion=f"Import: {results['erstellt']} erstellt, {results['aktualisiert']} aktualisiert, {len(results['fehler'])} Fehler",
-            usuario_nick="admin",
-        )
+        log_action(db, "IMPORT", "empleado",
+                   descripcion=f"Import: {results['erstellt']} erstellt, {results['aktualisiert']} aktualisiert",
+                   usuario_nick="admin")
         db.commit()
 
     results["dry_run"] = dry_run
-    results["neue_abteilungen"] = list(new_gruppen)
-    results["neue_kostenstellen"] = list(new_kostenstellen)
     return results
 
 
-# ── Backup Telegram ──────────────────────────────────────
+# ── Backup ───────────────────────────────────────────────
+
 @router.post("/backup/telegram")
 def backup_to_telegram(
-    chat_id: str = Query(..., description="Telegram Chat-ID für den Backup"),
+    chat_id: int = Query(..., description="Telegram Chat-ID für Backup"),
     db: Session = Depends(get_db),
 ):
     """
-    Exportar backup de la DB y enviar por Telegram.
-    Usa pg_dump del container postgres.
+    Erstellt ein Datenbank-Backup und sendet es an Telegram.
     """
-    db_url = os.getenv("DATABASE_URL", "")
-    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    dump_file = f"/tmp/hagemann_backup_{ts}.sql.gz"
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"hagemann_backup_{timestamp}.sql"
+    filepath = f"/tmp/{filename}"
 
+    # pg_dump
     try:
-        # pg_dump via subprocess
-        cmd = (
-            f"pg_dump -h postgres -U postgres -d neofreight "
-            f"--schema=hagemann --no-owner --no-acl "
-            f"| gzip > {dump_file}"
-        )
         result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True,
-            env={**os.environ, "PGPASSWORD": "localdev"},
-            timeout=60,
+            ["pg_dump", "-h", "postgres", "-U", "postgres", "-d", "neofreight",
+             "--schema=hagemann", "-f", filepath],
+            env={"PGPASSWORD": "localdev"},
+            capture_output=True, text=True, timeout=60,
         )
         if result.returncode != 0:
-            raise HTTPException(500, f"pg_dump fehlgeschlagen: {result.stderr}")
+            raise HTTPException(500, f"pg_dump Fehler: {result.stderr}")
+    except FileNotFoundError:
+        # pg_dump not available in container — use Python export
+        return _python_backup(db, chat_id, timestamp)
 
-        file_size = os.path.getsize(dump_file)
+    # Send to Telegram
+    _send_telegram_file(filepath, filename, chat_id)
 
-        # Send via Telegram Bot API
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-        with open(dump_file, "rb") as f:
-            resp = httpx.post(
-                url,
-                data={
-                    "chat_id": chat_id,
-                    "caption": f"🗄 Hagemann Backup\n📅 {ts}\n📦 {file_size // 1024} KB",
-                },
-                files={"document": (f"hagemann_{ts}.sql.gz", f, "application/gzip")},
-                timeout=30,
-            )
+    log_action(db, "BACKUP", "system",
+               descripcion=f"Backup gesendet an Telegram Chat {chat_id}",
+               usuario_nick="system")
+    db.commit()
 
-        if resp.status_code != 200:
-            raise HTTPException(500, f"Telegram API Fehler: {resp.text}")
+    return {"status": "ok", "datei": filename, "chat_id": chat_id}
 
-        log_action(
-            db, accion="BACKUP", entidad_tipo="system",
-            descripcion=f"Backup an Telegram gesendet ({file_size // 1024} KB)",
-            usuario_nick="system",
+
+def _python_backup(db: Session, chat_id: int, timestamp: str):
+    """Fallback: export tables as JSON."""
+    from ..models.empleado import Empleado, Grupo, CentroCoste, Zeitgruppe
+    from ..models.fichaje import Fichaje
+    from ..models.turno import ModeloTurno, PlanTurno
+
+    tables = {
+        "empleados": db.query(Empleado).all(),
+        "grupos": db.query(Grupo).all(),
+        "centros_coste": db.query(CentroCoste).all(),
+        "zeitgruppen": db.query(Zeitgruppe).all(),
+    }
+
+    data = {}
+    for name, rows in tables.items():
+        data[name] = [
+            {c.name: str(getattr(r, c.name, None)) for c in r.__table__.columns}
+            for r in rows
+        ]
+
+    filename = f"hagemann_backup_{timestamp}.json"
+    filepath = f"/tmp/{filename}"
+    with open(filepath, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+
+    _send_telegram_file(filepath, filename, chat_id)
+
+    log_action(db, "BACKUP", "system",
+               descripcion=f"JSON-Backup gesendet an Telegram Chat {chat_id}",
+               usuario_nick="system")
+    db.commit()
+
+    return {"status": "ok", "datei": filename, "format": "json", "chat_id": chat_id}
+
+
+def _send_telegram_file(filepath: str, filename: str, chat_id: int):
+    """Send file to Telegram bot."""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+    with open(filepath, "rb") as f:
+        resp = httpx.post(
+            url,
+            data={"chat_id": chat_id, "caption": f"🗄 Hagemann Backup\n{filename}"},
+            files={"document": (filename, f)},
+            timeout=30,
         )
-        db.commit()
-
-        # Cleanup
-        os.unlink(dump_file)
-
-        return {
-            "status": "ok",
-            "message": f"Backup erfolgreich gesendet ({file_size // 1024} KB)",
-            "timestamp": ts,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"Backup fehlgeschlagen: {str(e)}")
+    if resp.status_code != 200:
+        raise HTTPException(500, f"Telegram Fehler: {resp.text}")
 
 
 # ── Helpers ──────────────────────────────────────────────
+
 def _parse_xlsx(content: bytes) -> list[dict]:
-    """Parse Excel file to list of dicts. Busca hoja 'Importvorlage' o usa la primera."""
+    """Parse Excel file into list of dicts. Prefers 'Importvorlage' sheet."""
     import openpyxl
     wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
-    # Prefer sheet named 'Importvorlage', fallback to first
-    if "Importvorlage" in wb.sheetnames:
-        ws = wb["Importvorlage"]
-    else:
-        ws = wb[wb.sheetnames[0]]
-    rows_iter = ws.iter_rows(values_only=True)
-    headers = [str(h or "").strip() for h in next(rows_iter)]
+    ws = wb["Importvorlage"] if "Importvorlage" in wb.sheetnames else wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if len(rows) < 2:
+        return []
+    headers = [str(h).strip() if h else "" for h in rows[0]]
     result = []
-    for row in rows_iter:
-        if all(v is None for v in row):
+    for row in rows[1:]:
+        if not any(row):
             continue
-        result.append(dict(zip(headers, row)))
+        result.append({headers[i]: row[i] for i in range(len(headers)) if i < len(row)})
     return result
 
 
 def _parse_csv(content: bytes) -> list[dict]:
-    """Parse CSV file to list of dicts."""
+    """Parse CSV file into list of dicts."""
     text = content.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text), delimiter=";")
     return list(reader)
 
 
-def _safe_int(val) -> Optional[int]:
-    if val is None:
-        return None
-    try:
-        return int(val)
-    except (ValueError, TypeError):
-        return None
-
-
-def _parse_date(val):
+def _parse_date(val) -> Optional[date]:
+    """Parse various date formats."""
     if val is None:
         return None
     if isinstance(val, datetime):
         return val.date()
-    if hasattr(val, "date"):
-        return val.date()
-    try:
-        return datetime.strptime(str(val)[:10], "%Y-%m-%d").date()
-    except (ValueError, TypeError):
-        return None
+    if isinstance(val, date):
+        return val
+    s = str(val).strip()
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None

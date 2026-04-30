@@ -1,5 +1,5 @@
 """
-CRUD Zeitgruppen — grupos horarios (HG-Plan A)
+CRUD Zeitgruppen — reglas de cálculo horario (HG-Plan A.4)
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -18,10 +18,9 @@ class ZeitgruppeCreate(BaseModel):
     nombre: str
     descripcion: Optional[str] = None
     tipo: str = "GLEITZEIT"  # GLEITZEIT | VERWALTUNG | SCHICHT
-    hora_minima_inicio: Optional[str] = None  # "HH:MM"
+    hora_minima_inicio: Optional[str] = None  # "07:00"
     usar_inicio_turno: bool = False
     rotacion_semanal: bool = False
-
 
 class ZeitgruppeUpdate(BaseModel):
     nombre: Optional[str] = None
@@ -33,22 +32,12 @@ class ZeitgruppeUpdate(BaseModel):
     activo: Optional[bool] = None
 
 
-def _zg_dict(z: Zeitgruppe) -> dict:
-    return {
-        "id": str(z.id),
-        "nombre": z.nombre,
-        "descripcion": z.descripcion,
-        "tipo": z.tipo,
-        "hora_minima_inicio": z.hora_minima_inicio.strftime("%H:%M") if z.hora_minima_inicio else None,
-        "usar_inicio_turno": z.usar_inicio_turno,
-        "rotacion_semanal": z.rotacion_semanal,
-        "activo": z.activo,
-    }
-
-
 @router.get("/")
-def list_zeitgruppen(db: Session = Depends(get_db)):
-    items = db.query(Zeitgruppe).filter(Zeitgruppe.activo == True).order_by(Zeitgruppe.nombre).all()
+def list_zeitgruppen(activo: Optional[bool] = None, db: Session = Depends(get_db)):
+    q = db.query(Zeitgruppe)
+    if activo is not None:
+        q = q.filter(Zeitgruppe.activo == activo)
+    items = q.order_by(Zeitgruppe.nombre).all()
     return {"data": [_zg_dict(z) for z in items]}
 
 
@@ -95,8 +84,30 @@ def update_zeitgruppe(zg_id: UUID, data: ZeitgruppeUpdate, db: Session = Depends
     return _zg_dict(z)
 
 
-def _parse_time(val: Optional[str]) -> Optional[time]:
+@router.delete("/{zg_id}", status_code=204)
+def delete_zeitgruppe(zg_id: UUID, db: Session = Depends(get_db)):
+    z = db.query(Zeitgruppe).filter(Zeitgruppe.id == zg_id).first()
+    if not z:
+        raise HTTPException(404, "Zeitgruppe nicht gefunden")
+    z.activo = False
+    db.commit()
+
+
+def _parse_time(val) -> Optional[time]:
     if not val:
         return None
-    parts = val.split(":")
-    return time(int(parts[0]), int(parts[1]))
+    parts = str(val).split(":")
+    return time(int(parts[0]), int(parts[1]) if len(parts) > 1 else 0)
+
+
+def _zg_dict(z: Zeitgruppe) -> dict:
+    return {
+        "id": str(z.id),
+        "nombre": z.nombre,
+        "descripcion": z.descripcion,
+        "tipo": z.tipo,
+        "hora_minima_inicio": z.hora_minima_inicio.strftime("%H:%M") if z.hora_minima_inicio else None,
+        "usar_inicio_turno": z.usar_inicio_turno,
+        "rotacion_semanal": z.rotacion_semanal,
+        "activo": z.activo,
+    }
