@@ -1,5 +1,5 @@
 # Importar todos los modelos para que SQLAlchemy los registre
-from .empleado import Empleado, Grupo, CentroCoste
+from .empleado import Empleado, Grupo, CentroCoste, Zeitgruppe
 from .fichaje import Fichaje, SegmentoTiempo, FuenteFichaje
 from .vacaciones import (
     Festivo, PeriodoVacaciones, SolicitudVacaciones, LimiteVacaciones,
@@ -22,6 +22,9 @@ from .correccion import SolicitudCorreccion
 # HG-12 DATEV
 from .datev import DatevConfig, DatevExportLog
 
+# Audit Log
+from .audit import AuditLog
+
 __all__ = [
     # Empleados
     "Empleado", "Grupo", "CentroCoste",
@@ -43,4 +46,8 @@ __all__ = [
     # HG-12 DATEV
     "DatevConfig",
     "DatevExportLog",
+    # Zeitgruppe
+    "Zeitgruppe",
+    # Audit Log
+    "AuditLog",
 ]

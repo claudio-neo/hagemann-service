@@ -12,10 +12,32 @@ from sqlalchemy.orm import relationship
 from ..database import Base
 
 
+"""
+Roles del sistema Hagemann:
+  1 = Admin              — Acceso completo sin restricciones
+  2 = Schichtführer      — Liberar horas, control horas, vista vacaciones equipo,
+                           elegir suplente (Stellvertreter)
+  3 = Stv. Schichtführer — Como Benutzer + actúa como Schichtführer al sustituir
+  4 = Benutzer           — Login/Logout, Raucherpause, solicitar vacaciones/FZA,
+                           ver propias horas/vacaciones
+"""
+ROLE_ADMIN = 1
+ROLE_SCHICHTFUEHRER = 2
+ROLE_STV_SCHICHTFUEHRER = 3
+ROLE_BENUTZER = 4
+
+ROLE_LABELS = {
+    ROLE_ADMIN: "Admin",
+    ROLE_SCHICHTFUEHRER: "Schichtführer",
+    ROLE_STV_SCHICHTFUEHRER: "Stv. Schichtführer",
+    ROLE_BENUTZER: "Benutzer",
+}
+
+
 class Usuario(Base):
     """
     Usuario del sistema Hagemann.
-    Roles: 1=Admin, 2=Abteilungsleiter (jefe dpto), 3=Mitarbeiter (empleado)
+    Roles: 1=Admin, 2=Schichtführer, 3=Stv. Schichtführer, 4=Benutzer
     """
     __tablename__ = "usuarios"
     __table_args__ = {"schema": "hagemann"}
@@ -24,8 +46,8 @@ class Usuario(Base):
     nick = Column(String(100), nullable=False, unique=True, index=True)
     email = Column(String(255), nullable=True, unique=True)
     password_hash = Column(String(255), nullable=False)
-    role = Column(Integer, nullable=False, default=3,
-                  comment="1=Admin, 2=Abteilungsleiter, 3=Mitarbeiter")
+    role = Column(Integer, nullable=False, default=ROLE_BENUTZER,
+                  comment="1=Admin, 2=Schichtführer, 3=Stv.Schichtführer, 4=Benutzer")
 
     # FK opcional al empleado
     empleado_id = Column(UUID(as_uuid=True),

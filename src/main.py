@@ -42,6 +42,10 @@ from .routes.aprobaciones import router as aprobaciones_router
 from .routes.correcciones import router as correcciones_router
 from .routes.exportacion import router as exportacion_router
 from .routes.datev import router as datev_router
+from .routes.gruppen import router as gruppen_router
+from .routes.zeitgruppen import router as zeitgruppen_router
+from .routes.audit import router as audit_router
+from .routes.import_export import router as import_export_router
 
 settings = get_settings()
 
@@ -50,11 +54,37 @@ init_schema()
 Base.metadata.create_all(bind=engine)
 
 # Seed inicial (idempotente)
+def _seed_zeitgruppen(db):
+    """Crear las 4 Zeitgruppen de Hagemann si no existen."""
+    from .models.empleado import Zeitgruppe
+    from datetime import time as t
+    if db.query(Zeitgruppe).count() > 0:
+        return
+    gruppen = [
+        Zeitgruppe(nombre="Gleitzeit Velten", tipo="GLEITZEIT",
+                   descripcion="Arbeitsbeginn/ende wird nach Login/out berechnet"),
+        Zeitgruppe(nombre="Büro Lager B4", tipo="GLEITZEIT",
+                   descripcion="Arbeitsbeginn/ende wird nach Login/out berechnet"),
+        Zeitgruppe(nombre="Verwaltung ab 07:00 Uhr", tipo="VERWALTUNG",
+                   hora_minima_inicio=t(7, 0),
+                   descripcion="Startzeit wird erst ab 07:00 Uhr berechnet"),
+        Zeitgruppe(nombre="BMB - Schicht 1", tipo="SCHICHT",
+                   usar_inicio_turno=True, rotacion_semanal=True,
+                   descripcion="Startzeit ab Schichtbeginn, wöchentliche Rotation"),
+        Zeitgruppe(nombre="BMB - Schicht 2", tipo="SCHICHT",
+                   usar_inicio_turno=True, rotacion_semanal=True,
+                   descripcion="Startzeit ab Schichtbeginn, wöchentliche Rotation"),
+    ]
+    db.add_all(gruppen)
+    db.commit()
+
+
 def _run_seeds():
     db = SessionLocal()
     try:
         seed_usuarios(db)
         seed_modelos_turno(db)
+        _seed_zeitgruppen(db)
     finally:
         db.close()
 
@@ -116,6 +146,10 @@ app.include_router(aprobaciones_router, prefix="/api/v1")
 app.include_router(correcciones_router, prefix="/api/v1")
 app.include_router(exportacion_router, prefix="/api/v1")
 app.include_router(datev_router, prefix="/api/v1")
+app.include_router(gruppen_router, prefix="/api/v1")
+app.include_router(zeitgruppen_router, prefix="/api/v1")
+app.include_router(audit_router, prefix="/api/v1")
+app.include_router(import_export_router, prefix="/api/v1")
 
 
 @app.get("/api/info")
