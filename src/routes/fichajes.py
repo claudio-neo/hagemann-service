@@ -15,7 +15,9 @@ from datetime import datetime, date, timedelta, timezone
 from ..database import get_db
 from ..models.empleado import Empleado, CentroCoste
 from ..models.fichaje import Fichaje, SegmentoTiempo, FuenteFichaje
+from ..models.pausa import Pausa
 from ..services.arbzg import calcular_pausa_minima, verificar_jornada_maxima
+from ..services.zeitgruppe_service import aplicar_ajuste_zeitgruppe, calcular_minutos_rauch_descontables
 
 router = APIRouter(prefix="/fichajes", tags=["Fichajes"])
 
@@ -138,7 +140,10 @@ def fichar_entrada(data: PunchIn, db: Session = Depends(get_db)):
     El empleado debe seleccionar un centro de coste.
     """
     emp = _resolve_empleado(db, data.nfc_tag, data.empleado_id)
-    ts = data.timestamp or datetime.utcnow()
+    ts_real = data.timestamp or datetime.utcnow()
+
+    # C: Ajuste Zeitgruppe — redondear según reglas de grupo horario
+    ts, aviso_zeitgruppe = aplicar_ajuste_zeitgruppe(ts_real, emp, db)
 
     # Verificar que no hay jornada abierta
     open_fich = _get_open_fichaje(db, emp.id)
@@ -192,7 +197,10 @@ def fichar_entrada(data: PunchIn, db: Session = Depends(get_db)):
             "nombre": cc.nombre,
         },
         "hora": ts.strftime("%H:%M:%S"),
-        "message": f"Entrada registrada — {cc.nombre}",
+        "hora_real": ts_real.strftime("%H:%M:%S"),
+        "aviso_zeitgruppe": aviso_zeitgruppe,
+        "message": f"Eingang registriert — {cc.nombre}"
+                   + (f" ⚠ {aviso_zeitgruppe}" if aviso_zeitgruppe else ""),
     }
 
 
@@ -523,3 +531,130 @@ def fichajes_abiertos(db: Session = Depends(get_db)):
         })
 
     return {"data": results, "total": len(results)}
+
+
+# ========== PAUSEN (Raucherpause / Mittagspause) ==========
+
+class PauseStart(BaseModel):
+    empleado_id: Optional[UUID] = None
+    nfc_tag: Optional[str] = None
+    tipo: str = "RAUCH"   # RAUCH | MITTAG | SONSTIG
+    timestamp: Optional[datetime] = None
+
+class PauseEnd(BaseModel):
+    empleado_id: Optional[UUID] = None
+    nfc_tag: Optional[str] = None
+    timestamp: Optional[datetime] = None
+
+
+@router.post("/pausa/inicio")
+def iniciar_pausa(data: PauseStart, db: Session = Depends(get_db)):
+    """Inicia una pausa (Raucherpause, etc.) dentro de la jornada abierta."""
+    emp = _resolve_empleado(db, data.nfc_tag, data.empleado_id)
+    ts = data.timestamp or datetime.utcnow()
+
+    fichaje = _get_open_fichaje(db, emp.id)
+    if not fichaje:
+        raise HTTPException(404, "Keine offene Schicht — bitte zuerst einstempeln")
+
+    # Verificar que no hay otra pausa abierta
+    pausa_abierta = db.query(Pausa).filter(
+        Pausa.fichaje_id == fichaje.id,
+        Pausa.fin.is_(None),
+    ).first()
+    if pausa_abierta:
+        raise HTTPException(409, f"Es läuft bereits eine Pause ({pausa_abierta.tipo}). Bitte zuerst beenden.")
+
+    pausa = Pausa(
+        fichaje_id=fichaje.id,
+        empleado_id=emp.id,
+        tipo=data.tipo.upper(),
+        inicio=ts,
+        descontado=(data.tipo.upper() == "RAUCH"),  # Raucherpause siempre descontable
+    )
+    db.add(pausa)
+    db.commit()
+    db.refresh(pausa)
+
+    tipo_label = {"RAUCH": "Raucherpause", "MITTAG": "Mittagspause", "SONSTIG": "Pause"}.get(pausa.tipo, pausa.tipo)
+
+    return {
+        "action": "PAUSE_START",
+        "pausa_id": str(pausa.id),
+        "tipo": pausa.tipo,
+        "tipo_label": tipo_label,
+        "inicio": _utc(pausa.inicio),
+        "empleado": {
+            "id": str(emp.id),
+            "nombre": f"{emp.nombre} {emp.apellido or ''}".strip(),
+        },
+        "message": f"{tipo_label} gestartet um {ts.strftime('%H:%M')}",
+    }
+
+
+@router.post("/pausa/fin")
+def finalizar_pausa(data: PauseEnd, db: Session = Depends(get_db)):
+    """Finaliza la pausa activa del empleado."""
+    emp = _resolve_empleado(db, data.nfc_tag, data.empleado_id)
+    ts = data.timestamp or datetime.utcnow()
+
+    fichaje = _get_open_fichaje(db, emp.id)
+    if not fichaje:
+        raise HTTPException(404, "Keine offene Schicht")
+
+    pausa = db.query(Pausa).filter(
+        Pausa.fichaje_id == fichaje.id,
+        Pausa.fin.is_(None),
+    ).first()
+    if not pausa:
+        raise HTTPException(404, "Keine aktive Pause")
+
+    pausa.fin = ts
+    pausa.minutos = max(1, int((ts - pausa.inicio).total_seconds() // 60))
+    db.commit()
+
+    tipo_label = {"RAUCH": "Raucherpause", "MITTAG": "Mittagspause", "SONSTIG": "Pause"}.get(pausa.tipo, pausa.tipo)
+
+    return {
+        "action": "PAUSE_END",
+        "pausa_id": str(pausa.id),
+        "tipo": pausa.tipo,
+        "tipo_label": tipo_label,
+        "inicio": _utc(pausa.inicio),
+        "fin": _utc(pausa.fin),
+        "minutos": pausa.minutos,
+        "message": f"{tipo_label} beendet — {pausa.minutos} Minuten",
+    }
+
+
+@router.get("/pausa/estado/{empleado_id}")
+def estado_pausa(empleado_id: UUID, db: Session = Depends(get_db)):
+    """Estado de pausa del empleado: si tiene pausa activa y cuánto lleva."""
+    fichaje = _get_open_fichaje(db, empleado_id)
+    if not fichaje:
+        return {"en_pausa": False, "fichaje_abierto": False}
+
+    pausa = db.query(Pausa).filter(
+        Pausa.fichaje_id == fichaje.id,
+        Pausa.fin.is_(None),
+    ).first()
+
+    pausen_hoy = db.query(Pausa).filter(
+        Pausa.fichaje_id == fichaje.id,
+        Pausa.fin.isnot(None),
+    ).all()
+
+    total_minutos_rauch = sum(p.minutos or 0 for p in pausen_hoy if p.tipo == "RAUCH")
+
+    return {
+        "en_pausa": pausa is not None,
+        "fichaje_abierto": True,
+        "pausa_activa": {
+            "id": str(pausa.id),
+            "tipo": pausa.tipo,
+            "inicio": _utc(pausa.inicio),
+            "minutos_transcurridos": int((datetime.utcnow() - pausa.inicio).total_seconds() // 60),
+        } if pausa else None,
+        "total_raucherpausen_heute": len([p for p in pausen_hoy if p.tipo == "RAUCH"]),
+        "total_minutos_rauch": total_minutos_rauch,
+    }

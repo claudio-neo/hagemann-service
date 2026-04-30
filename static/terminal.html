@@ -596,6 +596,11 @@ header {
         <button class="big-btn btn-amber" onclick="goToScreen('screen-change')">
           <span class="btn-icon">🔄</span> Abteilung wechseln
         </button>
+        <button class="big-btn" id="btnRaucherpause" onclick="doRaucherpause()"
+          style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:white;grid-column:span 2">
+          <span class="btn-icon" id="rauchIcon">🚬</span>
+          <span id="rauchLabel">Raucherpause</span>
+        </button>
       </div>
     </div>
   </div>
@@ -904,7 +909,9 @@ async function showEntryScreen() {
 /* ══════════════════════════════════════════════════════════════
    SCREEN 3 — ANWESEND
 ══════════════════════════════════════════════════════════════ */
-function showPresentScreen() {
+let pausaActiva = null;
+
+async function showPresentScreen() {
   const f = selectedFichaje;
   const deptName = f.centro_coste_actual ? f.centro_coste_actual.nombre : '—';
   const entradaTime = formatTime(f.entrada);
@@ -914,7 +921,48 @@ function showPresentScreen() {
   document.getElementById('presentStatusText').textContent =
     `Eingang: ${entradaTime} — Kostenstelle: ${deptName} — Dauer: ${duration}`;
 
+  // Check Raucherpause status
+  try {
+    const estado = await apiFetch(`/fichajes/pausa/estado/${selectedEmp.id}`);
+    pausaActiva = estado.en_pausa;
+    const btn = document.getElementById('btnRaucherpause');
+    const icon = document.getElementById('rauchIcon');
+    const lbl = document.getElementById('rauchLabel');
+    if (pausaActiva && estado.pausa_activa) {
+      btn.style.background = 'linear-gradient(135deg,#10b981,#059669)';
+      icon.textContent = '▶';
+      const min = estado.pausa_activa.minutos_transcurridos || 0;
+      lbl.textContent = `Pause beenden (${min} Min.)`;
+    } else {
+      btn.style.background = 'linear-gradient(135deg,#6366f1,#4f46e5)';
+      icon.textContent = '🚬';
+      const total = estado.total_raucherpausen_heute || 0;
+      lbl.textContent = total > 0 ? `Raucherpause (${total}x heute)` : 'Raucherpause';
+    }
+  } catch(e) { /* ignore */ }
+
   _showScreen('screen-present');
+}
+
+async function doRaucherpause() {
+  showLoading(pausaActiva ? 'Pause wird beendet…' : 'Raucherpause wird gestartet…');
+  try {
+    if (pausaActiva) {
+      const res = await apiFetch('/fichajes/pausa/fin', {
+        method: 'POST',
+        body: JSON.stringify({ empleado_id: selectedEmp.id }),
+      });
+      showConfirm('info', '▶', 'Pause beendet', `Dauer: ${res.minutos} Minuten`);
+    } else {
+      const res = await apiFetch('/fichajes/pausa/inicio', {
+        method: 'POST',
+        body: JSON.stringify({ empleado_id: selectedEmp.id, tipo: 'RAUCH' }),
+      });
+      showConfirm('info', '🚬', 'Raucherpause gestartet', `Beginn: ${new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}`);
+    }
+  } catch(e) {
+    showError('Fehler: ' + e.message);
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════

@@ -829,6 +829,16 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     <div id="empSaldoPreview" style="margin-bottom:16px; display:none">
       <div class="alert alert-info" id="empSaldoInfo"></div>
     </div>
+    <div class="form-group">
+      <label>Abwesenheitstyp *</label>
+      <select id="uaTipo" class="form-control">
+        <option value="VACACIONES">🌴 Urlaub</option>
+        <option value="FZA">⏱ Freizeitausgleich (FZA)</option>
+        <option value="BAJA_MEDICA">🏥 Krankmeldung</option>
+        <option value="ASUNTOS_PROPIOS">📋 Sonstiges</option>
+        <option value="PERMISO_RETRIBUIDO">✅ Bezahlte Freistellung</option>
+      </select>
+    </div>
     <div class="form-row cols-2">
       <div class="form-group">
         <label>Von *</label>
@@ -1822,6 +1832,7 @@ async function saveUrlaub() {
   const fecha_inicio = document.getElementById('uaVon').value;
   const fecha_fin = document.getElementById('uaBis').value;
   const motivo = document.getElementById('uaMotivo').value.trim();
+  const tipo_ausencia = document.getElementById('uaTipo').value || 'VACACIONES';
 
   if (!empleado_id || !fecha_inicio || !fecha_fin) {
     showModalAlert('urlaubModalAlert', 'error', 'Mitarbeiter und Datumsangaben sind Pflichtfelder');
@@ -1836,10 +1847,11 @@ async function saveUrlaub() {
     const anio = parseInt(fecha_inicio.substring(0, 4));
     await api('/vacaciones/solicitudes', {
       method: 'POST',
-      body: JSON.stringify({ empleado_id, anio, fecha_inicio, fecha_fin, notas: motivo })
+      body: JSON.stringify({ empleado_id, anio, fecha_inicio, fecha_fin, notas: motivo, tipo_ausencia })
     });
     closeModal('urlaubModal');
-    showGlobalAlert('success', '✓ Urlaubsantrag erstellt');
+    const tipoLabels = {VACACIONES:'Urlaubsantrag',FZA:'FZA-Antrag',BAJA_MEDICA:'Krankmeldung',ASUNTOS_PROPIOS:'Antrag',PERMISO_RETRIBUIDO:'Antrag'};
+    showGlobalAlert('success', `✓ ${tipoLabels[tipo_ausencia]||'Antrag'} erstellt`);
     loadUrlaub();
   } catch(e) {
     showModalAlert('urlaubModalAlert', 'error', 'Fehler: ' + e.message);
@@ -2015,7 +2027,8 @@ function filterEmployees() {
   tbody.innerHTML = data.map(e => {
     const name = `${e.nombre} ${e.apellido||''}`.trim();
     let actions = `<button class="btn btn-sm btn-outline" onclick='openNewEmpModal(${JSON.stringify(e)})' title="Bearbeiten">✏</button>
-      <button class="btn btn-sm btn-outline" onclick="openNfcModal('${e.id}','${name.replace(/'/g,"\\'")}') " title="NFC ändern">📡</button>`;
+      <button class="btn btn-sm btn-outline" onclick="openNfcModal('${e.id}','${name.replace(/'/g,"\\'")}') " title="NFC ändern">📡</button>
+      <button class="btn btn-sm btn-outline" onclick="manageStellvertreter('${e.id}','${name.replace(/'/g,"\\'")}','${e.stellvertreter_id||''}','${e.stellvertreter_nombre||''}','${e.stellvertretung_hasta||''}')" title="Stellvertreter verwalten">👤</button>`;
     if (e.activo) {
       actions += ` <button class="btn btn-sm btn-danger" onclick="deactivateEmployee('${e.id}','${name.replace(/'/g,"\\'")}') " title="Deaktivieren">⊘</button>`;
     } else {
@@ -3118,6 +3131,61 @@ async function runBackup() {
   } catch(e) {
     resultDiv.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
   }
+}
+
+// =====================================================================
+// STELLVERTRETER
+// =====================================================================
+async function manageStellvertreter(empId, empName, currentStvId, currentStvName, currentBis) {
+  const info = currentStvName
+    ? `Aktueller Stellvertreter: ${currentStvName}${currentBis ? ' bis ' + currentBis : ''}`
+    : 'Kein Stellvertreter zugewiesen';
+
+  const options = allEmployeesAll
+    .filter(e => e.id !== empId && e.activo)
+    .map(e => `${e.id_nummer}: ${e.nombre} ${e.apellido||''}`.trim());
+
+  const selected = prompt(
+    `Stellvertreter für ${empName}\n${info}\n\nNummer oder Name eingeben (leer = entfernen):\n${options.slice(0,10).join('\n')}`,
+    currentStvName || ''
+  );
+  if (selected === null) return; // Abbrechen
+
+  if (selected.trim() === '') {
+    // Entfernen
+    try {
+      await api(`/empleados/${empId}/stellvertretung`, {
+        method: 'PUT', body: JSON.stringify({stellvertreter_id: null})
+      });
+      showGlobalAlert('success', '✓ Stellvertretung aufgehoben');
+      allEmployeesAll = [];
+      await renderEmployees();
+    } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+    return;
+  }
+
+  // Buscar empleado por número o nombre
+  const query = selected.trim().toLowerCase();
+  const found = allEmployeesAll.find(e =>
+    String(e.id_nummer) === query.split(':')[0].trim() ||
+    `${e.nombre} ${e.apellido||''}`.toLowerCase().includes(query)
+  );
+  if (!found) {
+    showGlobalAlert('error', 'Mitarbeiter nicht gefunden: ' + selected);
+    return;
+  }
+
+  const bis = prompt(`Stellvertretung bis (YYYY-MM-DD, leer = unbefristet):`, '') || null;
+
+  try {
+    await api(`/empleados/${empId}/stellvertretung`, {
+      method: 'PUT',
+      body: JSON.stringify({stellvertreter_id: found.id, stellvertretung_hasta: bis || null})
+    });
+    showGlobalAlert('success', `✓ ${found.nombre} ${found.apellido||''} als Stellvertreter zugewiesen`);
+    allEmployeesAll = [];
+    await renderEmployees();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
 }
 
 // =====================================================================

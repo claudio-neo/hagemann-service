@@ -25,10 +25,11 @@ class TipoFestivo(str, enum.Enum):
 
 
 class TipoAusencia(str, enum.Enum):
-    VACACIONES = "VACACIONES"
-    BAJA_MEDICA = "BAJA_MEDICA"
-    ASUNTOS_PROPIOS = "ASUNTOS_PROPIOS"
+    VACACIONES = "VACACIONES"           # Urlaub
+    BAJA_MEDICA = "BAJA_MEDICA"         # Krankmeldung
+    ASUNTOS_PROPIOS = "ASUNTOS_PROPIOS" # Sonstiges
     PERMISO_RETRIBUIDO = "PERMISO_RETRIBUIDO"
+    FZA = "FZA"                         # Freizeitausgleich (compensación horas extra)
 
 
 class EstadoSolicitud(str, enum.Enum):

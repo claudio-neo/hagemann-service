@@ -96,6 +96,14 @@ class Empleado(Base):
     firmenbereich = Column(String(100), nullable=True, default="<Keine>",
                            comment="Firmenbereich (futuro)")
 
+    # --- Stellvertretung ---
+    stellvertreter_id = Column(UUID(as_uuid=True),
+                               ForeignKey("hagemann.empleados.id"),
+                               nullable=True,
+                               comment="Stv. Schichtführer asignado como suplente")
+    stellvertretung_hasta = Column(Date, nullable=True,
+                                   comment="Fecha fin de la sustitución activa")
+
     # --- Estado ---
     activo = Column(Boolean, default=True, nullable=False)
     fecha_alta = Column(Date, nullable=True)
@@ -111,6 +119,11 @@ class Empleado(Base):
     kostenstelle = relationship("CentroCoste", foreign_keys=[kostenstelle_id])
     zeitgruppe = relationship("Zeitgruppe", back_populates="empleados")
     fichajes = relationship("Fichaje", back_populates="empleado")
+    stellvertreter = relationship(
+        "Empleado",
+        foreign_keys=[stellvertreter_id],
+        primaryjoin="Empleado.stellvertreter_id == Empleado.id",
+    )
 
 
 class Grupo(Base):

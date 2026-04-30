@@ -25,6 +25,9 @@ from .datev import DatevConfig, DatevExportLog
 # Audit Log
 from .audit import AuditLog
 
+# Pausen (Raucherpause etc.)
+from .pausa import Pausa
+
 __all__ = [
     # Empleados
     "Empleado", "Grupo", "CentroCoste",

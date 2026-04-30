@@ -105,6 +105,12 @@ def _to_out(e: Empleado) -> dict:
         "beginn_berechnung": e.beginn_berechnung.isoformat() if e.beginn_berechnung else None,
         "mandat": e.mandat,
         "firmenbereich": e.firmenbereich,
+        "stellvertreter_id": e.stellvertreter_id,
+        "stellvertreter_nombre": (
+            f"{e.stellvertreter.nombre} {e.stellvertreter.apellido or ''}".strip()
+            if e.stellvertreter else None
+        ),
+        "stellvertretung_hasta": e.stellvertretung_hasta.isoformat() if e.stellvertretung_hasta else None,
         "activo": e.activo,
         "fecha_alta": e.fecha_alta,
         "fecha_baja": e.fecha_baja,
@@ -313,4 +319,50 @@ def reactivar_empleado(
         "message": f"Empleado {emp.id_nummer} reactivado",
         "empleado_id": str(empleado_id),
         "id_nummer": emp.id_nummer,
+    }
+
+
+# ========== STELLVERTRETUNG ==========
+
+class StellvertretungSet(BaseModel):
+    stellvertreter_id: Optional[UUID] = None   # None = eliminar sustitución
+    stellvertretung_hasta: Optional[date] = None
+
+
+@router.put("/{empleado_id}/stellvertretung")
+def set_stellvertretung(
+    empleado_id: UUID,
+    data: StellvertretungSet,
+    db: Session = Depends(get_db),
+):
+    """
+    Asigna (o elimina) un Stv. Schichtführer como suplente del empleado.
+    El suplente hereda permisos de Schichtführer mientras esté activa.
+    """
+    emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
+    if not emp:
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
+
+    if data.stellvertreter_id:
+        stv = db.query(Empleado).filter(Empleado.id == data.stellvertreter_id).first()
+        if not stv:
+            raise HTTPException(404, "Stellvertreter nicht gefunden")
+        if str(data.stellvertreter_id) == str(empleado_id):
+            raise HTTPException(400, "Ein Mitarbeiter kann nicht sein eigener Stellvertreter sein")
+        emp.stellvertreter_id = data.stellvertreter_id
+        emp.stellvertretung_hasta = data.stellvertretung_hasta
+        msg = f"Stellvertreter {stv.nombre} {stv.apellido or ''} zugewiesen"
+    else:
+        emp.stellvertreter_id = None
+        emp.stellvertretung_hasta = None
+        msg = "Stellvertretung aufgehoben"
+
+    emp.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        "message": msg,
+        "empleado_id": str(emp.id),
+        "stellvertreter_id": str(emp.stellvertreter_id) if emp.stellvertreter_id else None,
+        "stellvertretung_hasta": emp.stellvertretung_hasta.isoformat() if emp.stellvertretung_hasta else None,
     }
