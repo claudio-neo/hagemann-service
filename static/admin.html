@@ -231,9 +231,38 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+/* LOGIN */
+#loginOverlay { position: fixed; inset: 0; background: rgba(15,23,42,.8); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(4px); }
+.login-box { background: white; border-radius: 16px; padding: 40px; width: 100%; max-width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.login-box h1 { font-size: 22px; margin-bottom: 4px; }
+.login-box p { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+.login-field { margin-bottom: 16px; }
+.login-field label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+.login-field input { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 15px; outline: none; transition: border .15s; }
+.login-field input:focus { border-color: var(--blue); }
+#loginError { color: var(--red); font-size: 13px; margin-top: -8px; margin-bottom: 12px; display: none; }
 </style>
 </head>
 <body>
+
+<!-- ===== LOGIN ===== -->
+<div id="loginOverlay">
+  <div class="login-box">
+    <h1>⚙ Hagemann Admin</h1>
+    <p>Bitte mit Admin- oder Schichtführer-Konto anmelden</p>
+    <div class="login-field">
+      <label>Benutzername</label>
+      <input type="text" id="loginUser" placeholder="nick" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <label>Passwort</label>
+      <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="loginError">Benutzername oder Passwort falsch</div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:14px" onclick="doLogin()">Anmelden</button>
+  </div>
+</div>
 
 <!-- ===== NAVIGATION ===== -->
 <nav>
@@ -1063,14 +1092,46 @@ let reportTab = 'cc';
 let urlaubTab = 'antraege';
 
 // =====================================================================
+// AUTH
+// =====================================================================
+function getToken() { return localStorage.getItem('hg_token'); }
+function setToken(t) { localStorage.setItem('hg_token', t); }
+function clearToken() { localStorage.removeItem('hg_token'); }
+
+function showLogin() { document.getElementById('loginOverlay').style.display = 'flex'; }
+function hideLogin() { document.getElementById('loginOverlay').style.display = 'none'; }
+
+async function doLogin() {
+  const nick = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  document.getElementById('loginError').style.display = 'none';
+  try {
+    const r = await fetch(API + '/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: nick, password: pass}),
+    });
+    if (!r.ok) { document.getElementById('loginError').style.display = 'block'; return; }
+    const data = await r.json();
+    setToken(data.access_token);
+    hideLogin();
+    init();
+  } catch(e) {
+    document.getElementById('loginError').style.display = 'block';
+  }
+}
+
+// =====================================================================
 // UTILS
 // =====================================================================
 async function api(path, opts = {}) {
+  const token = getToken();
   const url = API + path;
   const r = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    headers: { 'Content-Type': 'application/json', ...(token ? {'Authorization': 'Bearer ' + token} : {}), ...opts.headers },
     ...opts
   });
+  if (r.status === 401) { clearToken(); showLogin(); throw new Error('Not authenticated'); }
   if (r.status === 204) return null;
   const data = await r.json();
   if (!r.ok) {
@@ -2924,7 +2985,7 @@ async function reactivateEmployee(id, name) {
 // =====================================================================
 // START
 // =====================================================================
-init();
+if (getToken()) { hideLogin(); init(); }
 // =====================================================================
 // STAMMDATEN (Abteilungen, Kostenstellen, Zeitgruppen)
 // =====================================================================

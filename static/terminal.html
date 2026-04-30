@@ -518,9 +518,38 @@ header {
 @media (min-width: 1200px) {
   .employee-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 }
+
+/* LOGIN */
+#loginOverlay { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+.login-box { background: #1e2a3a; border-radius: 16px; padding: 40px; width: 100%; max-width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.login-box h1 { color: white; font-size: 22px; margin-bottom: 4px; }
+.login-box p { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
+.login-field { margin-bottom: 16px; }
+.login-field label { display: block; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+.login-field input { width: 100%; padding: 12px 14px; border: 1px solid #334155; border-radius: 8px; font-size: 15px; background: #0f172a; color: white; outline: none; }
+.login-field input:focus { border-color: #3b82f6; }
+#loginError { color: #ef4444; font-size: 13px; margin-top: -8px; margin-bottom: 12px; display: none; }
+.login-btn { width: 100%; padding: 14px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
 </style>
 </head>
 <body>
+
+<div id="loginOverlay">
+  <div class="login-box">
+    <h1>⏱ Terminal</h1>
+    <p>Benutzerkonto für Zeiterfassung erforderlich</p>
+    <div class="login-field">
+      <label>Benutzername</label>
+      <input type="text" id="loginUser" placeholder="nick" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <label>Passwort</label>
+      <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="loginError">Benutzername oder Passwort falsch</div>
+    <button class="login-btn" onclick="doLogin()">Anmelden</button>
+  </div>
+</div>
 
 <div class="app">
 
@@ -647,6 +676,31 @@ header {
 
 <script>
 /* ══════════════════════════════════════════════════════════════
+   AUTH
+══════════════════════════════════════════════════════════════ */
+function getToken() { return localStorage.getItem('hg_token'); }
+function setToken(t) { localStorage.setItem('hg_token', t); }
+function clearToken() { localStorage.removeItem('hg_token'); }
+
+async function doLogin() {
+  const nick = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  document.getElementById('loginError').style.display = 'none';
+  try {
+    const r = await fetch(API + '/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: nick, password: pass}),
+    });
+    if (!r.ok) { document.getElementById('loginError').style.display = 'block'; return; }
+    const data = await r.json();
+    setToken(data.access_token);
+    document.getElementById('loginOverlay').style.display = 'none';
+    loadData().then(startAutoRefresh);
+  } catch(e) { document.getElementById('loginError').style.display = 'block'; }
+}
+
+/* ══════════════════════════════════════════════════════════════
    CONFIG & GLOBALS
 ══════════════════════════════════════════════════════════════ */
 const basePath = window.location.pathname
@@ -707,10 +761,12 @@ function todayDateStr() {
    API HELPER
 ══════════════════════════════════════════════════════════════ */
 async function apiFetch(path, opts = {}) {
+  const token = getToken();
   const r = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(token ? {'Authorization': 'Bearer ' + token} : {}) },
     ...opts
   });
+  if (r.status === 401) { clearToken(); document.getElementById('loginOverlay').style.display = 'flex'; throw new Error('Not authenticated'); }
   if (!r.ok) {
     const err = await r.json().catch(() => ({ detail: r.statusText }));
     let msg = err.message || `HTTP ${r.status}`;
@@ -1140,7 +1196,10 @@ function startAutoRefresh() {
 /* ══════════════════════════════════════════════════════════════
    INIT
 ══════════════════════════════════════════════════════════════ */
-loadData().then(startAutoRefresh);
+if (getToken()) {
+  document.getElementById('loginOverlay').style.display = 'none';
+  loadData().then(startAutoRefresh);
+}
 </script>
 </body>
 </html>
