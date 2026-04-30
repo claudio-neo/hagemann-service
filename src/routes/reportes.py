@@ -29,7 +29,7 @@ def horas_por_empleado(
     """
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     desde_dt = datetime.combine(desde, datetime.min.time())
     hasta_dt = datetime.combine(hasta, datetime.max.time())
@@ -126,7 +126,7 @@ def horas_por_centro_coste(
     """
     cc = db.query(CentroCoste).filter(CentroCoste.id == centro_coste_id).first()
     if not cc:
-        raise HTTPException(404, "Centro de coste no encontrado")
+        raise HTTPException(404, "Kostenstelle nicht gefunden")
 
     desde_dt = datetime.combine(desde, datetime.min.time())
     hasta_dt = datetime.combine(hasta, datetime.max.time())

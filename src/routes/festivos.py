@@ -75,13 +75,13 @@ def obtener_festivo(festivo_id: UUID, db: Session = Depends(get_db)):
     """Obtiene un festivo por ID."""
     f = db.query(Festivo).filter(Festivo.id == festivo_id).first()
     if not f:
-        raise HTTPException(404, "Festivo no encontrado")
+        raise HTTPException(404, "Feiertag nicht gefunden")
     return _to_dict(f)
 
 
 @router.post("/", status_code=201)
 def crear_festivo(data: FestivoCreate, db: Session = Depends(get_db)):
-    """Crea un nuevo festivo. Falla si ya existe el mismo fecha+bundesland."""
+    """Crea un nuevo festivo. Falla si existiert bereits el mismo fecha+bundesland."""
     existing = db.query(Festivo).filter(
         Festivo.fecha == data.fecha,
         Festivo.bundesland == data.bundesland.upper(),
@@ -111,7 +111,7 @@ def crear_festivos_bulk(
 ):
     """
     Crea múltiples festivos de una vez.
-    Omite los que ya existen (upsert por fecha+bundesland).
+    Omite los que existiert bereitsn (upsert por fecha+bundesland).
     """
     created = 0
     skipped = 0
@@ -148,7 +148,7 @@ def actualizar_festivo(
     """Actualiza un festivo."""
     f = db.query(Festivo).filter(Festivo.id == festivo_id).first()
     if not f:
-        raise HTTPException(404, "Festivo no encontrado")
+        raise HTTPException(404, "Feiertag nicht gefunden")
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(f, field, value)
     db.commit()
@@ -161,7 +161,7 @@ def eliminar_festivo(festivo_id: UUID, db: Session = Depends(get_db)):
     """Elimina un festivo (baja física)."""
     f = db.query(Festivo).filter(Festivo.id == festivo_id).first()
     if not f:
-        raise HTTPException(404, "Festivo no encontrado")
+        raise HTTPException(404, "Feiertag nicht gefunden")
     db.delete(f)
     db.commit()
     return {"message": "Festivo eliminado"}

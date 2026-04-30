@@ -132,7 +132,7 @@ def get_config(db: Session = Depends(get_db)):
     if config is None:
         raise HTTPException(
             status_code=404,
-            detail="No hay configuración DATEV registrada. Use POST /datev/config para crearla.",
+            detail="Keine DATEV-Konfiguration vorhanden. Verwenden Sie POST /datev/config.",
         )
     return DatevConfigOut(
         id=config.id,
@@ -160,7 +160,7 @@ def get_config(db: Session = Depends(get_db)):
     description=(
         "Crea o actualiza la configuración DATEV. "
         "Solo puede existir un registro activo. "
-        "Si ya existe, lo actualiza en lugar de crear uno nuevo."
+        "Si existiert bereits, lo actualiza en lugar de crear uno nuevo."
     ),
 )
 def upsert_config(body: DatevConfigIn, db: Session = Depends(get_db)):
@@ -243,7 +243,7 @@ def oauth_callback(
 ):
     config = datev_service.get_config(db)
     if config is None:
-        raise HTTPException(404, "Configuración DATEV no encontrada")
+        raise HTTPException(404, "DATEV-Konfiguration nicht gefunden")
 
     # Reconstruir redirect_uri — debe ser igual al usado en authorize
     # En producción: usar el mismo base_url
@@ -255,7 +255,7 @@ def oauth_callback(
     try:
         token_data = datev_service.exchange_code(config, code, redirect_uri, db)
     except Exception as e:
-        raise HTTPException(500, f"Error al intercambiar el código OAuth: {str(e)}")
+        raise HTTPException(500, f"Fehler beim OAuth-Code-Austausch: {str(e)}")
 
     return {
         "status": "ok",
@@ -299,7 +299,7 @@ def export_to_datev(body: ExportRequest, db: Session = Depends(get_db)):
     try:
         payload = datev_service.build_export_payload(db, body.year, body.month, config)
     except Exception as e:
-        raise HTTPException(500, f"Error al construir el payload: {str(e)}")
+        raise HTTPException(500, f"Fehler beim Aufbau der Nutzdaten: {str(e)}")
 
     if body.dry_run:
         return {
@@ -324,7 +324,7 @@ def export_to_datev(body: ExportRequest, db: Session = Depends(get_db)):
             records_sent=0,
             error_message=str(e),
         )
-        raise HTTPException(500, f"Error al enviar a DATEV: {str(e)}")
+        raise HTTPException(500, f"Fehler beim Senden an DATEV: {str(e)}")
 
     # Guardar log de éxito
     response_body = json.dumps(result)
@@ -402,7 +402,7 @@ def export_csv(body: CsvRequest, db: Session = Depends(get_db)):
     try:
         csv_bytes = datev_service.export_to_csv(db, body.year, body.month)
     except Exception as e:
-        raise HTTPException(500, f"Error al generar CSV: {str(e)}")
+        raise HTTPException(500, f"Fehler beim Erstellen der CSV: {str(e)}")
 
     filename = f"datev_lohn_{body.year}-{body.month:02d}.csv"
     headers = {
@@ -471,7 +471,7 @@ def datev_status(db: Session = Depends(get_db)):
             else (
                 "Conexión DATEV operativa"
                 if token_valid
-                else "Token expirado. Use GET /datev/oauth/authorize para renovar."
+                else "Token abgelaufen. Use GET /datev/oauth/authorize para renovar."
             )
         ),
     }

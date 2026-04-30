@@ -158,7 +158,7 @@ def crear_periodo(data: PeriodoCreate, db: Session = Depends(get_db)):
     """Crea un periodo vacacional para un empleado."""
     emp = db.query(Empleado).filter(Empleado.id == data.empleado_id).first()
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     existing = _get_periodo(db, data.empleado_id, data.anio)
     if existing:
@@ -204,7 +204,7 @@ def saldo_vacaciones(
     """
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     periodo = _get_periodo(db, empleado_id, anio)
     if not periodo:
@@ -256,7 +256,7 @@ def crear_solicitud(data: SolicitudCreate, db: Session = Depends(get_db)):
     """
     emp = db.query(Empleado).filter(Empleado.id == data.empleado_id).first()
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     if data.fecha_fin < data.fecha_inicio:
         raise HTTPException(400, "fecha_fin debe ser >= fecha_inicio")
@@ -376,7 +376,7 @@ def obtener_solicitud(solicitud_id: UUID, db: Session = Depends(get_db)):
         joinedload(SolicitudVacaciones.empleado)
     ).filter(SolicitudVacaciones.id == solicitud_id).first()
     if not s:
-        raise HTTPException(404, "Solicitud no encontrada")
+        raise HTTPException(404, "Antrag nicht gefunden")
     return _solicitud_dict(s)
 
 
@@ -395,7 +395,7 @@ def accion_nivel1(
         joinedload(SolicitudVacaciones.empleado)
     ).filter(SolicitudVacaciones.id == solicitud_id).first()
     if not s:
-        raise HTTPException(404, "Solicitud no encontrada")
+        raise HTTPException(404, "Antrag nicht gefunden")
     if s.estado != EstadoSolicitud.PENDIENTE:
         raise HTTPException(
             409,
@@ -437,7 +437,7 @@ def accion_nivel2(
         joinedload(SolicitudVacaciones.empleado)
     ).filter(SolicitudVacaciones.id == solicitud_id).first()
     if not s:
-        raise HTTPException(404, "Solicitud no encontrada")
+        raise HTTPException(404, "Antrag nicht gefunden")
     if s.estado != EstadoSolicitud.PROPUESTA:
         raise HTTPException(
             409,
@@ -479,7 +479,7 @@ def cancelar_solicitud(
         SolicitudVacaciones.id == solicitud_id
     ).first()
     if not s:
-        raise HTTPException(404, "Solicitud no encontrada")
+        raise HTTPException(404, "Antrag nicht gefunden")
     if s.estado in (EstadoSolicitud.APROBADA, EstadoSolicitud.RECHAZADA):
         raise HTTPException(409, f"No se puede cancelar en estado '{s.estado}'")
 

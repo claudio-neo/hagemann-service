@@ -39,9 +39,9 @@ def exportar_excel(
     - **empleado_ids**: Lista de UUIDs a incluir (opcional; si omite, incluye todos)
     """
     if not 1 <= body.month <= 12:
-        raise HTTPException(400, "El mes debe estar entre 1 y 12")
+        raise HTTPException(400, "Der Monat muss zwischen 1 und 12 liegen")
     if not 2020 <= body.year <= 2099:
-        raise HTTPException(400, "El año debe estar entre 2020 y 2099")
+        raise HTTPException(400, "Das Jahr muss zwischen 2020 und 2099 liegen")
 
     try:
         xlsx_bytes = generar_reporte_mensual(

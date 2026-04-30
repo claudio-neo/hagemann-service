@@ -70,12 +70,12 @@ def crear_correccion(data: CorreccionCreate, db: Session = Depends(get_db)):
     # Verificar fichaje
     fichaje = db.query(Fichaje).filter(Fichaje.id == data.fichaje_id).first()
     if not fichaje:
-        raise HTTPException(404, "Fichaje no encontrado")
+        raise HTTPException(404, "Zeitbuchung nicht gefunden")
 
     # Verificar empleado
     empleado = db.query(Empleado).filter(Empleado.id == data.empleado_id).first()
     if not empleado:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     # Crear solicitud con snapshot de los valores actuales
     solicitud = SolicitudCorreccion(
@@ -147,7 +147,7 @@ def ver_correccion(correccion_id: UUID, db: Session = Depends(get_db)):
         SolicitudCorreccion.id == correccion_id
     ).first()
     if not c:
-        raise HTTPException(404, "Solicitud de corrección no encontrada")
+        raise HTTPException(404, "Korrekturantrag nicht gefunden")
 
     # Buscar estado de aprobación
     aprobacion = db.query(AprobacionLog).filter(

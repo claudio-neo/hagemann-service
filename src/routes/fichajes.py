@@ -64,11 +64,11 @@ def _resolve_empleado(db: Session, nfc_tag: str = None, empleado_id: UUID = None
     elif nfc_tag:
         emp = db.query(Empleado).filter(Empleado.nfc_tag == nfc_tag).first()
     else:
-        raise HTTPException(400, "Se requiere nfc_tag o empleado_id")
+        raise HTTPException(400, "nfc_tag oder empleado_id erforderlich")
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
     if not emp.activo:
-        raise HTTPException(403, "Empleado inactivo")
+        raise HTTPException(403, "Mitarbeiter inaktiv")
     return emp
 
 
@@ -155,7 +155,7 @@ def fichar_entrada(data: PunchIn, db: Session = Depends(get_db)):
         CentroCoste.id == data.centro_coste_id, CentroCoste.activo == True
     ).first()
     if not cc:
-        raise HTTPException(404, "Centro de coste no encontrado o inactivo")
+        raise HTTPException(404, "Kostenstelle nicht gefunden oder inaktiv")
 
     # Crear fichaje
     fichaje = Fichaje(
@@ -207,7 +207,7 @@ def fichar_salida(data: PunchOut, db: Session = Depends(get_db)):
 
     fichaje = _get_open_fichaje(db, emp.id)
     if not fichaje:
-        raise HTTPException(404, "No hay jornada abierta para este empleado")
+        raise HTTPException(404, "Keine offene Schicht für diesen Mitarbeiter")
 
     # Cerrar segmento activo
     seg_abierto = _get_open_segment(db, fichaje.id)
@@ -376,21 +376,21 @@ def cambiar_departamento(data: SwitchDepartment, db: Session = Depends(get_db)):
 
     fichaje = _get_open_fichaje(db, emp.id)
     if not fichaje:
-        raise HTTPException(404, "No hay jornada abierta. Ficha entrada primero.")
+        raise HTTPException(404, "Keine offene Schicht. Bitte zuerst einstempeln.")
 
     # Verificar nuevo centro de coste
     nuevo_cc = db.query(CentroCoste).filter(
         CentroCoste.id == data.nuevo_centro_coste_id, CentroCoste.activo == True
     ).first()
     if not nuevo_cc:
-        raise HTTPException(404, "Centro de coste no encontrado o inactivo")
+        raise HTTPException(404, "Kostenstelle nicht gefunden oder inaktiv")
 
     # Cerrar segmento actual
     seg_abierto = _get_open_segment(db, fichaje.id)
     old_cc_nombre = None
     if seg_abierto:
         if seg_abierto.centro_coste_id == nuevo_cc.id:
-            raise HTTPException(409, f"Ya estás trabajando en {nuevo_cc.nombre}")
+            raise HTTPException(409, f"Bereits tätig in {nuevo_cc.nombre}")
         old_cc = db.query(CentroCoste).filter(
             CentroCoste.id == seg_abierto.centro_coste_id
         ).first()

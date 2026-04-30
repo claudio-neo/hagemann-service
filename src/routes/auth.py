@@ -83,7 +83,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
-            "Credenciales inválidas",
+            "Ungültige Anmeldedaten",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -108,7 +108,7 @@ def refresh_token(data: RefreshRequest, db: Session = Depends(get_db)):
         Usuario.nick == nick, Usuario.activo == True
     ).first()
     if not user:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuario no válido")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Ungültiger Benutzer")
 
     new_token = create_access_token({"sub": user.nick, "role": user.role})
     return {"access_token": new_token, "token_type": "bearer"}

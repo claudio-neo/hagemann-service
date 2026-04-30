@@ -59,7 +59,7 @@ def crear_centro(data: CentroCosteCreate, db: Session = Depends(get_db)):
         CentroCoste.codigo == data.codigo
     ).first()
     if existing:
-        raise HTTPException(409, f"Código {data.codigo} ya existe")
+        raise HTTPException(409, f"Código {data.codigo} existiert bereits")
     cc = CentroCoste(**data.model_dump())
     db.add(cc)
     db.commit()
@@ -73,7 +73,7 @@ def actualizar_centro(
 ):
     cc = db.query(CentroCoste).filter(CentroCoste.id == centro_id).first()
     if not cc:
-        raise HTTPException(404, "Centro de coste no encontrado")
+        raise HTTPException(404, "Kostenstelle nicht gefunden")
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(cc, field, value)
     db.commit()

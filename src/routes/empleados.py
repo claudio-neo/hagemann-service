@@ -148,7 +148,7 @@ def obtener_empleado(empleado_id: UUID, db: Session = Depends(get_db)):
          .filter(Empleado.id == empleado_id)
          .first())
     if not e:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
     return _to_out(e)
 
 
@@ -164,7 +164,7 @@ def crear_empleado(data: EmpleadoCreate, db: Session = Depends(get_db)):
             Empleado.id_nummer == data.id_nummer
         ).first()
         if existing:
-            raise HTTPException(409, f"id_nummer {data.id_nummer} ya existe")
+            raise HTTPException(409, f"id_nummer {data.id_nummer} existiert bereits")
         id_nummer = data.id_nummer
     else:
         id_nummer = _next_id_nummer(db)
@@ -206,7 +206,7 @@ def actualizar_empleado(
            .filter(Empleado.id == empleado_id)
            .first())
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(emp, field, value)
@@ -229,7 +229,7 @@ def cambiar_nfc(
     """
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     old_nfc = emp.nfc_tag
     emp.nfc_tag = body.id_nfc
@@ -264,7 +264,7 @@ def desactivar_empleado(
     """
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
     if not emp.activo:
         return {
             "message": "El empleado ya estaba inactivo",
@@ -296,7 +296,7 @@ def reactivar_empleado(
     """
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
     if emp.activo:
         return {
             "message": "El empleado ya estaba activo",

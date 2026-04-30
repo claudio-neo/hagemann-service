@@ -276,7 +276,7 @@ def crear_plan(data: PlanTurnoCreate, db: Session = Depends(get_db)):
     # Verificar empleado
     emp = db.query(Empleado).filter(Empleado.id == data.empleado_id).first()
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     # Verificar modelo si se especificó
     if data.modelo_turno_id:
@@ -314,7 +314,7 @@ def crear_plan(data: PlanTurnoCreate, db: Session = Depends(get_db)):
 def crear_planes_bulk(data: PlanTurnoBulk, db: Session = Depends(get_db)):
     """
     Asignación masiva: lista de empleados × lista de fechas × un modelo.
-    Si ya existe plan para (empleado, fecha) se omite (no error).
+    Si existiert bereits plan para (empleado, fecha) se omite (no error).
     """
     if not data.empleado_ids or not data.fechas:
         raise HTTPException(400, "empleado_ids y fechas no pueden estar vacíos")

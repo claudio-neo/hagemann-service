@@ -49,7 +49,7 @@ def saldo_horas_empleado(
     """
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     limite = Decimal(str(kappung)) if kappung is not None else None
     meses = calcular_saldo_anio(db, empleado_id, year, limite_kappung=limite)
@@ -89,11 +89,11 @@ def saldo_mes_empleado(
 ):
     """Saldo de un mes concreto para un empleado."""
     if not 1 <= mes <= 12:
-        raise HTTPException(400, "El mes debe estar entre 1 y 12")
+        raise HTTPException(400, "Der Monat muss zwischen 1 und 12 liegen")
 
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     limite = Decimal(str(kappung)) if kappung is not None else None
     resultado = calcular_saldo_mes(
@@ -117,7 +117,7 @@ def cerrar_mes_empleado(
     """
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     saldo = db.query(SaldoHorasMensual).filter(
         SaldoHorasMensual.empleado_id == empleado_id,
@@ -173,7 +173,7 @@ def historial_saldo(
     """Historial de saldos guardados para un empleado (los últimos N meses)."""
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
-        raise HTTPException(404, "Empleado no encontrado")
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     saldos = (
         db.query(SaldoHorasMensual)

@@ -202,7 +202,7 @@ def actuar_nivel1(
     Si rechaza, el estado_final pasa a RECHAZADA directamente.
     """
     if data.accion.upper() not in _ACCIONES_N1:
-        raise HTTPException(400, f"Acción inválida. Opciones: {_ACCIONES_N1}")
+        raise HTTPException(400, f"Ungültige Aktion. Optionen: {_ACCIONES_N1}")
 
     log = db.query(AprobacionLog).filter(
         AprobacionLog.tipo_entidad == tipo_entidad,
@@ -258,7 +258,7 @@ def actuar_nivel2(
     Acción: APROBADA | RECHAZADA.
     """
     if data.accion.upper() not in _ACCIONES_N2:
-        raise HTTPException(400, f"Acción inválida. Opciones: {_ACCIONES_N2}")
+        raise HTTPException(400, f"Ungültige Aktion. Optionen: {_ACCIONES_N2}")
 
     log = _get_or_404(db, tipo_entidad, entidad_id)
 

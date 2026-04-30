@@ -52,7 +52,7 @@ def crear_grupo(data: GrupoCreate, db: Session = Depends(get_db)):
 def actualizar_grupo(grupo_id: UUID, data: GrupoUpdate, db: Session = Depends(get_db)):
     g = db.query(Grupo).filter(Grupo.id == grupo_id).first()
     if not g:
-        raise HTTPException(404, "Grupo no encontrado")
+        raise HTTPException(404, "Abteilung nicht gefunden")
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(g, field, value)
     db.commit()
