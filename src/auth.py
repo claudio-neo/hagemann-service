@@ -22,7 +22,7 @@ from .models.usuario import Usuario
 
 settings = get_settings()
 
-# ── Contraseñas ──────────────────────────────────────────────────────────────
+# ── Passwords ────────────────────────────────────────────────────────────────
 
 def verify_password(plain: str, hashed: str) -> bool:
     return _bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
@@ -43,7 +43,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 def decode_token(token: str) -> dict:
-    """Decodifica y valida un JWT. Lanza HTTPException si es inválido/expirado."""
+    """Decodes and validates a JWT. Raises HTTPException if invalid or expired."""
     try:
         payload = jwt.decode(
             token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
@@ -52,7 +52,7 @@ def decode_token(token: str) -> dict:
     except JWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Token inválido o expirado: {e}",
+            detail=f"Invalid or expired token: {e}",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -66,20 +66,17 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> Usuario:
-    """
-    Dependency que extrae y valida el token Bearer, devolviendo el Usuario activo.
-    Uso:  current_user: Usuario = Depends(get_current_user)
-    """
+    """Extracts and validates the Bearer token, returning the active user."""
     payload = decode_token(credentials.credentials)
     nick: str = payload.get("sub")
     if not nick:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token sin sub")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token missing subject")
 
     user = db.query(Usuario).filter(Usuario.nick == nick).first()
     if not user:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuario no encontrado")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found")
     if not user.activo:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Usuario inactivo")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "User account is inactive")
     return user
 
 
@@ -95,27 +92,27 @@ def require_role(min_role: int):
     return _check
 
 
-def require_permission(permiso: str):
+def require_permission(permission: str):
     """
-    Dependency factory que verifica un permiso granular.
-    Resuelve delegación automática para Stv. Schichtführer.
+    Dependency factory that checks a granular permission.
+    Resolves automatic delegation for Stv. Schichtführer.
 
-    Uso:
-        @router.post("/horas/liberar")
-        def liberar(u = Depends(require_permission(HORAS_LIBERAR_EQUIPO))):
+    Usage:
+        @router.post("/hours/release")
+        def release(u = Depends(require_permission(HOURS_RELEASE_TEAM))):
             ...
     """
-    from .permisos import permisos_efectivos
+    from .permisos import effective_permissions
 
     def _check(
         current_user: Usuario = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> Usuario:
-        efectivos = permisos_efectivos(current_user, db)
-        if permiso not in efectivos:
+        effective = effective_permissions(current_user, db)
+        if permission not in effective:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
-                f"Fehlende Berechtigung: {permiso}",
+                f"Fehlende Berechtigung: {permission}",
             )
         return current_user
     return _check

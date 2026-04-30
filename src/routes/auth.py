@@ -16,7 +16,7 @@ from ..auth import (
     create_access_token, decode_token,
     get_current_user,
 )
-from ..permisos import permisos_efectivos, PERMISOS_DELEGADOS_SCHICHTFUEHRER
+from ..permisos import effective_permissions, DEPUTY_SUBSTITUTION_PERMISSIONS
 from ..models.usuario import ROLE_STV_SCHICHTFUEHRER
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
@@ -42,10 +42,10 @@ class RefreshRequest(BaseModel):
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _user_dict(u: Usuario, db) -> dict:
-    efectivos = permisos_efectivos(u, db)
-    sustituyendo = (
+    effective = effective_permissions(u, db)
+    substituting = (
         u.role == ROLE_STV_SCHICHTFUEHRER
-        and bool(PERMISOS_DELEGADOS_SCHICHTFUEHRER & efectivos)
+        and bool(DEPUTY_SUBSTITUTION_PERMISSIONS & effective)
     )
     return {
         "id": str(u.id),
@@ -53,11 +53,11 @@ def _user_dict(u: Usuario, db) -> dict:
         "email": u.email,
         "role": u.role,
         "role_name": ROLE_LABELS.get(u.role, "Unbekannt"),
-        "empleado_id": str(u.empleado_id) if u.empleado_id else None,
-        "activo": u.activo,
+        "employee_id": str(u.empleado_id) if u.empleado_id else None,
+        "active": u.activo,
         "last_login": u.last_login.isoformat() + "Z" if u.last_login else None,
-        "permisos": sorted(efectivos),
-        "sustituyendo": sustituyendo,
+        "permissions": sorted(effective),
+        "substituting": substituting,
     }
 
 

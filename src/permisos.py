@@ -1,12 +1,13 @@
 """
-Permisos granulares del sistema Hagemann.
+Granular permission definitions for the Hagemann system.
 
-Fuente de verdad: Stammdaten del importvorlage-hagemann.xlsx.
-  Admin              — Zugriff ohne Einschränkungen
-  Schichtführer      — Stundenfreigabe, Stundenkontrolle, Urlaubsübersicht equipo,
-                       elegir Stellvertreter
-  Stv. Schichtführer — Como Benutzer; permisos de Schichtführer solo al sustituir
-  Benutzer           — Login/Logout, Raucherpause, Urlaubsantrag, propias horas/vacaciones
+Source of truth: Stammdaten sheet in importvorlage-hagemann.xlsx.
+  Admin              — Unrestricted access
+  Schichtführer      — Hour release, hour control, team leave overview,
+                       assign deputy
+  Stv. Schichtführer — Same as Benutzer; inherits Schichtführer permissions
+                       automatically while substituting an absent shift lead
+  Benutzer           — Clock in/out, smoke break, leave requests, own hours/leave
 """
 from __future__ import annotations
 
@@ -24,120 +25,120 @@ from .models.usuario import (
     ROLE_BENUTZER,
 )
 
-# ── Constantes de permiso ─────────────────────────────────────────────────────
+# ── Permission constants ──────────────────────────────────────────────────────
 
-# Fichajes propios
-FICHAJES_REGISTRAR   = "fichajes:registrar"    # login / logout / Raucherpause / FZA
-FICHAJES_VER_PROPIOS = "fichajes:ver_propios"
+# Time clock — own
+TIMECLOCK_REGISTER = "timeclock:register"   # clock in / out / smoke break / FZA
+TIMECLOCK_VIEW_OWN = "timeclock:view_own"
 
-# Horas — nivel Schichtführer
-HORAS_LIBERAR_EQUIPO   = "horas:liberar_equipo"    # Stundenfreigabe
-HORAS_CONTROLAR_EQUIPO = "horas:controlar_equipo"  # Stundenkontrolle
+# Hours — Schichtführer level
+HOURS_RELEASE_TEAM = "hours:release_team"   # Stundenfreigabe
+HOURS_CONTROL_TEAM = "hours:control_team"   # Stundenkontrolle
 
-# Vacaciones
-VACACIONES_SOLICITAR  = "vacaciones:solicitar"   # Urlaubsantrag stellen
-VACACIONES_VER_PROPIAS = "vacaciones:ver_propias"
-VACACIONES_VER_EQUIPO  = "vacaciones:ver_equipo"  # Urlaubsübersicht seines Teams
-VACACIONES_APROBAR     = "vacaciones:aprobar"     # nivel 1 (Schichtführer)
+# Leave
+LEAVE_REQUEST  = "leave:request"            # Urlaubsantrag stellen
+LEAVE_VIEW_OWN = "leave:view_own"
+LEAVE_VIEW_TEAM = "leave:view_team"         # Urlaubsübersicht seines Teams
+LEAVE_APPROVE  = "leave:approve"            # Level 1 approval (Schichtführer)
 
-# Stellvertreter
-STELLVERTRETER_ASIGNAR = "stellvertreter:asignar"  # Schichtführer elige su sustituto
+# Deputy management
+DEPUTY_ASSIGN = "deputy:assign"             # Schichtführer assigns their substitute
 
-# Correcciones y aprobaciones
-CORRECCIONES_REVISAR = "correcciones:revisar"
-APROBACIONES_N1      = "aprobaciones:nivel1"
-APROBACIONES_N2      = "aprobaciones:nivel2"
+# Corrections and approvals
+CORRECTIONS_REVIEW = "corrections:review"
+APPROVALS_LEVEL1   = "approvals:level1"
+APPROVALS_LEVEL2   = "approvals:level2"
 
-# Reportes y exportación
-REPORTES_VER = "reportes:ver"
-EXPORTAR     = "exportacion:exportar"
+# Reports and export
+REPORTS_VIEW = "reports:view"
+EXPORT_RUN   = "export:run"
 
-# Administración
-USUARIOS_ADMIN   = "usuarios:admin"
-TURNOS_ESCRIBIR  = "turnos:escribir"
-EMPLEADOS_EDITAR = "empleados:editar"
+# Administration
+USERS_ADMIN    = "users:admin"
+SHIFTS_WRITE   = "shifts:write"
+EMPLOYEES_EDIT = "employees:edit"
 
 
-# ── Mapa rol → permisos base ──────────────────────────────────────────────────
+# ── Role → base permission sets ───────────────────────────────────────────────
 
-_BASE_BENUTZER: frozenset[str] = frozenset({
-    FICHAJES_REGISTRAR,
-    FICHAJES_VER_PROPIOS,
-    VACACIONES_SOLICITAR,
-    VACACIONES_VER_PROPIAS,
+_BASE_USER: frozenset[str] = frozenset({
+    TIMECLOCK_REGISTER,
+    TIMECLOCK_VIEW_OWN,
+    LEAVE_REQUEST,
+    LEAVE_VIEW_OWN,
 })
 
-_BASE_SCHICHTFUEHRER: frozenset[str] = _BASE_BENUTZER | frozenset({
-    HORAS_LIBERAR_EQUIPO,
-    HORAS_CONTROLAR_EQUIPO,
-    VACACIONES_VER_EQUIPO,
-    VACACIONES_APROBAR,
-    CORRECCIONES_REVISAR,
-    APROBACIONES_N1,
-    REPORTES_VER,
-    STELLVERTRETER_ASIGNAR,
+_BASE_SHIFT_LEAD: frozenset[str] = _BASE_USER | frozenset({
+    HOURS_RELEASE_TEAM,
+    HOURS_CONTROL_TEAM,
+    LEAVE_VIEW_TEAM,
+    LEAVE_APPROVE,
+    CORRECTIONS_REVIEW,
+    APPROVALS_LEVEL1,
+    REPORTS_VIEW,
+    DEPUTY_ASSIGN,
 })
 
-_BASE_ADMIN: frozenset[str] = _BASE_SCHICHTFUEHRER | frozenset({
-    APROBACIONES_N2,
-    EXPORTAR,
-    USUARIOS_ADMIN,
-    TURNOS_ESCRIBIR,
-    EMPLEADOS_EDITAR,
+_BASE_ADMIN: frozenset[str] = _BASE_SHIFT_LEAD | frozenset({
+    APPROVALS_LEVEL2,
+    EXPORT_RUN,
+    USERS_ADMIN,
+    SHIFTS_WRITE,
+    EMPLOYEES_EDIT,
 })
 
-PERMISOS_POR_ROL: dict[int, frozenset[str]] = {
-    ROLE_ADMIN:             _BASE_ADMIN,
-    ROLE_SCHICHTFUEHRER:    _BASE_SCHICHTFUEHRER,
-    ROLE_STV_SCHICHTFUEHRER: _BASE_BENUTZER,   # ampliados dinámicamente si hay ausencia
-    ROLE_BENUTZER:          _BASE_BENUTZER,
+PERMISSIONS_BY_ROLE: dict[int, frozenset[str]] = {
+    ROLE_ADMIN:              _BASE_ADMIN,
+    ROLE_SCHICHTFUEHRER:     _BASE_SHIFT_LEAD,
+    ROLE_STV_SCHICHTFUEHRER: _BASE_USER,    # expanded dynamically when substituting
+    ROLE_BENUTZER:           _BASE_USER,
 }
 
-# Permisos que el Stv. Schichtführer hereda cuando su Schichtführer está ausente
-PERMISOS_DELEGADOS_SCHICHTFUEHRER: frozenset[str] = frozenset({
-    HORAS_LIBERAR_EQUIPO,
-    HORAS_CONTROLAR_EQUIPO,
-    VACACIONES_VER_EQUIPO,
-    VACACIONES_APROBAR,
-    CORRECCIONES_REVISAR,
-    APROBACIONES_N1,
-    REPORTES_VER,
+# Permissions granted to the deputy (Stv. Schichtführer) while the shift lead is absent
+DEPUTY_SUBSTITUTION_PERMISSIONS: frozenset[str] = frozenset({
+    HOURS_RELEASE_TEAM,
+    HOURS_CONTROL_TEAM,
+    LEAVE_VIEW_TEAM,
+    LEAVE_APPROVE,
+    CORRECTIONS_REVIEW,
+    APPROVALS_LEVEL1,
+    REPORTS_VIEW,
 })
 
 
-# ── Permisos efectivos (resuelve delegación automática) ───────────────────────
+# ── Effective permissions (resolves automatic delegation) ─────────────────────
 
-def permisos_efectivos(user: "Usuario", db: "Session") -> frozenset[str]:
+def effective_permissions(user: "Usuario", db: "Session") -> frozenset[str]:
     """
-    Devuelve el set de permisos reales del usuario, incluyendo los delegados
-    si el Stv. Schichtführer está sustituyendo a un Schichtführer ausente hoy.
+    Returns the full permission set for a user, including delegated permissions
+    if the user is a Stv. Schichtführer currently substituting an absent shift lead.
     """
-    base = PERMISOS_POR_ROL.get(user.role, frozenset())
+    base = PERMISSIONS_BY_ROLE.get(user.role, frozenset())
 
     if user.role == ROLE_STV_SCHICHTFUEHRER and user.empleado_id:
-        base = base | _permisos_por_sustitucion(user.empleado_id, db)
+        base = base | _substitution_permissions(user.empleado_id, db)
 
     return base
 
 
-def _permisos_por_sustitucion(empleado_id, db: "Session") -> frozenset[str]:
+def _substitution_permissions(employee_id, db: "Session") -> frozenset[str]:
     """
-    Retorna PERMISOS_DELEGADOS_SCHICHTFUEHRER si hay algún Schichtführer
-    que tenga este empleado como stellvertreter y esté ausente hoy.
+    Returns DEPUTY_SUBSTITUTION_PERMISSIONS if any Schichtführer who has this
+    employee as their deputy currently has an approved absence covering today.
     """
     from .models.empleado import Empleado
     from .models.vacaciones import SolicitudVacaciones, EstadoSolicitud
 
-    hoy = date.today()
-    ausente = (
+    today = date.today()
+    absent = (
         db.query(SolicitudVacaciones)
         .join(Empleado, SolicitudVacaciones.empleado_id == Empleado.id)
         .filter(
-            Empleado.stellvertreter_id == empleado_id,
+            Empleado.stellvertreter_id == employee_id,
             SolicitudVacaciones.estado == EstadoSolicitud.APROBADA,
-            SolicitudVacaciones.fecha_inicio <= hoy,
-            SolicitudVacaciones.fecha_fin >= hoy,
+            SolicitudVacaciones.fecha_inicio <= today,
+            SolicitudVacaciones.fecha_fin >= today,
         )
         .first()
     )
-    return PERMISOS_DELEGADOS_SCHICHTFUEHRER if ausente else frozenset()
+    return DEPUTY_SUBSTITUTION_PERMISSIONS if absent else frozenset()
