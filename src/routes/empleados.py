@@ -14,7 +14,7 @@ import logging
 from ..database import get_db
 from ..models.empleado import Empleado, Grupo
 from ..auth import require_permission
-from ..permisos import HOURS_CONTROL_TEAM, EMPLOYEES_EDIT, DEPUTY_ASSIGN
+from ..permisos import HOURS_CONTROL_TEAM, EMPLOYEES_EDIT, DEPUTY_ASSIGN, TIMECLOCK_REGISTER
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ def listar_empleados(
     grupo_id: Optional[UUID] = None,
     q: Optional[str] = None,
     db: Session = Depends(get_db),
-    _auth=Depends(require_permission(HOURS_CONTROL_TEAM)),
+    _auth=Depends(require_permission(TIMECLOCK_REGISTER)),
 ):
     query = db.query(Empleado).options(joinedload(Empleado.grupo))
     if activo is not None:

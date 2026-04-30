@@ -99,9 +99,38 @@ tr:hover td { background: #f1f5f9; }
 
 /* SELECT */
 select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: white; }
+
+/* LOGIN */
+#loginOverlay { position: fixed; inset: 0; background: rgba(15,23,42,.7); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(4px); }
+.login-box { background: white; border-radius: 16px; padding: 40px; width: 100%; max-width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+.login-box h1 { font-size: 22px; margin-bottom: 6px; }
+.login-box p { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+.login-field { margin-bottom: 16px; }
+.login-field label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+.login-field input { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 15px; outline: none; transition: border .15s; }
+.login-field input:focus { border-color: var(--blue); }
+#loginError { color: var(--red); font-size: 13px; margin-top: -8px; margin-bottom: 12px; display: none; }
 </style>
 </head>
 <body>
+
+<!-- ===== LOGIN ===== -->
+<div id="loginOverlay">
+  <div class="login-box">
+    <h1>⏱ Hagemann</h1>
+    <p>Zeiterfassung — Bitte anmelden</p>
+    <div class="login-field">
+      <label>Benutzername</label>
+      <input type="text" id="loginUser" placeholder="nick" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <label>Passwort</label>
+      <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="loginError">Benutzername oder Passwort falsch</div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:14px" onclick="doLogin()">Anmelden</button>
+  </div>
+</div>
 
 <nav>
   <span class="logo">⏱ Hagemann</span>
@@ -198,6 +227,37 @@ const basePath = window.location.pathname
 const API = window.location.origin + basePath + '/api/v1';
 let employees = [], costCenters = [], selectedEmp = null, selectedCC = null;
 
+// === AUTH ===
+function getToken() { return localStorage.getItem('hg_token'); }
+function setToken(t) { localStorage.setItem('hg_token', t); }
+function clearToken() { localStorage.removeItem('hg_token'); }
+
+async function doLogin() {
+  const nick = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  document.getElementById('loginError').style.display = 'none';
+  try {
+    const r = await fetch(API + '/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: nick, password: pass}),
+    });
+    if (!r.ok) { document.getElementById('loginError').style.display = 'block'; return; }
+    const data = await r.json();
+    setToken(data.access_token);
+    document.getElementById('loginOverlay').style.display = 'none';
+    loadInitialData().then(() => loadFichaje());
+  } catch(e) {
+    document.getElementById('loginError').style.display = 'block';
+  }
+}
+
+// Check stored token on load
+if (getToken()) {
+  document.getElementById('loginOverlay').style.display = 'none';
+  loadInitialData().then(() => loadFichaje());
+}
+
 // === CLOCK ===
 function updateClock() {
   const now = new Date();
@@ -220,8 +280,11 @@ function showPage(page) {
 }
 
 // === DATA ===
-async function api(path, opts) {
-  const r = await fetch(API + path, {headers: {'Content-Type': 'application/json'}, ...opts});
+async function api(path, opts = {}) {
+  const token = getToken();
+  const headers = {'Content-Type': 'application/json', ...(token ? {'Authorization': 'Bearer ' + token} : {}), ...(opts.headers || {})};
+  const r = await fetch(API + path, {...opts, headers});
+  if (r.status === 401) { clearToken(); document.getElementById('loginOverlay').style.display = 'flex'; throw new Error('Not authenticated'); }
   return r.json();
 }
 
@@ -454,8 +517,6 @@ async function loadEmpleados() {
   `).join('');
 }
 
-// === INIT ===
-loadInitialData().then(() => loadFichaje());
 </script>
 </body>
 </html>

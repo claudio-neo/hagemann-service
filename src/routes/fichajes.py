@@ -501,7 +501,7 @@ def listar_fichajes(
 
 
 @router.get("/abiertos")
-def fichajes_abiertos(db: Session = Depends(get_db), _auth=Depends(require_permission(HOURS_CONTROL_TEAM))):
+def fichajes_abiertos(db: Session = Depends(get_db), _auth=Depends(require_permission(TIMECLOCK_REGISTER))):
     """Lista fichajes abiertos (empleados que están trabajando ahora)"""
     fichajes = (
         db.query(Fichaje)
