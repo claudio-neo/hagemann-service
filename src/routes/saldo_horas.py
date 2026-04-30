@@ -12,6 +12,8 @@ from datetime import date
 from ..database import get_db
 from ..models.empleado import Empleado
 from ..models.saldo_horas import SaldoHorasMensual
+from ..auth import require_permission
+from ..permisos import TIMECLOCK_VIEW_OWN, HOURS_CONTROL_TEAM, HOURS_RELEASE_TEAM
 from ..services.calculo_saldo import (
     calcular_saldo_mes,
     calcular_saldo_anio,
@@ -34,6 +36,7 @@ def saldo_horas_empleado(
         description=f"Límite Stundenkappung en horas (default: {float(DEFAULT_LIMITE_KAPPUNG)})"
     ),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(TIMECLOCK_VIEW_OWN)),
 ):
     """
     Calcula el saldo de horas mensual de un empleado para un año completo.
@@ -86,6 +89,7 @@ def saldo_mes_empleado(
     kappung: Optional[float] = Query(None),
     forzar: bool = Query(False, description="Forzar recálculo aunque esté cerrado"),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(TIMECLOCK_VIEW_OWN)),
 ):
     """Saldo de un mes concreto para un empleado."""
     if not 1 <= mes <= 12:
@@ -110,6 +114,7 @@ def cerrar_mes_empleado(
     year: int = Query(...),
     mes: int = Query(..., ge=1, le=12),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(HOURS_RELEASE_TEAM)),
 ):
     """
     Marca el saldo de un mes como CERRADO.
@@ -148,6 +153,7 @@ def cierre_mensual(
     kappung: Optional[float] = Query(None),
     solo_activos: bool = Query(True),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(HOURS_CONTROL_TEAM)),
 ):
     """
     Genera/recalcula saldos de TODOS los empleados para un mes dado.
@@ -169,6 +175,7 @@ def historial_saldo(
     empleado_id: UUID,
     limit: int = Query(24, ge=1, le=60, description="Últimos N meses"),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(TIMECLOCK_VIEW_OWN)),
 ):
     """Historial de saldos guardados para un empleado (los últimos N meses)."""
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()

@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.aprobacion import AprobacionLog
+from ..auth import require_permission
+from ..permisos import APPROVALS_LEVEL1, APPROVALS_LEVEL2
 
 router = APIRouter(prefix="/aprobaciones", tags=["Aprobaciones"])
 
@@ -151,6 +153,7 @@ def listar_pendientes(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(APPROVALS_LEVEL1)),
 ):
     """
     Lista aprobaciones pendientes (o filtradas por estado/tipo).
@@ -183,6 +186,7 @@ def ver_aprobacion(
     tipo_entidad: str,
     entidad_id: str,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(APPROVALS_LEVEL1)),
 ):
     """Ver el estado de aprobación de una entidad concreta."""
     log = _get_or_404(db, tipo_entidad, entidad_id)
@@ -195,6 +199,7 @@ def actuar_nivel1(
     entidad_id: str,
     data: AccionNivel1,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(APPROVALS_LEVEL1)),
 ):
     """
     Abteilungsleiter actúa (nivel 1).
@@ -251,6 +256,7 @@ def actuar_nivel2(
     entidad_id: str,
     data: AccionNivel2,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(APPROVALS_LEVEL2)),
 ):
     """
     Admin actúa (nivel 2) — aprobación o rechazo final.

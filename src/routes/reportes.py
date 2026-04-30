@@ -12,8 +12,14 @@ from ..database import get_db
 from ..models.empleado import Empleado, CentroCoste
 from ..models.fichaje import Fichaje, SegmentoTiempo
 from ..models.turno import PlanTurno, ModeloTurno
+from ..auth import require_permission
+from ..permisos import REPORTS_VIEW
 
-router = APIRouter(prefix="/reportes", tags=["Reportes"])
+router = APIRouter(
+    prefix="/reportes",
+    tags=["Reportes"],
+    dependencies=[Depends(require_permission(REPORTS_VIEW))],
+)
 
 
 @router.get("/horas-empleado")

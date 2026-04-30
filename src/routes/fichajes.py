@@ -16,6 +16,8 @@ from ..database import get_db
 from ..models.empleado import Empleado, CentroCoste
 from ..models.fichaje import Fichaje, SegmentoTiempo, FuenteFichaje
 from ..models.pausa import Pausa
+from ..auth import require_permission
+from ..permisos import TIMECLOCK_REGISTER, HOURS_CONTROL_TEAM
 from ..services.arbzg import calcular_pausa_minima, verificar_jornada_maxima
 from ..services.zeitgruppe_service import aplicar_ajuste_zeitgruppe, calcular_minutos_rauch_descontables
 
@@ -134,7 +136,7 @@ def _segment_dict(seg: SegmentoTiempo, cc: CentroCoste = None) -> dict:
 # ========== ENDPOINTS ==========
 
 @router.post("/entrada", status_code=201)
-def fichar_entrada(data: PunchIn, db: Session = Depends(get_db)):
+def fichar_entrada(data: PunchIn, db: Session = Depends(get_db), _auth=Depends(require_permission(TIMECLOCK_REGISTER))):
     """
     Fichaje de ENTRADA — abre jornada + primer segmento.
     El empleado debe seleccionar un centro de coste.
@@ -205,7 +207,7 @@ def fichar_entrada(data: PunchIn, db: Session = Depends(get_db)):
 
 
 @router.post("/salida")
-def fichar_salida(data: PunchOut, db: Session = Depends(get_db)):
+def fichar_salida(data: PunchOut, db: Session = Depends(get_db), _auth=Depends(require_permission(TIMECLOCK_REGISTER))):
     """
     Fichaje de SALIDA — cierra último segmento + cierra jornada.
     Calcula totales. HG-18: aplica pausa mínima ArbZG si no hay descanso definido.
@@ -278,6 +280,7 @@ def fichar_salida(data: PunchOut, db: Session = Depends(get_db)):
 def cierre_forzado(
     max_horas: float = Query(24.0, ge=1.0, description="Horas mínimas para considerar jornada abandonada"),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(HOURS_CONTROL_TEAM)),
 ):
     """
     HG-19: Cierra forzosamente todas las jornadas abiertas que llevan más de
@@ -374,7 +377,7 @@ def cierre_forzado(
 
 
 @router.post("/cambio-departamento")
-def cambiar_departamento(data: SwitchDepartment, db: Session = Depends(get_db)):
+def cambiar_departamento(data: SwitchDepartment, db: Session = Depends(get_db), _auth=Depends(require_permission(TIMECLOCK_REGISTER))):
     """
     Cambio de departamento — cierra segmento actual, abre nuevo.
     La jornada sigue abierta.
@@ -437,6 +440,7 @@ def listar_fichajes(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(HOURS_CONTROL_TEAM)),
 ):
     """Lista fichajes con filtros"""
     query = (
@@ -497,7 +501,7 @@ def listar_fichajes(
 
 
 @router.get("/abiertos")
-def fichajes_abiertos(db: Session = Depends(get_db)):
+def fichajes_abiertos(db: Session = Depends(get_db), _auth=Depends(require_permission(HOURS_CONTROL_TEAM))):
     """Lista fichajes abiertos (empleados que están trabajando ahora)"""
     fichajes = (
         db.query(Fichaje)
@@ -548,7 +552,7 @@ class PauseEnd(BaseModel):
 
 
 @router.post("/pausa/inicio")
-def iniciar_pausa(data: PauseStart, db: Session = Depends(get_db)):
+def iniciar_pausa(data: PauseStart, db: Session = Depends(get_db), _auth=Depends(require_permission(TIMECLOCK_REGISTER))):
     """Inicia una pausa (Raucherpause, etc.) dentro de la jornada abierta."""
     emp = _resolve_empleado(db, data.nfc_tag, data.empleado_id)
     ts = data.timestamp or datetime.utcnow()
@@ -593,7 +597,7 @@ def iniciar_pausa(data: PauseStart, db: Session = Depends(get_db)):
 
 
 @router.post("/pausa/fin")
-def finalizar_pausa(data: PauseEnd, db: Session = Depends(get_db)):
+def finalizar_pausa(data: PauseEnd, db: Session = Depends(get_db), _auth=Depends(require_permission(TIMECLOCK_REGISTER))):
     """Finaliza la pausa activa del empleado."""
     emp = _resolve_empleado(db, data.nfc_tag, data.empleado_id)
     ts = data.timestamp or datetime.utcnow()
@@ -628,7 +632,7 @@ def finalizar_pausa(data: PauseEnd, db: Session = Depends(get_db)):
 
 
 @router.get("/pausa/estado/{empleado_id}")
-def estado_pausa(empleado_id: UUID, db: Session = Depends(get_db)):
+def estado_pausa(empleado_id: UUID, db: Session = Depends(get_db), _auth=Depends(require_permission(TIMECLOCK_REGISTER))):
     """Estado de pausa del empleado: si tiene pausa activa y cuánto lleva."""
     fichaje = _get_open_fichaje(db, empleado_id)
     if not fichaje:

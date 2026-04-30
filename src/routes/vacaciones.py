@@ -12,6 +12,11 @@ from datetime import date, datetime, timedelta
 
 from ..database import get_db
 from ..models.empleado import Empleado
+from ..auth import require_permission
+from ..permisos import (
+    LEAVE_REQUEST, LEAVE_VIEW_OWN, LEAVE_VIEW_TEAM,
+    LEAVE_APPROVE, APPROVALS_LEVEL2, USERS_ADMIN,
+)
 from ..models.vacaciones import (
     PeriodoVacaciones, SolicitudVacaciones, LimiteVacaciones,
     TipoAusencia, EstadoSolicitud,
@@ -154,7 +159,7 @@ def _solicitud_dict(s: SolicitudVacaciones) -> dict:
 # ========== ENDPOINTS: PERIODOS ==========
 
 @router.post("/periodos", status_code=201)
-def crear_periodo(data: PeriodoCreate, db: Session = Depends(get_db)):
+def crear_periodo(data: PeriodoCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(USERS_ADMIN))):
     """Crea un periodo vacacional para un empleado."""
     emp = db.query(Empleado).filter(Empleado.id == data.empleado_id).first()
     if not emp:
@@ -179,7 +184,8 @@ def crear_periodo(data: PeriodoCreate, db: Session = Depends(get_db)):
 
 @router.get("/periodos/{empleado_id}")
 def listar_periodos_empleado(
-    empleado_id: UUID, db: Session = Depends(get_db)
+    empleado_id: UUID, db: Session = Depends(get_db),
+    _auth=Depends(require_permission(LEAVE_VIEW_OWN)),
 ):
     """Lista todos los periodos de un empleado."""
     periodos = db.query(PeriodoVacaciones).filter(
@@ -195,6 +201,7 @@ def saldo_vacaciones(
     empleado_id: UUID,
     anio: int = Query(..., description="Año (ej: 2026)"),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(LEAVE_VIEW_OWN)),
 ):
     """
     Devuelve el saldo de vacaciones de un empleado para un año.
@@ -248,7 +255,7 @@ def saldo_vacaciones(
 # ========== ENDPOINTS: SOLICITUDES ==========
 
 @router.post("/solicitudes", status_code=201)
-def crear_solicitud(data: SolicitudCreate, db: Session = Depends(get_db)):
+def crear_solicitud(data: SolicitudCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(LEAVE_REQUEST))):
     """
     Crea una solicitud de vacaciones/ausencia.
     El empleado la crea → queda en estado PENDIENTE.
@@ -341,6 +348,7 @@ def listar_solicitudes(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(LEAVE_VIEW_TEAM)),
 ):
     """Lista solicitudes con filtros."""
     query = db.query(SolicitudVacaciones).options(
@@ -370,7 +378,7 @@ def listar_solicitudes(
 
 
 @router.get("/solicitudes/{solicitud_id}")
-def obtener_solicitud(solicitud_id: UUID, db: Session = Depends(get_db)):
+def obtener_solicitud(solicitud_id: UUID, db: Session = Depends(get_db), _auth=Depends(require_permission(LEAVE_VIEW_OWN))):
     """Obtiene una solicitud por ID."""
     s = db.query(SolicitudVacaciones).options(
         joinedload(SolicitudVacaciones.empleado)
@@ -385,6 +393,7 @@ def accion_nivel1(
     solicitud_id: UUID,
     data: AccionNivel1,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(LEAVE_APPROVE)),
 ):
     """
     Acción del Abteilungsleiter (nivel 1).
@@ -426,6 +435,7 @@ def accion_nivel2(
     solicitud_id: UUID,
     data: AccionNivel2,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(APPROVALS_LEVEL2)),
 ):
     """
     Acción del Admin (nivel 2).
@@ -473,6 +483,7 @@ def cancelar_solicitud(
     solicitud_id: UUID,
     motivo: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(LEAVE_REQUEST)),
 ):
     """Cancela (rechaza) una solicitud PENDIENTE o PROPUESTA."""
     s = db.query(SolicitudVacaciones).filter(
@@ -500,6 +511,7 @@ def cancelar_solicitud(
 def listar_limites(
     grupo_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(LEAVE_VIEW_TEAM)),
 ):
     """Lista límites de ausencias por grupo."""
     query = db.query(LimiteVacaciones).options(
@@ -527,7 +539,7 @@ def listar_limites(
 
 
 @router.post("/limites", status_code=201)
-def crear_limite(data: LimiteCreate, db: Session = Depends(get_db)):
+def crear_limite(data: LimiteCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(LEAVE_APPROVE))):
     """Crea un límite de ausencias para un grupo."""
     limite = LimiteVacaciones(
         grupo_id=data.grupo_id,

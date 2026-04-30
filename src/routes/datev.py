@@ -19,8 +19,14 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..services import datev_service
+from ..auth import require_permission
+from ..permisos import EXPORT_RUN
 
-router = APIRouter(prefix="/datev", tags=["DATEV"])
+router = APIRouter(
+    prefix="/datev",
+    tags=["DATEV"],
+    dependencies=[Depends(require_permission(EXPORT_RUN))],
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

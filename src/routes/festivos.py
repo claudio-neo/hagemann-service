@@ -11,8 +11,14 @@ from datetime import date
 
 from ..database import get_db
 from ..models.vacaciones import Festivo, TipoFestivo
+from ..auth import require_permission
+from ..permisos import TIMECLOCK_REGISTER, USERS_ADMIN
 
-router = APIRouter(prefix="/festivos", tags=["Festivos"])
+router = APIRouter(
+    prefix="/festivos",
+    tags=["Festivos"],
+    dependencies=[Depends(require_permission(TIMECLOCK_REGISTER))],
+)
 
 
 # ========== SCHEMAS ==========
@@ -80,7 +86,7 @@ def obtener_festivo(festivo_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.post("/", status_code=201)
-def crear_festivo(data: FestivoCreate, db: Session = Depends(get_db)):
+def crear_festivo(data: FestivoCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(USERS_ADMIN))):
     """Crea un nuevo festivo. Falla si existiert bereits el mismo fecha+bundesland."""
     existing = db.query(Festivo).filter(
         Festivo.fecha == data.fecha,
@@ -107,7 +113,8 @@ def crear_festivo(data: FestivoCreate, db: Session = Depends(get_db)):
 
 @router.post("/bulk", status_code=201)
 def crear_festivos_bulk(
-    festivos: List[FestivoCreate], db: Session = Depends(get_db)
+    festivos: List[FestivoCreate], db: Session = Depends(get_db),
+    _auth=Depends(require_permission(USERS_ADMIN)),
 ):
     """
     Crea múltiples festivos de una vez.
@@ -143,7 +150,8 @@ def crear_festivos_bulk(
 
 @router.put("/{festivo_id}")
 def actualizar_festivo(
-    festivo_id: UUID, data: FestivoUpdate, db: Session = Depends(get_db)
+    festivo_id: UUID, data: FestivoUpdate, db: Session = Depends(get_db),
+    _auth=Depends(require_permission(USERS_ADMIN)),
 ):
     """Actualiza un festivo."""
     f = db.query(Festivo).filter(Festivo.id == festivo_id).first()
@@ -157,7 +165,7 @@ def actualizar_festivo(
 
 
 @router.delete("/{festivo_id}")
-def eliminar_festivo(festivo_id: UUID, db: Session = Depends(get_db)):
+def eliminar_festivo(festivo_id: UUID, db: Session = Depends(get_db), _auth=Depends(require_permission(USERS_ADMIN))):
     """Elimina un festivo (baja física)."""
     f = db.query(Festivo).filter(Festivo.id == festivo_id).first()
     if not f:

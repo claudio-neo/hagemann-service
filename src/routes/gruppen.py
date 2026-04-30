@@ -9,8 +9,13 @@ from uuid import UUID
 
 from ..database import get_db
 from ..models.empleado import Grupo, CentroCoste
+from ..auth import require_permission
+from ..permisos import TIMECLOCK_REGISTER, EMPLOYEES_EDIT
 
-router = APIRouter(tags=["Stammdaten"])
+router = APIRouter(
+    tags=["Stammdaten"],
+    dependencies=[Depends(require_permission(TIMECLOCK_REGISTER))],
+)
 
 
 # ── Schemas ──────────────────────────────────────────────
@@ -48,7 +53,7 @@ def list_abteilungen(activo: Optional[bool] = None, db: Session = Depends(get_db
 
 
 @router.post("/abteilungen/", status_code=201)
-def create_abteilung(data: GruppeCreate, db: Session = Depends(get_db)):
+def create_abteilung(data: GruppeCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(EMPLOYEES_EDIT))):
     existing = db.query(Grupo).filter(Grupo.nombre == data.nombre).first()
     if existing:
         raise HTTPException(409, f"Abteilung '{data.nombre}' existiert bereits")
@@ -60,7 +65,7 @@ def create_abteilung(data: GruppeCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/abteilungen/{abt_id}")
-def update_abteilung(abt_id: UUID, data: GruppeUpdate, db: Session = Depends(get_db)):
+def update_abteilung(abt_id: UUID, data: GruppeUpdate, db: Session = Depends(get_db), _auth=Depends(require_permission(EMPLOYEES_EDIT))):
     g = db.query(Grupo).filter(Grupo.id == abt_id).first()
     if not g:
         raise HTTPException(404, "Abteilung nicht gefunden")
@@ -76,7 +81,7 @@ def update_abteilung(abt_id: UUID, data: GruppeUpdate, db: Session = Depends(get
 
 
 @router.delete("/abteilungen/{abt_id}", status_code=204)
-def delete_abteilung(abt_id: UUID, db: Session = Depends(get_db)):
+def delete_abteilung(abt_id: UUID, db: Session = Depends(get_db), _auth=Depends(require_permission(EMPLOYEES_EDIT))):
     g = db.query(Grupo).filter(Grupo.id == abt_id).first()
     if not g:
         raise HTTPException(404, "Abteilung nicht gefunden")
@@ -95,7 +100,7 @@ def list_kostenstellen(activo: Optional[bool] = None, db: Session = Depends(get_
 
 
 @router.post("/kostenstellen/", status_code=201)
-def create_kostenstelle(data: KostenstelleCreate, db: Session = Depends(get_db)):
+def create_kostenstelle(data: KostenstelleCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(EMPLOYEES_EDIT))):
     existing = db.query(CentroCoste).filter(CentroCoste.codigo == data.codigo).first()
     if existing:
         raise HTTPException(409, f"Kostenstelle '{data.codigo}' existiert bereits")
@@ -110,7 +115,7 @@ def create_kostenstelle(data: KostenstelleCreate, db: Session = Depends(get_db))
 
 
 @router.put("/kostenstellen/{ks_id}")
-def update_kostenstelle(ks_id: UUID, data: KostenstelleUpdate, db: Session = Depends(get_db)):
+def update_kostenstelle(ks_id: UUID, data: KostenstelleUpdate, db: Session = Depends(get_db), _auth=Depends(require_permission(EMPLOYEES_EDIT))):
     c = db.query(CentroCoste).filter(CentroCoste.id == ks_id).first()
     if not c:
         raise HTTPException(404, "Kostenstelle nicht gefunden")
@@ -124,7 +129,7 @@ def update_kostenstelle(ks_id: UUID, data: KostenstelleUpdate, db: Session = Dep
 
 
 @router.delete("/kostenstellen/{ks_id}", status_code=204)
-def delete_kostenstelle(ks_id: UUID, db: Session = Depends(get_db)):
+def delete_kostenstelle(ks_id: UUID, db: Session = Depends(get_db), _auth=Depends(require_permission(EMPLOYEES_EDIT))):
     c = db.query(CentroCoste).filter(CentroCoste.id == ks_id).first()
     if not c:
         raise HTTPException(404, "Kostenstelle nicht gefunden")

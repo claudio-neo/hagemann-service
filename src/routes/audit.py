@@ -8,8 +8,14 @@ from datetime import date, datetime
 
 from ..database import get_db
 from ..models.audit import AuditLog
+from ..auth import require_permission
+from ..permisos import USERS_ADMIN
 
-router = APIRouter(prefix="/audit", tags=["Audit"])
+router = APIRouter(
+    prefix="/audit",
+    tags=["Audit"],
+    dependencies=[Depends(require_permission(USERS_ADMIN))],
+)
 
 
 @router.get("/")

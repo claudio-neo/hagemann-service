@@ -10,8 +10,14 @@ from uuid import UUID
 
 from ..database import get_db
 from ..models.empleado import CentroCoste
+from ..auth import require_permission
+from ..permisos import TIMECLOCK_REGISTER, EMPLOYEES_EDIT
 
-router = APIRouter(prefix="/centros-coste", tags=["Centros de Coste"])
+router = APIRouter(
+    prefix="/centros-coste",
+    tags=["Centros de Coste"],
+    dependencies=[Depends(require_permission(TIMECLOCK_REGISTER))],
+)
 
 
 class CentroCosteCreate(BaseModel):
@@ -54,7 +60,7 @@ def listar_centros(
 
 
 @router.post("/", status_code=201)
-def crear_centro(data: CentroCosteCreate, db: Session = Depends(get_db)):
+def crear_centro(data: CentroCosteCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(EMPLOYEES_EDIT))):
     existing = db.query(CentroCoste).filter(
         CentroCoste.codigo == data.codigo
     ).first()
@@ -69,7 +75,8 @@ def crear_centro(data: CentroCosteCreate, db: Session = Depends(get_db)):
 
 @router.put("/{centro_id}")
 def actualizar_centro(
-    centro_id: UUID, data: CentroCosteUpdate, db: Session = Depends(get_db)
+    centro_id: UUID, data: CentroCosteUpdate, db: Session = Depends(get_db),
+    _auth=Depends(require_permission(EMPLOYEES_EDIT)),
 ):
     cc = db.query(CentroCoste).filter(CentroCoste.id == centro_id).first()
     if not cc:

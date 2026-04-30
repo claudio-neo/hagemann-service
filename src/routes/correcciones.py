@@ -15,6 +15,8 @@ from ..models.correccion import SolicitudCorreccion
 from ..models.fichaje import Fichaje
 from ..models.empleado import Empleado
 from ..models.aprobacion import AprobacionLog
+from ..auth import require_permission
+from ..permisos import TIMECLOCK_REGISTER, CORRECTIONS_REVIEW
 
 router = APIRouter(prefix="/correcciones", tags=["Correcciones de Fichaje"])
 
@@ -62,7 +64,7 @@ def _correc_dict(c: SolicitudCorreccion, emp: Empleado = None) -> dict:
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
 @router.post("/", status_code=201)
-def crear_correccion(data: CorreccionCreate, db: Session = Depends(get_db)):
+def crear_correccion(data: CorreccionCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(TIMECLOCK_REGISTER))):
     """
     Crear solicitud de corrección de fichaje.
     Crea automáticamente un registro en aprobaciones_log.
@@ -119,6 +121,7 @@ def listar_correcciones(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(CORRECTIONS_REVIEW)),
 ):
     """Lista solicitudes de corrección con filtros."""
     q = db.query(SolicitudCorreccion)
@@ -141,7 +144,7 @@ def listar_correcciones(
 
 
 @router.get("/{correccion_id}")
-def ver_correccion(correccion_id: UUID, db: Session = Depends(get_db)):
+def ver_correccion(correccion_id: UUID, db: Session = Depends(get_db), _auth=Depends(require_permission(CORRECTIONS_REVIEW))):
     """Detalle de una solicitud de corrección + estado de aprobación."""
     c = db.query(SolicitudCorreccion).filter(
         SolicitudCorreccion.id == correccion_id

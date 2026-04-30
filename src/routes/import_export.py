@@ -17,6 +17,8 @@ from ..database import get_db
 from ..models.empleado import Empleado, Grupo, CentroCoste, Zeitgruppe
 from ..models.audit import AuditLog
 from ..services.audit_service import log_action
+from ..auth import require_permission
+from ..permisos import EMPLOYEES_EDIT, USERS_ADMIN
 
 router = APIRouter(tags=["Import / Export"])
 
@@ -54,6 +56,7 @@ async def import_mitarbeiter(
     file: UploadFile = File(...),
     dry_run: bool = Query(False, description="Nur validieren, nicht speichern"),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(EMPLOYEES_EDIT)),
 ):
     """
     Importiert Mitarbeiter aus Excel (.xlsx) oder CSV (.csv).
@@ -206,6 +209,7 @@ async def import_mitarbeiter(
 def backup_to_telegram(
     chat_id: int = Query(..., description="Telegram Chat-ID für Backup"),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(USERS_ADMIN)),
 ):
     """
     Erstellt ein Datenbank-Backup und sendet es an Telegram.

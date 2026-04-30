@@ -10,8 +10,14 @@ from datetime import time
 
 from ..database import get_db
 from ..models.empleado import Zeitgruppe
+from ..auth import require_permission
+from ..permisos import TIMECLOCK_REGISTER, EMPLOYEES_EDIT
 
-router = APIRouter(prefix="/zeitgruppen", tags=["Stammdaten"])
+router = APIRouter(
+    prefix="/zeitgruppen",
+    tags=["Stammdaten"],
+    dependencies=[Depends(require_permission(TIMECLOCK_REGISTER))],
+)
 
 
 class ZeitgruppeCreate(BaseModel):
@@ -42,7 +48,7 @@ def list_zeitgruppen(activo: Optional[bool] = None, db: Session = Depends(get_db
 
 
 @router.post("/", status_code=201)
-def create_zeitgruppe(data: ZeitgruppeCreate, db: Session = Depends(get_db)):
+def create_zeitgruppe(data: ZeitgruppeCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(EMPLOYEES_EDIT))):
     existing = db.query(Zeitgruppe).filter(Zeitgruppe.nombre == data.nombre).first()
     if existing:
         raise HTTPException(409, f"Zeitgruppe '{data.nombre}' existiert bereits")
@@ -61,7 +67,7 @@ def create_zeitgruppe(data: ZeitgruppeCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{zg_id}")
-def update_zeitgruppe(zg_id: UUID, data: ZeitgruppeUpdate, db: Session = Depends(get_db)):
+def update_zeitgruppe(zg_id: UUID, data: ZeitgruppeUpdate, db: Session = Depends(get_db), _auth=Depends(require_permission(EMPLOYEES_EDIT))):
     z = db.query(Zeitgruppe).filter(Zeitgruppe.id == zg_id).first()
     if not z:
         raise HTTPException(404, "Zeitgruppe nicht gefunden")
@@ -85,7 +91,7 @@ def update_zeitgruppe(zg_id: UUID, data: ZeitgruppeUpdate, db: Session = Depends
 
 
 @router.delete("/{zg_id}", status_code=204)
-def delete_zeitgruppe(zg_id: UUID, db: Session = Depends(get_db)):
+def delete_zeitgruppe(zg_id: UUID, db: Session = Depends(get_db), _auth=Depends(require_permission(EMPLOYEES_EDIT))):
     z = db.query(Zeitgruppe).filter(Zeitgruppe.id == zg_id).first()
     if not z:
         raise HTTPException(404, "Zeitgruppe nicht gefunden")

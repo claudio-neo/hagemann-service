@@ -13,6 +13,8 @@ import logging
 
 from ..database import get_db
 from ..models.empleado import Empleado, Grupo
+from ..auth import require_permission
+from ..permisos import HOURS_CONTROL_TEAM, EMPLOYEES_EDIT, DEPUTY_ASSIGN
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +134,7 @@ def listar_empleados(
     grupo_id: Optional[UUID] = None,
     q: Optional[str] = None,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(HOURS_CONTROL_TEAM)),
 ):
     query = db.query(Empleado).options(joinedload(Empleado.grupo))
     if activo is not None:
@@ -148,7 +151,7 @@ def listar_empleados(
 
 
 @router.get("/{empleado_id}")
-def obtener_empleado(empleado_id: UUID, db: Session = Depends(get_db)):
+def obtener_empleado(empleado_id: UUID, db: Session = Depends(get_db), _auth=Depends(require_permission(HOURS_CONTROL_TEAM))):
     e = (db.query(Empleado)
          .options(joinedload(Empleado.grupo))
          .filter(Empleado.id == empleado_id)
@@ -159,7 +162,7 @@ def obtener_empleado(empleado_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.post("/", status_code=201)
-def crear_empleado(data: EmpleadoCreate, db: Session = Depends(get_db)):
+def crear_empleado(data: EmpleadoCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(EMPLOYEES_EDIT))):
     """
     Crear empleado. Si no se provee id_nummer, se auto-genera secuencial.
     id_nfc es alias de nfc_tag.
@@ -204,7 +207,8 @@ def crear_empleado(data: EmpleadoCreate, db: Session = Depends(get_db)):
 
 @router.put("/{empleado_id}")
 def actualizar_empleado(
-    empleado_id: UUID, data: EmpleadoUpdate, db: Session = Depends(get_db)
+    empleado_id: UUID, data: EmpleadoUpdate, db: Session = Depends(get_db),
+    _auth=Depends(require_permission(EMPLOYEES_EDIT)),
 ):
     """Actualiza todos los campos relevantes del empleado."""
     emp = (db.query(Empleado)
@@ -228,6 +232,7 @@ def cambiar_nfc(
     empleado_id: UUID,
     body: NfcUpdateBody,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(EMPLOYEES_EDIT)),
 ):
     """
     Cambia el NFC tag del empleado.
@@ -263,6 +268,7 @@ def cambiar_nfc(
 def desactivar_empleado(
     empleado_id: UUID,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(EMPLOYEES_EDIT)),
 ):
     """
     Soft delete: marca al empleado como inactivo (activo=False).
@@ -295,6 +301,7 @@ def desactivar_empleado(
 def reactivar_empleado(
     empleado_id: UUID,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(EMPLOYEES_EDIT)),
 ):
     """
     Reactiva un empleado previamente desactivado (activo=True).
@@ -334,6 +341,7 @@ def set_stellvertretung(
     empleado_id: UUID,
     data: StellvertretungSet,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(DEPUTY_ASSIGN)),
 ):
     """
     Asigna (o elimina) un Stv. Schichtführer como suplente del empleado.

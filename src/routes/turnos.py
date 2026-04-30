@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.turno import ModeloTurno, PlanTurno
 from ..models.empleado import Empleado, Grupo
+from ..auth import require_permission
+from ..permisos import TIMECLOCK_VIEW_OWN, SHIFTS_WRITE
 
 router = APIRouter(prefix="/turnos", tags=["Turnos"])
 
@@ -137,6 +139,7 @@ def _parse_time(s: Optional[str]) -> Optional[time]:
 def listar_modelos(
     activo: Optional[bool] = True,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(TIMECLOCK_VIEW_OWN)),
 ):
     """Lista modelos de turno. Por defecto solo activos."""
     q = db.query(ModeloTurno)
@@ -147,7 +150,7 @@ def listar_modelos(
 
 
 @router.post("/modelos", status_code=201)
-def crear_modelo(data: ModeloTurnoCreate, db: Session = Depends(get_db)):
+def crear_modelo(data: ModeloTurnoCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(SHIFTS_WRITE))):
     """Crear un nuevo modelo de turno. Calcula horas_netas automáticamente."""
     # Verificar código único
     if db.query(ModeloTurno).filter(ModeloTurno.codigo == data.codigo).first():
@@ -179,6 +182,7 @@ def editar_modelo(
     modelo_id: UUID,
     data: ModeloTurnoUpdate,
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(SHIFTS_WRITE)),
 ):
     """Editar un modelo de turno. Recalcula horas_netas si se cambian horas."""
     modelo = db.query(ModeloTurno).filter(ModeloTurno.id == modelo_id).first()
@@ -220,7 +224,7 @@ def editar_modelo(
 
 
 @router.delete("/modelos/{modelo_id}")
-def eliminar_modelo(modelo_id: UUID, db: Session = Depends(get_db)):
+def eliminar_modelo(modelo_id: UUID, db: Session = Depends(get_db), _auth=Depends(require_permission(SHIFTS_WRITE))):
     """Soft-delete: marca el modelo como inactivo."""
     modelo = db.query(ModeloTurno).filter(ModeloTurno.id == modelo_id).first()
     if not modelo:
@@ -242,6 +246,7 @@ def listar_planes(
     page: int = Query(1, ge=1),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
+    _auth=Depends(require_permission(TIMECLOCK_VIEW_OWN)),
 ):
     """Lista planes de turno con filtros."""
     q = (
@@ -271,7 +276,7 @@ def listar_planes(
 
 
 @router.post("/planes", status_code=201)
-def crear_plan(data: PlanTurnoCreate, db: Session = Depends(get_db)):
+def crear_plan(data: PlanTurnoCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(SHIFTS_WRITE))):
     """Asignar turno individual a un empleado en una fecha."""
     # Verificar empleado
     emp = db.query(Empleado).filter(Empleado.id == data.empleado_id).first()
@@ -311,7 +316,7 @@ def crear_plan(data: PlanTurnoCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/planes/bulk")
-def crear_planes_bulk(data: PlanTurnoBulk, db: Session = Depends(get_db)):
+def crear_planes_bulk(data: PlanTurnoBulk, db: Session = Depends(get_db), _auth=Depends(require_permission(SHIFTS_WRITE))):
     """
     Asignación masiva: lista de empleados × lista de fechas × un modelo.
     Si existiert bereits plan para (empleado, fecha) se omite (no error).
@@ -358,7 +363,7 @@ def crear_planes_bulk(data: PlanTurnoBulk, db: Session = Depends(get_db)):
 
 
 @router.put("/planes/{plan_id}")
-def editar_plan(plan_id: UUID, data: PlanTurnoUpdate, db: Session = Depends(get_db)):
+def editar_plan(plan_id: UUID, data: PlanTurnoUpdate, db: Session = Depends(get_db), _auth=Depends(require_permission(SHIFTS_WRITE))):
     """Actualizar plan de turno (cambiar modelo, estado, registrar real, etc.)"""
     plan = db.query(PlanTurno).filter(PlanTurno.id == plan_id).first()
     if not plan:
@@ -384,7 +389,7 @@ def editar_plan(plan_id: UUID, data: PlanTurnoUpdate, db: Session = Depends(get_
 
 
 @router.delete("/planes/{plan_id}")
-def eliminar_plan(plan_id: UUID, db: Session = Depends(get_db)):
+def eliminar_plan(plan_id: UUID, db: Session = Depends(get_db), _auth=Depends(require_permission(SHIFTS_WRITE))):
     """Eliminar un plan de turno."""
     plan = db.query(PlanTurno).filter(PlanTurno.id == plan_id).first()
     if not plan:

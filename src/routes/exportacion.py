@@ -12,8 +12,14 @@ import io
 
 from ..database import get_db
 from ..services.excel_export import generar_reporte_mensual, preview_reporte_mensual
+from ..auth import require_permission
+from ..permisos import EXPORT_RUN
 
-router = APIRouter(prefix="/exportacion", tags=["Exportación"])
+router = APIRouter(
+    prefix="/exportacion",
+    tags=["Exportación"],
+    dependencies=[Depends(require_permission(EXPORT_RUN))],
+)
 
 
 # ========== SCHEMAS ==========
