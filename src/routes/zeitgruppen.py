@@ -12,6 +12,7 @@ from ..database import get_db
 from ..models.empleado import Zeitgruppe
 from ..auth import require_permission
 from ..permisos import TIMECLOCK_REGISTER, EMPLOYEES_EDIT
+from ..services.audit_service import log_action, diff_changes
 
 router = APIRouter(
     prefix="/zeitgruppen",
@@ -61,6 +62,11 @@ def create_zeitgruppe(data: ZeitgruppeCreate, db: Session = Depends(get_db), _au
         rotacion_semanal=data.rotacion_semanal,
     )
     db.add(z)
+    db.flush()
+    log_action(db, "CREATE", "zeitgruppe",
+               entidad_id=str(z.id), entidad_label=z.nombre,
+               descripcion=f"Zeitgruppe '{z.nombre}' ({z.tipo}) erstellt",
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(z)
     return _zg_dict(z)
@@ -71,6 +77,8 @@ def update_zeitgruppe(zg_id: UUID, data: ZeitgruppeUpdate, db: Session = Depends
     z = db.query(Zeitgruppe).filter(Zeitgruppe.id == zg_id).first()
     if not z:
         raise HTTPException(404, "Zeitgruppe nicht gefunden")
+    old_state = {"nombre": z.nombre, "tipo": z.tipo, "activo": z.activo,
+                 "usar_inicio_turno": z.usar_inicio_turno, "rotacion_semanal": z.rotacion_semanal}
     if data.nombre is not None:
         z.nombre = data.nombre
     if data.descripcion is not None:
@@ -85,6 +93,12 @@ def update_zeitgruppe(zg_id: UUID, data: ZeitgruppeUpdate, db: Session = Depends
         z.rotacion_semanal = data.rotacion_semanal
     if data.activo is not None:
         z.activo = data.activo
+    new_state = {"nombre": z.nombre, "tipo": z.tipo, "activo": z.activo,
+                 "usar_inicio_turno": z.usar_inicio_turno, "rotacion_semanal": z.rotacion_semanal}
+    log_action(db, "UPDATE", "zeitgruppe",
+               entidad_id=str(z.id), entidad_label=z.nombre,
+               cambios=diff_changes(old_state, new_state),
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(z)
     return _zg_dict(z)
@@ -96,6 +110,10 @@ def delete_zeitgruppe(zg_id: UUID, db: Session = Depends(get_db), _auth=Depends(
     if not z:
         raise HTTPException(404, "Zeitgruppe nicht gefunden")
     z.activo = False
+    log_action(db, "DEACTIVATE", "zeitgruppe",
+               entidad_id=str(z.id), entidad_label=z.nombre,
+               descripcion=f"Zeitgruppe '{z.nombre}' deaktiviert",
+               usuario_nick=_auth.nick)
     db.commit()
 
 

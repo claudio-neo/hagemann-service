@@ -12,8 +12,9 @@ from datetime import datetime
 from ..database import get_db
 from ..models.usuario import Usuario, ROLE_LABELS
 from ..models.empleado import Empleado
-from ..auth import require_permission, hash_password
+from ..auth import require_permission, hash_password, get_current_user
 from ..permisos import USERS_ADMIN
+from ..services.audit_service import log_action, diff_changes
 
 router = APIRouter(
     prefix="/usuarios",
@@ -87,7 +88,8 @@ def obtener_usuario(usuario_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.post("/", status_code=201)
-def crear_usuario(data: UsuarioCreate, db: Session = Depends(get_db)):
+def crear_usuario(data: UsuarioCreate, db: Session = Depends(get_db),
+                  current_user: Usuario = Depends(get_current_user)):
     if db.query(Usuario).filter(Usuario.nick == data.nick).first():
         raise HTTPException(409, f"Nick '{data.nick}' bereits vergeben")
     if data.email and db.query(Usuario).filter(Usuario.email == data.email).first():
@@ -107,16 +109,27 @@ def crear_usuario(data: UsuarioCreate, db: Session = Depends(get_db)):
         activo=data.activo,
     )
     db.add(u)
+    db.flush()
+    log_action(db, "CREATE", "usuario",
+               entidad_id=str(u.id),
+               entidad_label=u.nick,
+               descripcion=f"Benutzer erstellt: {u.nick} (Rolle {ROLE_LABELS.get(u.role, u.role)})",
+               usuario_nick=current_user.nick)
     db.commit()
     db.refresh(u)
     return {"id": str(u.id), "message": "Benutzer erstellt"}
 
 
 @router.put("/{usuario_id}")
-def actualizar_usuario(usuario_id: UUID, data: UsuarioUpdate, db: Session = Depends(get_db)):
+def actualizar_usuario(usuario_id: UUID, data: UsuarioUpdate, db: Session = Depends(get_db),
+                       current_user: Usuario = Depends(get_current_user)):
     u = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not u:
         raise HTTPException(404, "Benutzer nicht gefunden")
+
+    old_state = {"nick": u.nick, "email": u.email, "role": u.role,
+                 "empleado_id": str(u.empleado_id) if u.empleado_id else None,
+                 "activo": u.activo}
 
     if data.nick is not None:
         conflict = db.query(Usuario).filter(Usuario.nick == data.nick, Usuario.id != usuario_id).first()
@@ -144,13 +157,22 @@ def actualizar_usuario(usuario_id: UUID, data: UsuarioUpdate, db: Session = Depe
         u.activo = data.activo
 
     u.updated_at = datetime.utcnow()
+    new_state = {"nick": u.nick, "email": u.email, "role": u.role,
+                 "empleado_id": str(u.empleado_id) if u.empleado_id else None,
+                 "activo": u.activo}
+    log_action(db, "UPDATE", "usuario",
+               entidad_id=str(u.id),
+               entidad_label=u.nick,
+               cambios=diff_changes(old_state, new_state),
+               usuario_nick=current_user.nick)
     db.commit()
     db.refresh(u)
     return {"message": "Benutzer aktualisiert", "usuario": _to_dict(u)}
 
 
 @router.post("/{usuario_id}/reset-password")
-def reset_password(usuario_id: UUID, data: PasswordReset, db: Session = Depends(get_db)):
+def reset_password(usuario_id: UUID, data: PasswordReset, db: Session = Depends(get_db),
+                   current_user: Usuario = Depends(get_current_user)):
     u = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not u:
         raise HTTPException(404, "Benutzer nicht gefunden")
@@ -158,16 +180,27 @@ def reset_password(usuario_id: UUID, data: PasswordReset, db: Session = Depends(
         raise HTTPException(400, "Passwort muss mindestens 6 Zeichen haben")
     u.password_hash = hash_password(data.password)
     u.updated_at = datetime.utcnow()
+    log_action(db, "PASSWORD_RESET", "usuario",
+               entidad_id=str(u.id),
+               entidad_label=u.nick,
+               descripcion=f"Passwort für '{u.nick}' zurückgesetzt",
+               usuario_nick=current_user.nick)
     db.commit()
     return {"message": f"Passwort für '{u.nick}' zurückgesetzt"}
 
 
 @router.delete("/{usuario_id}")
-def desactivar_usuario(usuario_id: UUID, db: Session = Depends(get_db)):
+def desactivar_usuario(usuario_id: UUID, db: Session = Depends(get_db),
+                       current_user: Usuario = Depends(get_current_user)):
     u = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not u:
         raise HTTPException(404, "Benutzer nicht gefunden")
     u.activo = False
     u.updated_at = datetime.utcnow()
+    log_action(db, "DEACTIVATE", "usuario",
+               entidad_id=str(u.id),
+               entidad_label=u.nick,
+               descripcion=f"Benutzer '{u.nick}' deaktiviert",
+               usuario_nick=current_user.nick)
     db.commit()
     return {"message": f"Benutzer '{u.nick}' deaktiviert"}

@@ -33,6 +33,18 @@ nav .logo-badge { background: var(--blue); color: white; font-size: 10px; font-w
 .nav-spacer { flex: 1; }
 .nav-back { color: #64748b; font-size: 12px; text-decoration: none; padding: 4px 10px; border-radius: 6px; }
 .nav-back:hover { color: #94a3b8; }
+#einstellungen-tabbar {
+  background: #1e293b; border-bottom: 1px solid rgba(255,255,255,.06);
+  padding: 0 24px; display: flex; align-items: center; gap: 4px; height: 40px;
+  position: sticky; top: 56px; z-index: 99;
+}
+#einstellungen-tabbar.hidden { display: none; }
+.etab-btn {
+  color: #94a3b8; font-size: 12.5px; font-weight: 500; padding: 4px 12px;
+  border-radius: 5px; border: none; background: transparent; cursor: pointer; transition: .15s;
+}
+.etab-btn:hover { color: white; background: rgba(255,255,255,.07); }
+.etab-btn.active { color: white; background: rgba(59,130,246,.35); }
 
 /* LAYOUT */
 .page { display: none; }
@@ -266,24 +278,30 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 
 <!-- ===== NAVIGATION ===== -->
 <nav>
-  <div class="logo">⚙ Hagemann <span class="logo-badge">Admin</span></div>
+  <div class="logo">⚙ Hagemann <span class="logo-badge" id="logo-badge">Admin</span></div>
   <button class="nav-btn active" onclick="showPage('dashboard')" id="nav-dashboard">📊 Dashboard</button>
-  <button class="nav-btn" onclick="showPage('berichte')" id="nav-berichte">📈 Berichte</button>
-  <button class="nav-btn" onclick="showPage('feiertage')" id="nav-feiertage">📅 Feiertage</button>
+  <button class="nav-btn hidden" onclick="showPage('berichte')" id="nav-berichte">📈 Berichte</button>
+  <button class="nav-btn hidden" onclick="showPage('feiertage')" id="nav-feiertage">📅 Feiertage</button>
   <button class="nav-btn" onclick="showPage('urlaub')" id="nav-urlaub">🌴 Urlaub</button>
   <button class="nav-btn" onclick="showPage('stundenkonto')" id="nav-stundenkonto">⏱ Stundenkonto</button>
-  <button class="nav-btn" onclick="showPage('schichtplanung')" id="nav-schichtplanung">🗓 Schichtplanung</button>
-  <button class="nav-btn" onclick="showPage('korrekturen')" id="nav-korrekturen">📝 Korrekturen</button>
-  <button class="nav-btn" onclick="showPage('genehmigungen')" id="nav-genehmigungen">✅ Genehmigungen<span id="pill-genehmigungen" class="pill hidden">0</span></button>
-  <button class="nav-btn" onclick="showPage('export')" id="nav-export">📥 Export</button>
-  <button class="nav-btn" onclick="showPage('stammdaten')" id="nav-stammdaten">⚙ Stammdaten</button>
-  <button class="nav-btn" onclick="showPage('importieren')" id="nav-importieren">📤 Import</button>
-  <button class="nav-btn" onclick="showPage('protokoll')" id="nav-protokoll">📜 Protokoll</button>
-  <button class="nav-btn" onclick="showPage('mitarbeiter')" id="nav-mitarbeiter">👥 Mitarbeiter</button>
-  <button class="nav-btn hidden" onclick="showPage('benutzerverwaltung')" id="nav-benutzerverwaltung">🔐 Benutzer</button>
+  <button class="nav-btn hidden" onclick="showPage('schichtplanung')" id="nav-schichtplanung">🗓 Schichtplanung</button>
+  <button class="nav-btn hidden" onclick="showPage('korrekturen')" id="nav-korrekturen">📝 Korrekturen</button>
+  <button class="nav-btn hidden" onclick="showPage('genehmigungen')" id="nav-genehmigungen">✅ Genehmigungen<span id="pill-genehmigungen" class="pill hidden">0</span></button>
+  <button class="nav-btn hidden" onclick="showPage('einstellungen')" id="nav-einstellungen">⚙ Einstellungen</button>
   <div class="nav-spacer"></div>
+  <span id="nav-user" style="color:#94a3b8;font-size:12px;padding:0 8px;white-space:nowrap"></span>
+  <button class="nav-btn" onclick="doLogout()" style="color:#f87171" title="Abmelden">⏻ Abmelden</button>
   <a class="nav-back" href="index.html">← Zurück zur App</a>
 </nav>
+
+<div id="einstellungen-tabbar" class="hidden">
+  <button class="etab-btn hidden" onclick="showPage('einstellungen')" id="etab-einstellungen">⚙ Stammdaten</button>
+  <button class="etab-btn hidden" onclick="showPage('export')" id="etab-export">📥 Export</button>
+  <button class="etab-btn hidden" onclick="showPage('importieren')" id="etab-importieren">📤 Import</button>
+  <button class="etab-btn hidden" onclick="showPage('protokoll')" id="etab-protokoll">📜 Protokoll</button>
+  <button class="etab-btn hidden" onclick="showPage('mitarbeiter')" id="etab-mitarbeiter">👥 Mitarbeiter</button>
+  <button class="etab-btn hidden" onclick="showPage('benutzerverwaltung')" id="etab-benutzerverwaltung">🔐 Benutzer</button>
+</div>
 
 <!-- ===== GLOBAL ALERTS ===== -->
 <div id="globalAlert" class="hidden" style="margin:16px 24px 0; max-width:1280px;"></div>
@@ -542,10 +560,10 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 </div>
 
 <!-- ===== PAGE: STAMMDATEN ===== -->
-<div id="page-stammdaten" class="page">
+<div id="page-einstellungen" class="page">
   <div class="container">
     <div class="page-header">
-      <div><h1>Stammdaten</h1><p>Abteilungen, Kostenstellen und Zeitgruppen verwalten</p></div>
+      <div><h1>Einstellungen</h1><p>Abteilungen, Kostenstellen und Zeitgruppen verwalten</p></div>
     </div>
 
     <div class="tab-bar" style="margin-bottom:20px">
@@ -578,18 +596,6 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     </div>
 
     <div id="importResult"></div>
-
-    <div class="card" style="margin-top:20px">
-      <div class="card-title" style="margin-bottom:12px">🗄 Backup</div>
-      <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap">
-        <div class="form-group" style="margin-bottom:0">
-          <label>Telegram Chat-ID</label>
-          <input type="text" id="backupChatId" class="form-control" style="width:200px" value="6055586001">
-        </div>
-        <button class="btn btn-primary" onclick="runBackup()">📦 Backup senden</button>
-      </div>
-      <div id="backupResult" style="margin-top:12px"></div>
-    </div>
   </div>
 </div>
 
@@ -597,47 +603,122 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 <div id="page-protokoll" class="page">
   <div class="container">
     <div class="page-header">
-      <div><h1>Protokoll</h1><p>Änderungshistorie aller Verwaltungsaktionen</p></div>
-      <button class="btn btn-outline" onclick="loadProtokoll()">🔄 Aktualisieren</button>
+      <div><h1>Protokoll</h1><p>Änderungshistorie &amp; Interaktions-Log</p></div>
+      <button class="btn btn-outline" onclick="_ilogTab==='audit'?loadProtokoll():loadInteractions()">🔄 Aktualisieren</button>
     </div>
 
-    <div class="card" style="margin-bottom:16px">
-      <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
-        <div class="form-group" style="margin-bottom:0">
-          <label>Von</label>
-          <input type="date" id="auditFrom" class="form-control" style="width:auto">
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid #e5e7eb">
+      <button id="protoTabAudit" class="btn active" onclick="switchProtoTab('audit')"
+        style="border:none;border-bottom:3px solid transparent;border-radius:0;padding:10px 20px;font-weight:600;background:none;cursor:pointer">
+        📜 Änderungen
+      </button>
+      <button id="protoTabInter" class="btn" onclick="switchProtoTab('interactions')"
+        style="border:none;border-bottom:3px solid transparent;border-radius:0;padding:10px 20px;font-weight:600;background:none;cursor:pointer">
+        🔍 Interaktionen
+      </button>
+    </div>
+    <style>
+      #protoTabAudit.active, #protoTabInter.active { border-bottom-color: #2563eb !important; color: #2563eb; }
+    </style>
+
+    <!-- === AUDIT TAB === -->
+    <div id="protoAuditSection">
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Von</label>
+            <input type="date" id="auditFrom" class="form-control" style="width:auto">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Bis</label>
+            <input type="date" id="auditTo" class="form-control" style="width:auto">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Aktion</label>
+            <select id="auditAction" class="form-control" style="width:auto">
+              <option value="">Alle</option>
+              <option value="CREATE">Erstellen</option>
+              <option value="UPDATE">Ändern</option>
+              <option value="DELETE">Löschen</option>
+              <option value="IMPORT">Import</option>
+              <option value="BACKUP">Backup</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="loadProtokoll()">Laden</button>
         </div>
-        <div class="form-group" style="margin-bottom:0">
-          <label>Bis</label>
-          <input type="date" id="auditTo" class="form-control" style="width:auto">
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Zeitpunkt</th><th>Benutzer</th><th>Aktion</th><th>Entität</th><th>Details</th></tr>
+            </thead>
+            <tbody id="protokollTbody">
+              <tr><td colspan="5"><div class="empty">Keine Einträge</div></td></tr>
+            </tbody>
+          </table>
         </div>
-        <div class="form-group" style="margin-bottom:0">
-          <label>Aktion</label>
-          <select id="auditAction" class="form-control" style="width:auto">
-            <option value="">Alle</option>
-            <option value="CREATE">Erstellen</option>
-            <option value="UPDATE">Ändern</option>
-            <option value="DELETE">Löschen</option>
-            <option value="IMPORT">Import</option>
-            <option value="BACKUP">Backup</option>
-          </select>
-        </div>
-        <button class="btn btn-primary" onclick="loadProtokoll()">Laden</button>
       </div>
     </div>
 
-    <div class="card">
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Zeitpunkt</th><th>Benutzer</th><th>Aktion</th><th>Entität</th><th>Details</th></tr>
-          </thead>
-          <tbody id="protokollTbody">
-            <tr><td colspan="5"><div class="empty">Keine Einträge</div></td></tr>
-          </tbody>
-        </table>
+    <!-- === INTERAKTIONEN TAB === -->
+    <div id="protoInterSection" class="hidden">
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Von</label>
+            <input type="date" id="interFrom" class="form-control" style="width:auto">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Bis</label>
+            <input type="date" id="interTo" class="form-control" style="width:auto">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Benutzer</label>
+            <input type="text" id="interUser" class="form-control" style="width:120px" placeholder="Nick…">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Aktion</label>
+            <select id="interAction" class="form-control" style="width:auto">
+              <option value="">Alle</option>
+              <option value="click">Klick</option>
+              <option value="navigate">Navigation</option>
+              <option value="api_call">API-Aufruf</option>
+              <option value="select">Auswahl</option>
+              <option value="login">Login</option>
+              <option value="logout">Logout</option>
+              <option value="error">Fehler</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Quelle</label>
+            <select id="interSource" class="form-control" style="width:auto">
+              <option value="">Alle</option>
+              <option value="admin">Admin</option>
+              <option value="terminal">Terminal</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="loadInteractions()">Laden</button>
+          <span id="interCount" style="font-size:12px;color:#6b7280;margin-left:auto"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Zeitpunkt</th><th>Benutzer</th><th>Aktion</th><th>Ziel</th><th>Detail</th><th>Quelle</th><th>Seite</th></tr>
+            </thead>
+            <tbody id="interTbody">
+              <tr><td colspan="7"><div class="empty">Tab wählen und Laden klicken</div></td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
+
   </div>
 </div>
 
@@ -825,6 +906,18 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
       </div>
       <div class="table-wrap" id="exportPreviewTable"></div>
     </div>
+
+    <div class="card" style="margin-top:20px">
+      <div class="card-title" style="margin-bottom:12px">🗄 Backup</div>
+      <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Telegram Chat-ID</label>
+          <input type="text" id="backupChatId" class="form-control" style="width:200px" value="6055586001">
+        </div>
+        <button class="btn btn-primary" onclick="runBackup()">📦 Backup senden</button>
+      </div>
+      <div id="backupResult" style="margin-top:12px"></div>
+    </div>
   </div>
 </div>
 
@@ -927,6 +1020,37 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('urlaubModal')">Abbrechen</button>
       <button class="btn btn-primary" onclick="saveUrlaub()">Antrag erstellen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: STUNDENKONTO AJUSTE ===== -->
+<div id="skAjusteModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h2>✏ Monat manuell anpassen</h2>
+      <button class="modal-close" onclick="closeModal('skAjusteModal')">✕</button>
+    </div>
+    <div id="skAjusteAlert"></div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+      Der Monat wird mit den eingegebenen Werten gespeichert und als <b>geschlossen</b> markiert (kein automatisches Neuberechnen).
+      Nützlich für Monate vor Systemstart.
+    </p>
+    <div class="form-group">
+      <label>Ist-Stunden (tatsächlich geleistet)</label>
+      <input type="number" id="skAjusteIst" class="form-control" step="0.5" min="0" placeholder="z.B. 168">
+    </div>
+    <div class="form-group">
+      <label>Soll-Stunden <span style="color:var(--muted);font-weight:400">(leer = Vertragsstunden)</span></label>
+      <input type="number" id="skAjusteSoll" class="form-control" step="0.5" min="0" placeholder="leer = Standard">
+    </div>
+    <div class="form-group">
+      <label>Notiz</label>
+      <input type="text" id="skAjusteNotas" class="form-control" placeholder="z.B. Vor Systemstart – manuell erfasst">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('skAjusteModal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="saveSkAjuste()">💾 Speichern</button>
     </div>
   </div>
 </div>
@@ -1280,6 +1404,9 @@ let employees = [], costCenters = [], allFeiertage = [], allUrlaub = [];
 let rejectContext = { type: 'urlaub', id: null, currentStatus: null };
 let reportTab = 'cc';
 let urlaubTab = 'antraege';
+let currentUser = { nick: '', role: 4, permissions: [], employee_id: null };
+function hasPerm(p) { return currentUser.permissions.includes(p); }
+function isBasicUser() { return !hasPerm('reports:view') && !hasPerm('employees:edit') && !hasPerm('users:admin'); }
 
 // =====================================================================
 // AUTH
@@ -1290,6 +1417,11 @@ function clearToken() { localStorage.removeItem('hg_token'); }
 
 function showLogin() { document.getElementById('loginOverlay').style.display = 'flex'; }
 function hideLogin() { document.getElementById('loginOverlay').style.display = 'none'; }
+function doLogout() {
+  clearToken();
+  document.getElementById('nav-user').textContent = '';
+  showLogin();
+}
 
 async function doLogin() {
   const nick = document.getElementById('loginUser').value.trim();
@@ -1409,12 +1541,27 @@ function populateYearSelect(selectId, defaultYear) {
 // =====================================================================
 // NAVIGATION
 // =====================================================================
+const EINSTELL_PAGES = new Set(['einstellungen','export','importieren','protokoll','mitarbeiter','benutzerverwaltung']);
+
 function showPage(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('page-' + page).classList.add('active');
-  document.getElementById('nav-' + page).classList.add('active');
+  document.getElementById('page-' + page)?.classList.add('active');
   document.getElementById('globalAlert').classList.add('hidden');
+
+  // Nav principal: einstellungen agrupa varias sub-páginas
+  const navId = EINSTELL_PAGES.has(page) ? 'nav-einstellungen' : 'nav-' + page;
+  document.getElementById(navId)?.classList.add('active');
+
+  // Sub-barra de Einstellungen
+  const tabBar = document.getElementById('einstellungen-tabbar');
+  if (EINSTELL_PAGES.has(page)) {
+    tabBar.classList.remove('hidden');
+    document.querySelectorAll('.etab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('etab-' + page)?.classList.add('active');
+  } else {
+    tabBar.classList.add('hidden');
+  }
 
   if (page === 'dashboard') loadDashboard();
   if (page === 'berichte') initBerichte();
@@ -1425,8 +1572,8 @@ function showPage(page) {
   if (page === 'korrekturen') loadKorrekturen();
   if (page === 'genehmigungen') loadGenehmigungen();
   if (page === 'export') initExport();
-  if (page === 'stammdaten') initStammdaten();
-  if (page === 'importieren') { /* static page */ }
+  if (page === 'einstellungen') initStammdaten();
+  if (page === 'importieren') { /* static */ }
   if (page === 'protokoll') loadProtokoll();
   if (page === 'mitarbeiter') renderEmployees();
   if (page === 'benutzerverwaltung') loadBenutzerverwaltung();
@@ -1450,10 +1597,52 @@ async function init() {
     employees = empRes.data || [];
     costCenters = ccRes.data || [];
 
-    // Show admin-only nav items based on permissions
-    const perms = meRes.permissions || [];
-    if (perms.includes('users:admin')) {
-      document.getElementById('nav-benutzerverwaltung').classList.remove('hidden');
+    // Store current user globally
+    currentUser = {
+      nick: meRes.nick || '',
+      role: meRes.role || 4,
+      permissions: meRes.permissions || [],
+      employee_id: meRes.employee_id || null,
+    };
+
+    // Show current user in nav
+    if (meRes.nick) {
+      document.getElementById('nav-user').textContent = '👤 ' + meRes.nick;
+    }
+
+    // ── Permission-based visibility ──────────────────────────
+    const perms = currentUser.permissions;
+    const has = p => perms.includes(p);
+    const show = id => document.getElementById(id)?.classList.remove('hidden');
+
+    // Nav buttons — map permission → nav element
+    if (has('reports:view'))       show('nav-berichte');
+    if (has('employees:edit'))     show('nav-feiertage');
+    if (has('shifts:write'))       show('nav-schichtplanung');
+    if (has('corrections:review')) show('nav-korrekturen');
+    if (has('approvals:level1'))   show('nav-genehmigungen');
+
+    // Einstellungen: visible if user has any admin-ish permission
+    if (has('employees:edit') || has('export:run') || has('users:admin')) {
+      show('nav-einstellungen');
+    }
+
+    // Einstellungen sub-tabs
+    if (has('employees:edit')) {
+      show('etab-einstellungen');  // Stammdaten
+      show('etab-importieren');
+      show('etab-mitarbeiter');
+    }
+    if (has('export:run'))    show('etab-export');
+    if (has('users:admin')) {
+      show('etab-protokoll');
+      show('etab-benutzerverwaltung');
+    }
+
+    // Adapt branding for Benutzer
+    if (isBasicUser()) {
+      document.getElementById('logo-badge').textContent = 'Portal';
+      document.getElementById('nav-dashboard').textContent = '📊 Mein Bereich';
     }
 
     // Populate employee dropdowns
@@ -1461,15 +1650,17 @@ async function init() {
     loadDashboard();
 
     // Load initial pending count for Genehmigungen badge
-    try {
-      const pendRes = await api('/aprobaciones/pendientes');
-      const pendCount = (pendRes.data || pendRes || []).length;
-      if (pendCount > 0) {
-        const pill = document.getElementById('pill-genehmigungen');
-        pill.textContent = pendCount;
-        pill.classList.remove('hidden');
-      }
-    } catch(e) { /* badge is optional */ }
+    if (has('approvals:level1')) {
+      try {
+        const pendRes = await api('/aprobaciones/pendientes');
+        const pendCount = (pendRes.data || pendRes || []).length;
+        if (pendCount > 0) {
+          const pill = document.getElementById('pill-genehmigungen');
+          pill.textContent = pendCount;
+          pill.classList.remove('hidden');
+        }
+      } catch(e) { /* badge is optional */ }
+    }
 
   } catch(e) {
     showGlobalAlert('error', 'Fehler beim Laden: ' + e.message, 0);
@@ -1477,15 +1668,20 @@ async function init() {
 }
 
 function populateEmpDropdowns() {
+  // For Benutzer: only show own employee in dropdowns
+  const empList = (isBasicUser() && currentUser.employee_id)
+    ? employees.filter(e => e.id === currentUser.employee_id)
+    : employees;
+
   const skSel = document.getElementById('skEmpSelect');
   skSel.innerHTML = '<option value="">— bitte wählen —</option>';
-  employees.forEach(e => {
+  empList.forEach(e => {
     skSel.innerHTML += `<option value="${e.id}">#${e.id_nummer} ${e.nombre} ${e.apellido||''}</option>`;
   });
 
   const uaSel = document.getElementById('uaEmp');
   uaSel.innerHTML = '<option value="">— bitte wählen —</option>';
-  employees.forEach(e => {
+  empList.forEach(e => {
     uaSel.innerHTML += `<option value="${e.id}">#${e.id_nummer} ${e.nombre} ${e.apellido||''}</option>`;
   });
 }
@@ -1494,6 +1690,7 @@ function populateEmpDropdowns() {
 // DASHBOARD
 // =====================================================================
 async function loadDashboard() {
+  if (isBasicUser()) return loadDashboardPersonal();
   try {
     const { from, to } = thisMonthRange();
     const [openRes, ccRes] = await Promise.all([
@@ -1557,6 +1754,90 @@ async function loadDashboard() {
     }
   } catch(e) {
     showGlobalAlert('error', 'Dashboard-Fehler: ' + e.message);
+  }
+}
+
+async function loadDashboardPersonal() {
+  // Personal dashboard for Benutzer role
+  const empId = currentUser.employee_id;
+  const container = document.getElementById('page-dashboard').querySelector('.container');
+
+  if (!empId) {
+    container.innerHTML = `
+      <div class="page-header"><div><h1>Mein Bereich</h1><p>Persönliche Übersicht</p></div></div>
+      <div class="card"><div class="empty">Kein Mitarbeiter mit diesem Benutzerkonto verknüpft.<br>Bitte den Administrator kontaktieren.</div></div>`;
+    return;
+  }
+
+  const emp = employees.find(e => e.id === empId);
+  const empName = emp ? `${emp.nombre} ${emp.apellido||''}` : currentUser.nick;
+
+  try {
+    const { from, to } = thisMonthRange();
+    const [openRes, saldoRes] = await Promise.all([
+      api('/fichajes/abiertos'),
+      api(`/saldo-horas/${empId}?year=${new Date().getFullYear()}`).catch(() => null),
+    ]);
+
+    const open = (openRes.data || []);
+    const myFichaje = open.find(f => f.empleado.id === empId);
+
+    // Vacation saldo
+    let vacInfo = '';
+    try {
+      const vacRes = await api(`/vacaciones/saldo/${empId}?anio=${new Date().getFullYear()}`);
+      vacInfo = `
+        <div class="stat-card accent-green">
+          <div class="stat-label">Urlaub verfügbar</div>
+          <div class="stat-value">${vacRes.dias_disponibles}</div>
+          <div class="stat-sub">von ${vacRes.dias_totales} Tagen</div>
+        </div>`;
+    } catch(e) { /* optional */ }
+
+    // Hours saldo
+    const resumen = saldoRes?.resumen || {};
+    const saldoTotal = resumen.saldo_total || 0;
+    const saldoSign = saldoTotal >= 0 ? '+' : '';
+
+    container.innerHTML = `
+      <div class="page-header">
+        <div><h1>Hallo, ${empName}</h1><p>Persönliche Übersicht</p></div>
+        <button class="btn btn-outline" onclick="loadDashboard()">🔄 Aktualisieren</button>
+      </div>
+
+      <div class="grid-4" style="margin-bottom:20px">
+        <div class="stat-card ${myFichaje ? 'accent-green' : 'accent-amber'}">
+          <div class="stat-label">Mein Status</div>
+          <div style="font-size:18px;font-weight:700">${myFichaje ? '🟢 Anwesend' : '○ Abwesend'}</div>
+          <div class="stat-sub">${myFichaje ? 'Seit ' + fmtTime(myFichaje.entrada) + ' · ' + elapsed(myFichaje.entrada) : 'Nicht eingestempelt'}</div>
+        </div>
+        ${myFichaje ? `
+        <div class="stat-card accent-blue">
+          <div class="stat-label">Aktuelle Abteilung</div>
+          <div style="font-size:18px;font-weight:700">${myFichaje.centro_coste_actual?.nombre || '—'}</div>
+        </div>` : ''}
+        <div class="stat-card ${saldoTotal >= 0 ? 'accent-green' : 'accent-amber'}">
+          <div class="stat-label">Stundensaldo ${new Date().getFullYear()}</div>
+          <div class="stat-value">${saldoSign}${(saldoTotal).toFixed(1)}h</div>
+          <div class="stat-sub">Ist: ${(resumen.total_real||0).toFixed(1)}h / Soll: ${(resumen.total_planificado||0).toFixed(1)}h</div>
+        </div>
+        ${vacInfo}
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Schnellzugriff</span>
+        </div>
+        <div style="display:flex;gap:12px;padding:12px 0;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="showPage('stundenkonto')">⏱ Mein Stundenkonto</button>
+          <button class="btn btn-primary" onclick="showPage('urlaub')">🌴 Urlaub</button>
+          <a href="terminal.html" class="btn btn-success" style="text-decoration:none">📱 Stempeluhr öffnen</a>
+        </div>
+      </div>`;
+  } catch(e) {
+    container.innerHTML = `
+      <div class="page-header"><div><h1>Mein Bereich</h1><p>${empName}</p></div></div>
+      <div class="card"><div class="alert alert-error">Fehler: ${e.message}</div></div>`;
   }
 }
 
@@ -1900,9 +2181,26 @@ async function loadUrlaub() {
   const leer  = document.getElementById('urlaubLeer');
   tbody.innerHTML = '<tr><td colspan="7"><div class="loading">Lade Daten</div></td></tr>';
 
+  // Hide Krankmeldung tab and Saldo-all for Benutzer (they see only own data)
+  if (isBasicUser()) {
+    document.getElementById('utab-krankmeldung').classList.add('hidden');
+  }
+
   try {
     const res = await api(`/vacaciones/solicitudes?anio=${year}`);
     allUrlaub = res.data || [];
+
+    // Benutzer: filter to own employee only
+    if (isBasicUser() && currentUser.employee_id) {
+      const myEmp = employees.find(e => e.id === currentUser.employee_id);
+      if (myEmp) {
+        const myName = `${myEmp.nombre} ${myEmp.apellido||''}`.trim();
+        allUrlaub = allUrlaub.filter(u =>
+          u.empleado_id === currentUser.employee_id || u.empleado_nombre === myName
+        );
+      }
+    }
+
     const pending = allUrlaub.filter(u => u.estado === 'PENDIENTE').length;
     document.getElementById('urlaubPending').textContent = `${pending} ausstehend`;
     renderUrlaubTable();
@@ -1934,16 +2232,18 @@ function renderUrlaubTable() {
     if (u.aprobado_por_nivel2) approvers.push(`L2: ${u.aprobado_por_nivel2}`);
 
     let actions = '';
-    if (u.estado === 'PENDIENTE') {
-      actions = `
-        <button class="btn btn-sm btn-success" onclick="approveUrlaub('${u.id}', 1)" title="Genehmigen Stufe 1">✓ L1</button>
-        <button class="btn btn-sm btn-danger" onclick="openReject('${u.id}')" title="Ablehnen">✗</button>
-      `;
-    } else if (u.estado === 'PROPUESTA') {
-      actions = `
-        <button class="btn btn-sm btn-success" onclick="approveUrlaub('${u.id}', 2)" title="Genehmigen Stufe 2">✓ L2</button>
-        <button class="btn btn-sm btn-danger" onclick="openReject('${u.id}')" title="Ablehnen">✗</button>
-      `;
+    if (!isBasicUser()) {
+      if (u.estado === 'PENDIENTE') {
+        actions = `
+          <button class="btn btn-sm btn-success" onclick="approveUrlaub('${u.id}', 1)" title="Genehmigen Stufe 1">✓ L1</button>
+          <button class="btn btn-sm btn-danger" onclick="openReject('${u.id}')" title="Ablehnen">✗</button>
+        `;
+      } else if (u.estado === 'PROPUESTA') {
+        actions = `
+          <button class="btn btn-sm btn-success" onclick="approveUrlaub('${u.id}', 2)" title="Genehmigen Stufe 2">✓ L2</button>
+          <button class="btn btn-sm btn-danger" onclick="openReject('${u.id}')" title="Ablehnen">✗</button>
+        `;
+      }
     }
 
     return `<tr>
@@ -2022,7 +2322,12 @@ async function loadSaldoGrid() {
   grid.innerHTML = '<div class="loading">Lade Salden</div>';
 
   try {
-    const results = await Promise.all(employees.map(e =>
+    // Benutzer: only own employee
+    const empList = (isBasicUser() && currentUser.employee_id)
+      ? employees.filter(e => e.id === currentUser.employee_id)
+      : employees;
+
+    const results = await Promise.all(empList.map(e =>
       api(`/vacaciones/saldo/${e.id}?anio=${year}`)
         .then(d => ({ emp: e, ...d }))
         .catch(() => null)
@@ -2052,7 +2357,8 @@ async function loadSaldoGrid() {
 }
 
 function openUrlaubModal() {
-  document.getElementById('uaEmp').value = '';
+  const empSel = document.getElementById('uaEmp');
+  empSel.value = '';
   document.getElementById('uaVon').value = '';
   document.getElementById('uaBis').value = '';
   document.getElementById('uaMotivo').value = '';
@@ -2060,6 +2366,16 @@ function openUrlaubModal() {
   document.getElementById('vacDaysPreview').textContent = '';
   document.getElementById('urlaubModalAlert').innerHTML = '';
   document.getElementById('urlaubModalAlert').style.display = 'none';
+
+  // Benutzer: auto-select own employee and lock selector
+  if (isBasicUser() && currentUser.employee_id) {
+    empSel.value = currentUser.employee_id;
+    empSel.disabled = true;
+    loadEmpSaldoPreview();
+  } else {
+    empSel.disabled = false;
+  }
+
   openModal('urlaubModal');
 }
 
@@ -2124,7 +2440,12 @@ async function saveUrlaub() {
 // STUNDENKONTO
 // =====================================================================
 function initStundenkonto() {
-  // Nothing special on init
+  if (isBasicUser() && currentUser.employee_id) {
+    const sel = document.getElementById('skEmpSelect');
+    sel.value = currentUser.employee_id;
+    sel.parentElement.style.display = 'none'; // hide employee selector
+    loadStundenkonto();
+  }
 }
 
 async function loadStundenkonto() {
@@ -2145,18 +2466,25 @@ async function loadStundenkonto() {
     const monthlyH = data.empleado?.monthly_hours || 0;
     const kappung = data.limite_kappung;
 
+    const canAdjust = hasPerm('hours:control_team');
     const rows = meses.map(m => {
       const saldoClass = m.saldo_final > 0 ? 'sk-positive' : m.saldo_final < 0 ? 'sk-negative' : '';
       const accClass   = m.saldo_acumulado > 0 ? 'sk-positive' : m.saldo_acumulado < 0 ? 'sk-negative' : '';
       const kappIcon   = m.kappung_aplicado ? `<span class="sk-kappung" title="Kappung angewendet">⚠</span>` : '';
+      const closedIcon = m.cerrado ? `<span title="Manuell geschlossen" style="color:var(--muted);font-size:11px">🔒</span>` : '';
+      const adjustBtn  = canAdjust
+        ? `<button class="btn btn-sm btn-outline" title="Monat manuell anpassen"
+             onclick="openSkAjuste(${m.mes}, ${m.horas_planificadas}, ${m.horas_reales})">✏</button>`
+        : '';
       return `<tr>
-        <td><b>${m.mes_nombre}</b></td>
+        <td><b>${m.mes_nombre}</b> ${closedIcon}</td>
         <td>${fmtHours(m.horas_planificadas)}</td>
         <td>${fmtHours(m.horas_reales)}</td>
         <td class="${saldoClass}">${fmtHoursSigned(m.saldo_mes)}</td>
         <td style="color:var(--muted)">${fmtHoursSigned(m.carryover_anterior)}</td>
         <td class="${accClass}">${fmtHoursSigned(m.saldo_acumulado)}</td>
         <td class="${saldoClass}">${fmtHoursSigned(m.saldo_final)} ${kappIcon}</td>
+        ${canAdjust ? `<td>${adjustBtn}</td>` : ''}
       </tr>`;
     }).join('');
 
@@ -2200,6 +2528,7 @@ async function loadStundenkonto() {
                 <th>Übertrag</th>
                 <th>Kumuliert</th>
                 <th>Saldo nach Kappung</th>
+                ${canAdjust ? '<th></th>' : ''}
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -2212,6 +2541,7 @@ async function loadStundenkonto() {
                 <td>—</td>
                 <td>—</td>
                 <td>${fmtHoursSigned(r.saldo_acumulado_diciembre || r.saldo_total)}</td>
+                ${canAdjust ? '<td></td>' : ''}
               </tr>
             </tfoot>
           </table>
@@ -2236,6 +2566,48 @@ function fmtHoursSigned(h) {
   if (h == null) return '—';
   const sign = h > 0 ? '+' : '';
   return sign + fmtHours(h);
+}
+
+// ── Stundenkonto Ajuste Manual ────────────────────────────
+let _skAjusteMes = null;
+
+function openSkAjuste(mes, sollH, istH) {
+  _skAjusteMes = mes;
+  document.getElementById('skAjusteIst').value = istH ?? '';
+  document.getElementById('skAjusteSoll').value = sollH ?? '';
+  document.getElementById('skAjusteNotas').value = 'Vor Systemstart – manuell erfasst';
+  document.getElementById('skAjusteAlert').innerHTML = '';
+  openModal('skAjusteModal');
+}
+
+async function saveSkAjuste() {
+  const empId = document.getElementById('skEmpSelect').value;
+  const year  = document.getElementById('skYear').value;
+  const mes   = _skAjusteMes;
+  const ist   = parseFloat(document.getElementById('skAjusteIst').value);
+  const soll  = document.getElementById('skAjusteSoll').value;
+  const notas = document.getElementById('skAjusteNotas').value.trim();
+  const alertEl = document.getElementById('skAjusteAlert');
+
+  if (isNaN(ist)) {
+    alertEl.innerHTML = '<div class="alert alert-error">Bitte Ist-Stunden eingeben</div>';
+    return;
+  }
+
+  const body = { horas_reales: ist, notas: notas || null };
+  if (soll !== '') body.horas_planificadas = parseFloat(soll);
+
+  try {
+    await api(`/saldo-horas/${empId}/mes/${mes}/ajuste?year=${year}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    closeModal('skAjusteModal');
+    showGlobalAlert('success', '✓ Monat angepasst');
+    loadStundenkonto();
+  } catch(e) {
+    alertEl.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+  }
 }
 
 // =====================================================================
@@ -2983,7 +3355,7 @@ async function loadExportPreview() {
   exportPreviewData = null;
 
   try {
-    const data = await api(`/exportacion/excel/preview?mes=${month}&anio=${year}`);
+    const data = await api(`/exportacion/excel/preview?month=${month}&year=${year}`);
     exportPreviewData = data;
 
     const monthName = new Date(year, month-1, 1).toLocaleDateString('de-DE', {month:'long', year:'numeric'});
@@ -3038,7 +3410,7 @@ async function downloadExcel() {
     const response = await fetch(API + `/exportacion/excel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mes: parseInt(month), anio: parseInt(year) })
+      body: JSON.stringify({ month: parseInt(month), year: parseInt(year) })
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -3222,7 +3594,10 @@ async function initStammdaten() {
               <td><b>${g.nombre}</b></td>
               <td>${g.descripcion||'—'}</td>
               <td>${g.activo ? '<span class="badge badge-green">Aktiv</span>' : '<span class="badge badge-gray">Inaktiv</span>'}</td>
-              <td><button class="btn btn-sm btn-outline" onclick="openStammModal('abt','${g.id}')">✎</button></td>
+              <td style="display:flex;gap:4px">
+                <button class="btn btn-sm btn-outline" onclick="openStammModal('abt','${g.id}')">✎</button>
+                <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteStamm('abt','${g.id}','${g.nombre.replace(/'/g,"\\'")}')">🗑</button>
+              </td>
             </tr>`).join('')}</tbody>
           </table></div>
         </div>`;
@@ -3243,7 +3618,10 @@ async function initStammdaten() {
               <td><b>${k.codigo}</b></td>
               <td>${k.nombre}</td>
               <td>${k.activo ? '<span class="badge badge-green">Aktiv</span>' : '<span class="badge badge-gray">Inaktiv</span>'}</td>
-              <td><button class="btn btn-sm btn-outline" onclick="openStammModal('ks','${k.id}')">✎</button></td>
+              <td style="display:flex;gap:4px">
+                <button class="btn btn-sm btn-outline" onclick="openStammModal('ks','${k.id}')">✎</button>
+                <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteStamm('ks','${k.id}','${k.nombre.replace(/'/g,"\\'")}')">🗑</button>
+              </td>
             </tr>`).join('')}</tbody>
           </table></div>
         </div>`;
@@ -3266,13 +3644,29 @@ async function initStammdaten() {
               <td>${z.hora_minima_inicio||'—'}</td>
               <td>${z.usar_inicio_turno ? '✓' : '—'}</td>
               <td>${z.rotacion_semanal ? '✓' : '—'}</td>
-              <td><button class="btn btn-sm btn-outline" onclick="openStammModal('zg','${z.id}')">✎</button></td>
+              <td style="display:flex;gap:4px">
+                <button class="btn btn-sm btn-outline" onclick="openStammModal('zg','${z.id}')">✎</button>
+                <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteStamm('zg','${z.id}','${z.nombre.replace(/'/g,"\\'")}')">🗑</button>
+              </td>
             </tr>`).join('')}</tbody>
           </table></div>
         </div>`;
     }
   } catch(e) {
     content.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+async function deleteStamm(type, id, name) {
+  const label = {abt:'Abteilung', ks:'Kostenstelle', zg:'Zeitgruppe'}[type];
+  const endpoint = {abt:`/abteilungen/${id}`, ks:`/kostenstellen/${id}`, zg:`/zeitgruppen/${id}`}[type];
+  if (!confirm(`${label} "${name}" wirklich deaktivieren?`)) return;
+  try {
+    await api(endpoint, {method:'DELETE'});
+    showGlobalAlert('success', `✓ ${label} "${name}" deaktiviert`);
+    initStammdaten();
+  } catch(e) {
+    showGlobalAlert('error', `Fehler: ${e.message}`);
   }
 }
 
@@ -3382,13 +3776,19 @@ async function runImport(dryRun) {
   try {
     const url = API + `/import/mitarbeiter?dry_run=${dryRun}`;
     const token = getToken();
-    const r = await fetch(url, {method:'POST', body: formData, headers: token ? {'Authorization': 'Bearer ' + token} : {}});
+    if (!token) { showLogin(); return; }
+    const r = await fetch(url, {method:'POST', body: formData, headers: {'Authorization': 'Bearer ' + token}});
+    if (r.status === 401) { clearToken(); showLogin(); return; }
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || data.message || 'Fehler');
 
     const fehlerRows = (data.fehler||[]).map(f =>
       `<tr><td>${f.zeile}</td><td class="alert-error">${f.fehler}</td></tr>`
     ).join('');
+
+    const ausgeschieden = data.ausgeschieden || [];
+    const ausTag = ausgeschieden.length
+      ? `<div style="color:var(--amber)"><b>${ausgeschieden.length}</b> Nicht in Datei</div>` : '';
 
     resultDiv.innerHTML = `
       <div class="card">
@@ -3401,12 +3801,14 @@ async function runImport(dryRun) {
           <div style="color:var(--green)"><b>${data.erstellt}</b> Erstellt</div>
           <div style="color:var(--blue)"><b>${data.aktualisiert}</b> Aktualisiert</div>
           <div style="color:var(--red)"><b>${(data.fehler||[]).length}</b> Fehler</div>
+          ${ausTag}
         </div>
         ${fehlerRows ? `<div class="table-wrap"><table>
           <thead><tr><th>Zeile</th><th>Fehler</th></tr></thead>
           <tbody>${fehlerRows}</tbody>
         </table></div>` : ''}
-      </div>`;
+      </div>
+      ${!dryRun && ausgeschieden.length ? _renderReconciliacion(ausgeschieden) : ''}`;
 
     if (!dryRun && data.erstellt + data.aktualisiert > 0) {
       await init();
@@ -3414,6 +3816,80 @@ async function runImport(dryRun) {
   } catch(e) {
     resultDiv.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
   }
+}
+
+function _renderReconciliacion(lista) {
+  const rows = lista.map(e => `
+    <tr id="recon-row-${e.id}">
+      <td>${e.id_nummer}</td>
+      <td>${e.nombre} ${e.apellido}</td>
+      <td>
+        <button class="btn btn-outline" style="padding:4px 10px;font-size:12px;color:var(--red)"
+          onclick="reconDeactivate('${e.id}','${e.nombre} ${e.apellido}')">
+          Deaktivieren
+        </button>
+        <button class="btn btn-outline" style="padding:4px 10px;font-size:12px"
+          onclick="reconKeep('${e.id}')">
+          Behalten
+        </button>
+      </td>
+    </tr>`).join('');
+
+  return `
+    <div class="card" style="margin-top:16px;border:1px solid var(--amber)">
+      <div class="card-header" style="margin-bottom:12px">
+        <span class="card-title" style="color:var(--amber)">⚠ Nicht in der importierten Datei</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" style="font-size:12px;color:var(--red)"
+            onclick="reconDeactivateAll()">Alle deaktivieren</button>
+          <button class="btn btn-outline" style="font-size:12px"
+            onclick="reconKeepAll()">Alle behalten</button>
+        </div>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+        Diese Mitarbeiter sind im System aktiv, erscheinen aber nicht in der importierten Datei.
+        Historische Daten bleiben in jedem Fall erhalten.
+      </p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Systemnr.</th><th>Name</th><th>Aktion</th></tr></thead>
+        <tbody id="recon-tbody">${rows}</tbody>
+      </table></div>
+    </div>`;
+}
+
+async function reconDeactivate(empId, nombre) {
+  try {
+    await api(`/empleados/${empId}`, {method:'DELETE'});
+    const row = document.getElementById(`recon-row-${empId}`);
+    if (row) row.innerHTML = `<td colspan="3" style="color:var(--muted);font-style:italic">
+      ✓ ${nombre} deaktiviert</td>`;
+  } catch(e) {
+    showGlobalAlert('error', `Fehler bei ${nombre}: ${e.message}`);
+  }
+}
+
+function reconKeep(empId) {
+  const row = document.getElementById(`recon-row-${empId}`);
+  if (row) row.innerHTML = `<td colspan="3" style="color:var(--muted);font-style:italic">— Behalten</td>`;
+}
+
+async function reconDeactivateAll() {
+  const rows = document.querySelectorAll('[id^="recon-row-"]');
+  for (const row of rows) {
+    const empId = row.id.replace('recon-row-', '');
+    const nameCell = row.cells[1];
+    if (!nameCell) continue;
+    const nombre = nameCell.textContent.trim();
+    await reconDeactivate(empId, nombre);
+  }
+}
+
+function reconKeepAll() {
+  const rows = document.querySelectorAll('[id^="recon-row-"]');
+  rows.forEach(row => {
+    const empId = row.id.replace('recon-row-', '');
+    reconKeep(empId);
+  });
 }
 
 async function runBackup() {
@@ -3722,6 +4198,253 @@ async function deactivateUser(userId, nick) {
     showGlobalAlert('success', `✓ Benutzer "${nick}" deaktiviert`);
     loadBenutzerverwaltung();
   } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+</script>
+
+<!-- ===== FEEDBACK WIDGET ===== -->
+<style>
+#feedback-tab {
+  position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+  writing-mode: vertical-rl; transform: translateY(-50%) rotate(180deg);
+  background: var(--blue); color: white; font-size: 12px; font-weight: 600;
+  padding: 12px 8px; border-radius: 6px 0 0 6px; border: none; cursor: pointer;
+  z-index: 500; letter-spacing: .5px; box-shadow: -2px 0 10px rgba(0,0,0,.25);
+  transition: background .15s; white-space: nowrap;
+}
+#feedback-tab:hover { background: #2563eb; }
+
+#feedback-panel {
+  position: fixed; right: -380px; top: 0; width: 360px; height: 100vh;
+  background: var(--surface); border-left: 1px solid var(--border);
+  box-shadow: -4px 0 24px rgba(0,0,0,.25); z-index: 600;
+  transition: right .25s ease; display: flex; flex-direction: column;
+}
+#feedback-panel.open { right: 0; }
+
+#feedback-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 599;
+}
+#feedback-overlay.open { display: block; }
+
+#feedback-panel .fp-header {
+  padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+#feedback-panel .fp-header h2 { font-size: 16px; font-weight: 700; margin: 0; }
+#feedback-panel .fp-body { padding: 20px; flex: 1; overflow-y: auto; }
+#feedback-close {
+  background: none; border: none; color: var(--muted); font-size: 20px;
+  cursor: pointer; line-height: 1; padding: 2px 6px; border-radius: 4px;
+}
+#feedback-close:hover { color: var(--text); background: var(--border); }
+</style>
+
+<button id="feedback-tab" onclick="toggleFeedback()">💬 Feedback / Hilfe</button>
+<div id="feedback-overlay" onclick="closeFeedback()"></div>
+
+<div id="feedback-panel">
+  <div class="fp-header">
+    <h2>💬 Feedback & Hilfe</h2>
+    <button id="feedback-close" onclick="closeFeedback()">✕</button>
+  </div>
+  <div class="fp-body">
+    <div class="form-group">
+      <label>Typ</label>
+      <select id="fb-tipo" class="form-control">
+        <option value="bug">🐛 Bug melden</option>
+        <option value="vorschlag">💡 Vorschlag</option>
+        <option value="frage">❓ Frage</option>
+        <option value="sonstiges">📝 Sonstiges</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Nachricht *</label>
+      <textarea id="fb-mensaje" class="form-control" rows="6"
+        placeholder="Beschreibe dein Anliegen…"
+        style="resize:vertical; font-family:inherit"></textarea>
+    </div>
+    <div id="fb-result" style="margin-bottom:12px"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center"
+      onclick="submitFeedback()">
+      Absenden
+    </button>
+    <p style="font-size:11px;color:var(--muted);margin-top:12px;text-align:center">
+      Nachrichten werden direkt an den Administrator weitergeleitet.
+    </p>
+  </div>
+</div>
+
+<script>
+function toggleFeedback() {
+  const open = document.getElementById('feedback-panel').classList.contains('open');
+  open ? closeFeedback() : openFeedback();
+}
+function openFeedback() {
+  document.getElementById('feedback-panel').classList.add('open');
+  document.getElementById('feedback-overlay').classList.add('open');
+  document.getElementById('fb-result').innerHTML = '';
+}
+function closeFeedback() {
+  document.getElementById('feedback-panel').classList.remove('open');
+  document.getElementById('feedback-overlay').classList.remove('open');
+}
+async function submitFeedback() {
+  const tipo    = document.getElementById('fb-tipo').value;
+  const mensaje = document.getElementById('fb-mensaje').value.trim();
+  const result  = document.getElementById('fb-result');
+  if (!mensaje) {
+    result.innerHTML = '<div class="alert alert-error">Bitte eine Nachricht eingeben.</div>';
+    return;
+  }
+  result.innerHTML = '<div class="loading">Wird gesendet…</div>';
+  try {
+    await api('/feedback', {
+      method: 'POST',
+      body: JSON.stringify({ tipo, mensaje }),
+    });
+    result.innerHTML = '<div class="alert" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0">✓ Nachricht gesendet. Danke!</div>';
+    document.getElementById('fb-mensaje').value = '';
+  } catch(e) {
+    result.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+// =====================================================================
+// DEEP INTERACTION TRACKING (forensic audit)
+// =====================================================================
+const _ilog = {
+  queue: [],
+  timer: null,
+  page: 'dashboard',
+
+  push(action, target, detail) {
+    this.queue.push({
+      action,
+      target: (target || '').substring(0, 500),
+      detail: (detail || '').substring(0, 2000),
+      page: this.page,
+      timestamp: new Date().toISOString(),
+    });
+    if (this.queue.length >= 10) this.flush();
+    if (!this.timer) this.timer = setInterval(() => this.flush(), 5000);
+  },
+
+  flush() {
+    if (!this.queue.length) return;
+    const batch = this.queue.splice(0, 50);
+    const token = getToken();
+    fetch(API + '/audit/interactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? {'Authorization': 'Bearer ' + token} : {}) },
+      body: JSON.stringify({
+        source: 'admin',
+        user_nick: currentUser.nick || null,
+        events: batch,
+      }),
+    }).catch(() => {});  // fire and forget
+  },
+};
+
+// Track page navigations
+const _origShowPage = typeof showPage === 'function' ? showPage : null;
+if (_origShowPage) {
+  const _realShowPage = showPage;
+  showPage = function(page) {
+    _ilog.page = page;
+    _ilog.push('navigate', page);
+    return _realShowPage.apply(this, arguments);
+  };
+}
+
+// Track button/link clicks (delegated)
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('button, a, [onclick], .card');
+  if (!btn) return;
+  const label = btn.textContent?.trim().substring(0, 120) ||
+                btn.getAttribute('onclick')?.substring(0, 120) ||
+                btn.className;
+  _ilog.push('click', label, btn.id || btn.getAttribute('onclick') || '');
+}, true);
+
+// Intercept API calls — wrap the existing api() function
+const _origApi = api;
+api = async function(path, opts = {}) {
+  const method = opts.method || 'GET';
+  const t0 = Date.now();
+  try {
+    const result = await _origApi.apply(this, arguments);
+    _ilog.push('api_call', `${method} ${path}`, `${Date.now() - t0}ms OK`);
+    return result;
+  } catch(e) {
+    _ilog.push('api_call', `${method} ${path}`, `${Date.now() - t0}ms ERROR: ${e.message}`);
+    throw e;
+  }
+};
+
+// Flush on page unload
+window.addEventListener('beforeunload', () => _ilog.flush());
+
+// =====================================================================
+// INTERAKTIONEN TAB (Protokoll page)
+// =====================================================================
+let _ilogTab = 'audit'; // audit | interactions
+
+function switchProtoTab(tab) {
+  _ilogTab = tab;
+  document.getElementById('protoTabAudit').classList.toggle('active', tab === 'audit');
+  document.getElementById('protoTabInter').classList.toggle('active', tab === 'interactions');
+  document.getElementById('protoAuditSection').classList.toggle('hidden', tab !== 'audit');
+  document.getElementById('protoInterSection').classList.toggle('hidden', tab !== 'interactions');
+  if (tab === 'interactions') loadInteractions();
+}
+
+async function loadInteractions() {
+  const tbody = document.getElementById('interTbody');
+  tbody.innerHTML = '<tr><td colspan="7"><div class="loading">Lade…</div></td></tr>';
+
+  let params = '?limit=200';
+  const from = document.getElementById('interFrom')?.value;
+  const to = document.getElementById('interTo')?.value;
+  const nick = document.getElementById('interUser')?.value;
+  const action = document.getElementById('interAction')?.value;
+  const source = document.getElementById('interSource')?.value;
+  if (from) params += `&desde=${from}`;
+  if (to) params += `&hasta=${to}`;
+  if (nick) params += `&user_nick=${nick}`;
+  if (action) params += `&action=${action}`;
+  if (source) params += `&source=${source}`;
+
+  try {
+    const res = await _origApi(`/audit/interactions${params}`);
+    const items = res.data || [];
+    document.getElementById('interCount').textContent = `${items.length} / ${res.total}`;
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty">Keine Interaktionen</div></td></tr>';
+      return;
+    }
+
+    const actionColors = {
+      click: '#3b82f6', navigate: '#8b5cf6', api_call: '#10b981',
+      select: '#f59e0b', login: '#06b6d4', logout: '#6b7280', error: '#ef4444',
+    };
+
+    tbody.innerHTML = items.map(e => {
+      const dt = e.timestamp ? new Date(e.timestamp).toLocaleString('de-DE', {hour:'2-digit',minute:'2-digit',second:'2-digit',day:'2-digit',month:'2-digit'}) : '—';
+      const color = actionColors[e.action] || '#6b7280';
+      const who = e.employee_name || e.user_nick || '—';
+      return `<tr>
+        <td style="white-space:nowrap;font-size:12px">${dt}</td>
+        <td>${who}</td>
+        <td><span style="background:${color};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">${e.action}</span></td>
+        <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="${(e.target||'').replace(/"/g,'&quot;')}">${e.target||'—'}</td>
+        <td style="font-size:11px;color:#6b7280">${e.detail||'—'}</td>
+        <td><span class="badge ${e.source==='terminal'?'badge-amber':'badge-blue'}">${e.source||'—'}</span></td>
+        <td style="font-size:11px">${e.page||'—'}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="alert alert-error">Fehler: ${e.message}</div></td></tr>`;
+  }
 }
 </script>
 </body>

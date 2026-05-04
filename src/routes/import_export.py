@@ -11,21 +11,21 @@ from datetime import datetime, date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.empleado import Empleado, Grupo, CentroCoste, Zeitgruppe
 from ..models.audit import AuditLog
 from ..services.audit_service import log_action
-from ..auth import require_permission
+from ..auth import require_permission, get_current_user
 from ..permisos import EMPLOYEES_EDIT, USERS_ADMIN
 
 router = APIRouter(tags=["Import / Export"])
 
 TELEGRAM_BOT_TOKEN = "8669567506:AAEqqrgMJPC8716yIldDLqW6yaO_OliJzCE"
-# Bot sends to itself (saved messages) — admin must /start the bot first
-# We'll use a configurable chat_id
-TELEGRAM_BACKUP_CHAT_ID = None  # Set via POST /backup/config
+TELEGRAM_BACKUP_CHAT_ID = None
+TELEGRAM_FEEDBACK_CHAT_ID = 140223355  # Daniel
 
 
 # ── Import Excel/CSV ────────────────────────────────────
@@ -81,7 +81,16 @@ async def import_mitarbeiter(
     grupos = {g.nombre: g for g in db.query(Grupo).all()}
     kostenstellen = {k.nombre: k for k in db.query(CentroCoste).all()}
     zeitgruppen = {z.nombre: z for z in db.query(Zeitgruppe).all()}
-    existing_ids = {e.id_nummer for e in db.query(Empleado.id_nummer).all()}
+
+    # Snapshot de activos antes del import (para reconciliación)
+    activos_antes = {
+        e.id_nummer: {"id": str(e.id), "id_nummer": e.id_nummer,
+                      "nombre": e.nombre, "apellido": e.apellido or ""}
+        for e in db.query(Empleado).filter(Empleado.activo == True).all()
+    }
+    existing_ids = set(activos_antes.keys()) | {
+        e.id_nummer for e in db.query(Empleado).filter(Empleado.activo == False).all()
+    }
 
     results = {"erstellt": 0, "aktualisiert": 0, "fehler": [], "gesamt": len(rows)}
 
@@ -193,10 +202,27 @@ async def import_mitarbeiter(
         except Exception as ex:
             results["fehler"].append({"zeile": i, "fehler": str(ex)})
 
+    # Reconciliación: activos en BD que no aparecen en el fichero importado
+    ids_en_fichero = set()
+    for row in rows:
+        try:
+            n = int(row.get("Systemnummer", 0))
+            if n:
+                ids_en_fichero.add(n)
+        except (ValueError, TypeError):
+            pass
+
+    ausgeschieden = [
+        emp for id_nr, emp in activos_antes.items()
+        if id_nr not in ids_en_fichero
+    ]
+    results["ausgeschieden"] = ausgeschieden
+
     if not dry_run:
         log_action(db, "IMPORT", "empleado",
-                   descripcion=f"Import: {results['erstellt']} erstellt, {results['aktualisiert']} aktualisiert",
-                   usuario_nick="admin")
+                   descripcion=f"Import: {results['erstellt']} erstellt, {results['aktualisiert']} aktualisiert, "
+                               f"{len(ausgeschieden)} nicht im Fichero",
+                   usuario_nick=_auth.nick)
         db.commit()
 
     results["dry_run"] = dry_run
@@ -290,6 +316,53 @@ def _send_telegram_file(filepath: str, filename: str, chat_id: int):
         )
     if resp.status_code != 200:
         raise HTTPException(500, f"Telegram Fehler: {resp.text}")
+
+
+# ── Feedback ─────────────────────────────────────────────
+
+class FeedbackIn(BaseModel):
+    tipo: str           # bug | vorschlag | frage | sonstiges
+    mensaje: str
+    nombre: Optional[str] = None
+
+
+TIPO_EMOJI = {
+    "bug": "🐛 Bug",
+    "vorschlag": "💡 Vorschlag",
+    "frage": "❓ Frage",
+    "sonstiges": "📝 Sonstiges",
+}
+
+
+@router.post("/feedback")
+def enviar_feedback(
+    data: FeedbackIn,
+    current_user=Depends(get_current_user),
+):
+    """Envía feedback al administrador vía Telegram."""
+    tipo_label = TIPO_EMOJI.get(data.tipo, data.tipo)
+    remitente = data.nombre or current_user.nick
+    timestamp = datetime.utcnow().strftime("%d.%m.%Y %H:%M UTC")
+
+    text = (
+        f"{tipo_label}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 {remitente}\n"
+        f"🕐 {timestamp}\n\n"
+        f"{data.mensaje}"
+    )
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    resp = httpx.post(url, json={
+        "chat_id": TELEGRAM_FEEDBACK_CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML",
+    }, timeout=10)
+
+    if resp.status_code != 200:
+        raise HTTPException(500, f"Telegram-Fehler: {resp.text}")
+
+    return {"status": "ok"}
 
 
 # ── Helpers ──────────────────────────────────────────────

@@ -23,7 +23,7 @@ from .correccion import SolicitudCorreccion
 from .datev import DatevConfig, DatevExportLog
 
 # Audit Log
-from .audit import AuditLog
+from .audit import AuditLog, InteractionLog
 
 # Pausen (Raucherpause etc.)
 from .pausa import Pausa
@@ -53,4 +53,5 @@ __all__ = [
     "Zeitgruppe",
     # Audit Log
     "AuditLog",
+    "InteractionLog",
 ]

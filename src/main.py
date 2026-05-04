@@ -5,7 +5,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "shared"))
 
 from pathlib import Path
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -29,6 +31,8 @@ from .models import (
     # HG-12 DATEV
     DatevConfig,
     DatevExportLog,
+    # Interaction Log
+    InteractionLog,
 )
 
 # Importar rutas
@@ -47,6 +51,7 @@ from .routes.zeitgruppen import router as zeitgruppen_router
 from .routes.audit import router as audit_router
 from .routes.import_export import router as import_export_router
 from .routes.usuarios import router as usuarios_router
+from .scheduler import start_scheduler, stop_scheduler
 
 settings = get_settings()
 
@@ -91,7 +96,16 @@ def _run_seeds():
 
 _run_seeds()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_scheduler()
+    yield
+    stop_scheduler()
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Hagemann — Sistema de Control Horario",
     description="""
 ## API de Control Horario para Hagemann
@@ -168,8 +182,19 @@ def api_info():
         "docs": "/docs",
     }
 
-# Static files (UI)
+# Static files (UI) — no-cache for HTML to ensure latest version
 _static_dir = Path(__file__).parent.parent / "static"
+
+from starlette.responses import Response
+
+@app.middleware("http")
+async def no_cache_html(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.endswith(".html"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
 if _static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 

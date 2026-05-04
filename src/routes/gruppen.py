@@ -11,6 +11,7 @@ from ..database import get_db
 from ..models.empleado import Grupo, CentroCoste
 from ..auth import require_permission
 from ..permisos import TIMECLOCK_REGISTER, EMPLOYEES_EDIT
+from ..services.audit_service import log_action, diff_changes
 
 router = APIRouter(
     tags=["Stammdaten"],
@@ -61,6 +62,11 @@ def create_abteilung(data: GruppeCreate, db: Session = Depends(get_db), _auth=De
         raise HTTPException(409, f"Abteilung '{data.nombre}' existiert bereits")
     g = Grupo(nombre=data.nombre, descripcion=data.descripcion, color=data.color)
     db.add(g)
+    db.flush()
+    log_action(db, "CREATE", "abteilung",
+               entidad_id=str(g.id), entidad_label=g.nombre,
+               descripcion=f"Abteilung '{g.nombre}' erstellt",
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(g)
     return _grupo_dict(g)
@@ -71,6 +77,7 @@ def update_abteilung(abt_id: UUID, data: GruppeUpdate, db: Session = Depends(get
     g = db.query(Grupo).filter(Grupo.id == abt_id).first()
     if not g:
         raise HTTPException(404, "Abteilung nicht gefunden")
+    old_state = {"nombre": g.nombre, "descripcion": g.descripcion, "color": g.color, "activo": g.activo}
     if data.nombre is not None:
         g.nombre = data.nombre
     if data.descripcion is not None:
@@ -79,6 +86,11 @@ def update_abteilung(abt_id: UUID, data: GruppeUpdate, db: Session = Depends(get
         g.color = data.color
     if data.activo is not None:
         g.activo = data.activo
+    new_state = {"nombre": g.nombre, "descripcion": g.descripcion, "color": g.color, "activo": g.activo}
+    log_action(db, "UPDATE", "abteilung",
+               entidad_id=str(g.id), entidad_label=g.nombre,
+               cambios=diff_changes(old_state, new_state),
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(g)
     return _grupo_dict(g)
@@ -90,6 +102,10 @@ def delete_abteilung(abt_id: UUID, db: Session = Depends(get_db), _auth=Depends(
     if not g:
         raise HTTPException(404, "Abteilung nicht gefunden")
     g.activo = False
+    log_action(db, "DEACTIVATE", "abteilung",
+               entidad_id=str(g.id), entidad_label=g.nombre,
+               descripcion=f"Abteilung '{g.nombre}' deaktiviert",
+               usuario_nick=_auth.nick)
     db.commit()
 
 
@@ -113,6 +129,11 @@ def create_kostenstelle(data: KostenstelleCreate, db: Session = Depends(get_db),
         descripcion=data.descripcion, color=data.color
     )
     db.add(c)
+    db.flush()
+    log_action(db, "CREATE", "kostenstelle",
+               entidad_id=str(c.id), entidad_label=f"{c.codigo} – {c.nombre}",
+               descripcion=f"Kostenstelle '{c.codigo}' erstellt",
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(c)
     return _cc_dict(c)
@@ -123,10 +144,16 @@ def update_kostenstelle(ks_id: UUID, data: KostenstelleUpdate, db: Session = Dep
     c = db.query(CentroCoste).filter(CentroCoste.id == ks_id).first()
     if not c:
         raise HTTPException(404, "Kostenstelle nicht gefunden")
+    old_state = {f: str(getattr(c, f)) for f in ("codigo", "nombre", "descripcion", "color", "activo")}
     for field in ("codigo", "nombre", "descripcion", "color", "activo"):
         val = getattr(data, field, None)
         if val is not None:
             setattr(c, field, val)
+    new_state = {f: str(getattr(c, f)) for f in ("codigo", "nombre", "descripcion", "color", "activo")}
+    log_action(db, "UPDATE", "kostenstelle",
+               entidad_id=str(c.id), entidad_label=f"{c.codigo} – {c.nombre}",
+               cambios=diff_changes(old_state, new_state),
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(c)
     return _cc_dict(c)
@@ -138,6 +165,10 @@ def delete_kostenstelle(ks_id: UUID, db: Session = Depends(get_db), _auth=Depend
     if not c:
         raise HTTPException(404, "Kostenstelle nicht gefunden")
     c.activo = False
+    log_action(db, "DEACTIVATE", "kostenstelle",
+               entidad_id=str(c.id), entidad_label=f"{c.codigo} – {c.nombre}",
+               descripcion=f"Kostenstelle '{c.codigo}' deaktiviert",
+               usuario_nick=_auth.nick)
     db.commit()
 
 

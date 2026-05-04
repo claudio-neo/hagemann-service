@@ -15,6 +15,7 @@ from ..database import get_db
 from ..models.empleado import Empleado, Grupo
 from ..auth import require_permission
 from ..permisos import HOURS_CONTROL_TEAM, EMPLOYEES_EDIT, DEPUTY_ASSIGN, TIMECLOCK_REGISTER
+from ..services.audit_service import log_action, diff_changes
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,12 @@ def crear_empleado(data: EmpleadoCreate, db: Session = Depends(get_db), _auth=De
         activo=data.activo,
     )
     db.add(emp)
+    db.flush()
+    log_action(db, "CREATE", "empleado",
+               entidad_id=str(emp.id),
+               entidad_label=f"{emp.nombre} {emp.apellido or ''}".strip(),
+               descripcion=f"Mitarbeiter erstellt (Systemnummer {emp.id_nummer})",
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(emp)
     return {
@@ -218,10 +225,19 @@ def actualizar_empleado(
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
-    for field, value in data.model_dump(exclude_unset=True).items():
+    update_fields = data.model_dump(exclude_unset=True)
+    old_state = {k: str(getattr(emp, k)) for k in update_fields}
+
+    for field, value in update_fields.items():
         setattr(emp, field, value)
 
     emp.updated_at = datetime.utcnow()
+    new_state = {k: str(getattr(emp, k)) for k in update_fields}
+    log_action(db, "UPDATE", "empleado",
+               entidad_id=str(emp.id),
+               entidad_label=f"{emp.nombre} {emp.apellido or ''}".strip(),
+               cambios=diff_changes(old_state, new_state),
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(emp)
     return {"message": "Empleado actualizado", "empleado": _to_out(emp)}
@@ -245,6 +261,12 @@ def cambiar_nfc(
     old_nfc = emp.nfc_tag
     emp.nfc_tag = body.id_nfc
     emp.updated_at = datetime.utcnow()
+    log_action(db, "UPDATE", "empleado",
+               entidad_id=str(empleado_id),
+               entidad_label=f"{emp.nombre} {emp.apellido or ''}".strip(),
+               cambios={"nfc_tag": {"vorher": old_nfc, "nachher": body.id_nfc}},
+               descripcion=f"NFC geändert: {body.motivo}",
+               usuario_nick=_auth.nick)
     db.commit()
 
     # Log del cambio
@@ -287,6 +309,11 @@ def desactivar_empleado(
     emp.activo = False
     emp.fecha_baja = date.today()
     emp.updated_at = datetime.utcnow()
+    log_action(db, "DEACTIVATE", "empleado",
+               entidad_id=str(empleado_id),
+               entidad_label=f"{emp.nombre} {emp.apellido or ''}".strip(),
+               descripcion=f"Mitarbeiter {emp.id_nummer} deaktiviert",
+               usuario_nick=_auth.nick)
     db.commit()
 
     return {
@@ -320,6 +347,11 @@ def reactivar_empleado(
     emp.activo = True
     emp.fecha_baja = None
     emp.updated_at = datetime.utcnow()
+    log_action(db, "REACTIVATE", "empleado",
+               entidad_id=str(empleado_id),
+               entidad_label=f"{emp.nombre} {emp.apellido or ''}".strip(),
+               descripcion=f"Mitarbeiter {emp.id_nummer} reaktiviert",
+               usuario_nick=_auth.nick)
     db.commit()
 
     return {
@@ -366,6 +398,11 @@ def set_stellvertretung(
         msg = "Stellvertretung aufgehoben"
 
     emp.updated_at = datetime.utcnow()
+    log_action(db, "UPDATE", "empleado",
+               entidad_id=str(emp.id),
+               entidad_label=f"{emp.nombre} {emp.apellido or ''}".strip(),
+               descripcion=msg,
+               usuario_nick=_auth.nick)
     db.commit()
 
     return {

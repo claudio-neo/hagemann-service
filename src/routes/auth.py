@@ -126,7 +126,10 @@ def seed_usuarios(db: Session):
         {"nick": "emp1",     "email": "emp1@hagemann.de",   "password": "emp123",    "role": ROLE_BENUTZER},
     ]
     for s in seeds:
-        if not db.query(Usuario).filter(Usuario.nick == s["nick"]).first():
+        exists = db.query(Usuario).filter(
+            (Usuario.nick == s["nick"]) | (Usuario.email == s["email"])
+        ).first()
+        if not exists:
             db.add(Usuario(
                 nick=s["nick"],
                 email=s["email"],

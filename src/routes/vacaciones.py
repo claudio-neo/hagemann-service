@@ -18,6 +18,7 @@ from ..permisos import (
     LEAVE_APPROVE, APPROVALS_LEVEL2, USERS_ADMIN,
     HOURS_CONTROL_TEAM,
 )
+from ..services.audit_service import log_action
 from ..models.vacaciones import (
     PeriodoVacaciones, SolicitudVacaciones, LimiteVacaciones,
     TipoAusencia, EstadoSolicitud,
@@ -178,6 +179,12 @@ def crear_periodo(data: PeriodoCreate, db: Session = Depends(get_db), _auth=Depe
         notas=data.notas,
     )
     db.add(periodo)
+    db.flush()
+    log_action(db, "CREATE", "periodo_vacaciones",
+               entidad_id=str(periodo.id),
+               entidad_label=f"{emp.nombre} {emp.apellido or ''} – {data.anio}".strip(),
+               descripcion=f"Urlaubsperiode {data.anio} für {emp.nombre}: {data.dias_contrato} Tage",
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(periodo)
     return {"message": "Periodo creado", **_periodo_dict(periodo)}
@@ -328,6 +335,12 @@ def crear_solicitud(data: SolicitudCreate, db: Session = Depends(get_db), _auth=
         notas=data.notas,
     )
     db.add(solicitud)
+    db.flush()
+    log_action(db, "CREATE", "solicitud_vacaciones",
+               entidad_id=str(solicitud.id),
+               entidad_label=f"{emp.nombre} {emp.apellido or ''} {data.fecha_inicio}–{data.fecha_fin}".strip(),
+               descripcion=f"{data.tipo_ausencia}: {dias} Tage ({data.fecha_inicio} – {data.fecha_fin})",
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(solicitud)
 
@@ -378,6 +391,23 @@ def listar_solicitudes(
     }
 
 
+@router.get("/mis-solicitudes/{empleado_id}")
+def mis_solicitudes(
+    empleado_id: UUID,
+    anio: Optional[int] = None,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_permission(LEAVE_VIEW_OWN)),
+):
+    """Solicitudes propias del empleado — requiere solo leave:view_own."""
+    query = db.query(SolicitudVacaciones).options(
+        joinedload(SolicitudVacaciones.empleado)
+    ).filter(SolicitudVacaciones.empleado_id == empleado_id)
+    if anio:
+        query = query.join(PeriodoVacaciones).filter(PeriodoVacaciones.anio == anio)
+    solicitudes = query.order_by(SolicitudVacaciones.fecha_inicio.desc()).all()
+    return {"data": [_solicitud_dict(s) for s in solicitudes]}
+
+
 @router.get("/solicitudes/{solicitud_id}")
 def obtener_solicitud(solicitud_id: UUID, db: Session = Depends(get_db), _auth=Depends(require_permission(LEAVE_VIEW_OWN))):
     """Obtiene una solicitud por ID."""
@@ -426,6 +456,10 @@ def accion_nivel1(
         s.motivo_rechazo = data.notas
         msg = f"Solicitud rechazada por {data.aprobado_por}"
 
+    log_action(db, "APPROVE_L1" if data.aprobar else "REJECT_L1", "solicitud_vacaciones",
+               entidad_id=str(solicitud_id),
+               descripcion=msg,
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(s)
     return {"message": msg, **_solicitud_dict(s)}
@@ -474,6 +508,10 @@ def accion_nivel2(
         s.motivo_rechazo = data.motivo_rechazo or data.notas
         msg = f"Solicitud rechazada por {data.aprobado_por}"
 
+    log_action(db, "APPROVE_L2" if data.aprobar else "REJECT_L2", "solicitud_vacaciones",
+               entidad_id=str(solicitud_id),
+               descripcion=msg,
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(s)
     return {"message": msg, **_solicitud_dict(s)}
@@ -498,6 +536,10 @@ def cancelar_solicitud(
     estado_anterior = s.estado
     s.estado = EstadoSolicitud.RECHAZADA
     s.motivo_rechazo = motivo or "Cancelada"
+    log_action(db, "CANCEL", "solicitud_vacaciones",
+               entidad_id=str(solicitud_id),
+               descripcion=f"Antrag storniert (war: {estado_anterior}). Grund: {motivo or 'Cancelada'}",
+               usuario_nick=_auth.nick)
     db.commit()
 
     return {
@@ -632,6 +674,12 @@ def registrar_krankmeldung(
         notas=data.notas or "Krankmeldung",
     )
     db.add(solicitud)
+    db.flush()
+    log_action(db, "KRANKMELDUNG", "solicitud_vacaciones",
+               entidad_id=str(solicitud.id),
+               entidad_label=f"{emp.nombre} {emp.apellido or ''}".strip(),
+               descripcion=f"Krankmeldung: {fecha_inicio} – {fecha_fin} ({dias} Tage), erfasst von {data.registrado_por}",
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(solicitud)
 
@@ -681,6 +729,10 @@ def beenden_krankmeldung(
     sol.dias = _calcular_dias_laborables(sol.fecha_inicio, today, db)
     sol.updated_at = datetime.utcnow()
     sol.notas = (sol.notas or "") + f" | Beendet am {today.isoformat()}"
+    log_action(db, "KRANKMELDUNG_BEENDET", "solicitud_vacaciones",
+               entidad_id=str(solicitud_id),
+               descripcion=f"Krankmeldung beendet am {today.isoformat()} ({sol.dias} Tage)",
+               usuario_nick=_auth.nick)
     db.commit()
 
     return {

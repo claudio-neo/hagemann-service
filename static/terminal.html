@@ -519,6 +519,103 @@ header {
   .employee-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 }
 
+/* ══════════════════════════════════════════
+   MEIN BEREICH — cards, forms, tables
+══════════════════════════════════════════ */
+.mb-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 16px;
+}
+.mb-form-group {
+  margin-bottom: 16px;
+}
+.mb-form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.mb-input, .mb-select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  font-size: 16px;
+  background: white;
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s;
+}
+.mb-input:focus, .mb-select:focus { border-color: var(--blue); }
+
+.mb-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.mb-stat {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+}
+.mb-stat-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.mb-stat-value { font-size: 28px; font-weight: 800; margin: 4px 0 2px; }
+.mb-stat-sub { font-size: 12px; color: var(--muted); }
+
+.mb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.mb-table th {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--border);
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.mb-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.mb-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.mb-badge-green  { background: #d1fae5; color: #065f46; }
+.mb-badge-amber  { background: #fef3c7; color: #92400e; }
+.mb-badge-blue   { background: #dbeafe; color: #1e40af; }
+.mb-badge-red    { background: #fee2e2; color: #991b1b; }
+.mb-badge-gray   { background: #f1f5f9; color: #475569; }
+
+.mb-alert {
+  padding: 14px 18px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.mb-alert-success { background: #d1fae5; color: #065f46; }
+.mb-alert-error   { background: #fee2e2; color: #991b1b; }
+.mb-empty { color: var(--muted); text-align: center; padding: 40px 20px; font-size: 16px; }
+
+/* sk table colors */
+.sk-pos { color: #059669; }
+.sk-neg { color: #dc2626; }
+
 /* LOGIN */
 #loginOverlay { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; z-index: 9999; }
 .login-box { background: #1e2a3a; border-radius: 16px; padding: 40px; width: 100%; max-width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
@@ -590,8 +687,9 @@ header {
   <!-- ═══════════════ SCREEN 2: EINGANG — ABTEILUNG ═══════════════ -->
   <div class="screen hidden" id="screen-entry">
     <div class="centered-screen">
-      <div style="max-width:860px;width:100%;">
+      <div style="max-width:860px;width:100%;display:flex;justify-content:space-between;align-items:center">
         <button class="screen-back-btn" onclick="goToScreen('screen-employees')">← Zurück</button>
+        <button class="screen-back-btn" onclick="goToScreen('screen-meinbereich')" style="color:var(--blue);border-color:var(--blue)">📋 Mein Bereich</button>
       </div>
       <div class="screen-header">
         <div class="screen-title" id="entryTitle">Eingang</div>
@@ -626,9 +724,12 @@ header {
           <span class="btn-icon">🔄</span> Abteilung wechseln
         </button>
         <button class="big-btn" id="btnRaucherpause" onclick="doRaucherpause()"
-          style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:white;grid-column:span 2">
+          style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:white">
           <span class="btn-icon" id="rauchIcon">🚬</span>
           <span id="rauchLabel">Raucherpause</span>
+        </button>
+        <button class="big-btn btn-blue" onclick="goToScreen('screen-meinbereich')">
+          <span class="btn-icon">📋</span> Mein Bereich
         </button>
       </div>
     </div>
@@ -659,6 +760,101 @@ header {
         <div class="countdown-bar">
           <div class="countdown-fill" id="countdownFill" style="width:100%"></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ SCREEN 5: MEIN BEREICH ═══════════════ -->
+  <div class="screen hidden" id="screen-meinbereich">
+    <div class="centered-screen" style="align-items:center;">
+      <div style="max-width:860px;width:100%;text-align:left;">
+        <button class="screen-back-btn" onclick="goBackFromMeinBereich()">← Zurück</button>
+      </div>
+      <div class="screen-header">
+        <div class="screen-title" id="mbTitle">Mein Bereich</div>
+        <div class="screen-subtitle" id="mbSubtitle"></div>
+      </div>
+      <div id="mbSummary" style="max-width:520px;width:100%;margin-bottom:20px"></div>
+      <div class="options-grid">
+        <button class="big-btn btn-green" onclick="goToScreen('screen-urlaub-neu')">
+          <span class="btn-icon">🌴</span> Urlaubsantrag stellen
+        </button>
+        <button class="big-btn btn-blue" onclick="goToScreen('screen-meine-antraege')">
+          <span class="btn-icon">📋</span> Meine Anträge
+        </button>
+        <button class="big-btn btn-amber" onclick="goToScreen('screen-stundenkonto')">
+          <span class="btn-icon">⏱</span> Mein Stundenkonto
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ SCREEN 6: URLAUBSANTRAG STELLEN ═══════════════ -->
+  <div class="screen hidden" id="screen-urlaub-neu">
+    <div class="centered-screen">
+      <div style="max-width:520px;width:100%;">
+        <button class="screen-back-btn" onclick="goToScreen('screen-meinbereich')">← Zurück</button>
+        <div class="screen-header" style="text-align:left">
+          <div class="screen-title">🌴 Urlaubsantrag</div>
+          <div class="screen-subtitle" id="urlaubNeuName"></div>
+        </div>
+        <div class="mb-card">
+          <div class="mb-form-group">
+            <label>Abwesenheitstyp</label>
+            <select id="mbUrlaubTyp" class="mb-select">
+              <option value="VACACIONES">🌴 Urlaub</option>
+              <option value="FZA">⏱ Freizeitausgleich (FZA)</option>
+              <option value="ASUNTOS_PROPIOS">📋 Sonstiges</option>
+              <option value="PERMISO_RETRIBUIDO">✅ Bezahlte Freistellung</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:12px">
+            <div class="mb-form-group" style="flex:1">
+              <label>Von</label>
+              <input type="date" id="mbUrlaubVon" class="mb-input" onchange="mbCalcDays()">
+            </div>
+            <div class="mb-form-group" style="flex:1">
+              <label>Bis</label>
+              <input type="date" id="mbUrlaubBis" class="mb-input" onchange="mbCalcDays()">
+            </div>
+          </div>
+          <div id="mbDaysPreview" style="font-size:14px;color:var(--muted);margin-bottom:12px"></div>
+          <div class="mb-form-group">
+            <label>Bemerkung (optional)</label>
+            <input type="text" id="mbUrlaubMotivo" class="mb-input" placeholder="z.B. Familienurlaub">
+          </div>
+          <button class="big-btn btn-green" style="min-height:60px;font-size:18px" onclick="mbSubmitUrlaub()">
+            Antrag absenden
+          </button>
+          <div id="mbUrlaubResult" style="margin-top:12px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ SCREEN 7: MEINE ANTRÄGE ═══════════════ -->
+  <div class="screen hidden" id="screen-meine-antraege">
+    <div class="centered-screen">
+      <div style="max-width:700px;width:100%;">
+        <button class="screen-back-btn" onclick="goToScreen('screen-meinbereich')">← Zurück</button>
+        <div class="screen-header" style="text-align:left">
+          <div class="screen-title">📋 Meine Anträge</div>
+        </div>
+        <div id="mbAntraegeContent"><div style="color:var(--muted);text-align:center;padding:40px">Lade…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ SCREEN 8: STUNDENKONTO ═══════════════ -->
+  <div class="screen hidden" id="screen-stundenkonto">
+    <div class="centered-screen">
+      <div style="max-width:700px;width:100%;">
+        <button class="screen-back-btn" onclick="goToScreen('screen-meinbereich')">← Zurück</button>
+        <div class="screen-header" style="text-align:left">
+          <div class="screen-title">⏱ Mein Stundenkonto</div>
+          <div class="screen-subtitle" id="skSubtitle"></div>
+        </div>
+        <div id="mbStundenContent"><div style="color:var(--muted);text-align:center;padding:40px">Lade…</div></div>
       </div>
     </div>
   </div>
@@ -801,17 +997,18 @@ function showError(msg) {
 /* ══════════════════════════════════════════════════════════════
    SCREEN NAVIGATION
 ══════════════════════════════════════════════════════════════ */
-const SCREENS = ['screen-employees','screen-entry','screen-present','screen-change','screen-confirm'];
+const SCREENS = ['screen-employees','screen-entry','screen-present','screen-change','screen-confirm','screen-meinbereich','screen-urlaub-neu','screen-meine-antraege','screen-stundenkonto'];
 function _showScreen(id) {
   SCREENS.forEach(s => {
     document.getElementById(s).classList.toggle('hidden', s !== id);
   });
 }
 function goToScreen(id) {
-  if (id === 'screen-change') {
-    showChangeScreen();
-    return;
-  }
+  if (id === 'screen-change') { showChangeScreen(); return; }
+  if (id === 'screen-meinbereich') { goToMeinBereich(); return; }
+  if (id === 'screen-urlaub-neu') { showUrlaubNeu(); return; }
+  if (id === 'screen-meine-antraege') { showMeineAntraege(); return; }
+  if (id === 'screen-stundenkonto') { showStundenkonto(); return; }
   _showScreen(id);
 }
 
@@ -1192,6 +1389,332 @@ function startAutoRefresh() {
     }
   }, 30000);
 }
+
+/* ══════════════════════════════════════════════════════════════
+   MEIN BEREICH
+══════════════════════════════════════════════════════════════ */
+function goBackFromMeinBereich() {
+  if (selectedFichaje) {
+    showPresentScreen();
+  } else if (selectedEmp) {
+    showEntryScreen();
+  } else {
+    _showScreen('screen-employees');
+  }
+}
+
+function goToMeinBereich() {
+  if (!selectedEmp) return;
+  document.getElementById('mbTitle').textContent = fullName(selectedEmp);
+  document.getElementById('mbSubtitle').textContent = '#' + selectedEmp.id_nummer;
+
+  // Load summary (vacation + hours)
+  const sum = document.getElementById('mbSummary');
+  sum.innerHTML = '<div style="color:var(--muted);text-align:center;padding:12px">Lade Übersicht…</div>';
+
+  const year = new Date().getFullYear();
+  Promise.all([
+    apiFetch(`/vacaciones/saldo/${selectedEmp.id}?anio=${year}`).catch(() => null),
+    apiFetch(`/saldo-horas/${selectedEmp.id}?year=${year}`).catch(() => null),
+  ]).then(([vac, hrs]) => {
+    const vacDispo = vac ? vac.dias_disponibles : '—';
+    const vacTotal = vac ? vac.dias_totales : '—';
+    const resumen = hrs?.resumen || {};
+    const saldo = resumen.saldo_total || 0;
+    const sign = saldo >= 0 ? '+' : '';
+
+    sum.innerHTML = `
+      <div class="mb-summary-grid">
+        <div class="mb-stat">
+          <div class="mb-stat-label">Urlaub verfügbar</div>
+          <div class="mb-stat-value" style="color:var(--green)">${vacDispo}</div>
+          <div class="mb-stat-sub">von ${vacTotal} Tagen</div>
+        </div>
+        <div class="mb-stat">
+          <div class="mb-stat-label">Stundensaldo ${year}</div>
+          <div class="mb-stat-value ${saldo >= 0 ? 'sk-pos' : 'sk-neg'}">${sign}${saldo.toFixed(1)}h</div>
+          <div class="mb-stat-sub">Ist: ${(resumen.total_real||0).toFixed(1)}h / Soll: ${(resumen.total_planificado||0).toFixed(1)}h</div>
+        </div>
+      </div>`;
+  });
+
+  _showScreen('screen-meinbereich');
+}
+
+/* ── Urlaubsantrag stellen ────────────────────────────── */
+function showUrlaubNeu() {
+  if (!selectedEmp) return;
+  document.getElementById('urlaubNeuName').textContent = fullName(selectedEmp);
+  document.getElementById('mbUrlaubTyp').value = 'VACACIONES';
+  document.getElementById('mbUrlaubVon').value = '';
+  document.getElementById('mbUrlaubBis').value = '';
+  document.getElementById('mbUrlaubMotivo').value = '';
+  document.getElementById('mbDaysPreview').textContent = '';
+  document.getElementById('mbUrlaubResult').innerHTML = '';
+  _showScreen('screen-urlaub-neu');
+}
+
+function mbCalcDays() {
+  const von = document.getElementById('mbUrlaubVon').value;
+  const bis = document.getElementById('mbUrlaubBis').value;
+  const preview = document.getElementById('mbDaysPreview');
+  if (!von || !bis) { preview.textContent = ''; return; }
+  const d1 = new Date(von), d2 = new Date(bis);
+  if (d2 < d1) { preview.textContent = '⚠ Enddatum liegt vor Startdatum'; return; }
+  let days = 0;
+  const cur = new Date(d1);
+  while (cur <= d2) {
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) days++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  preview.textContent = `≈ ${days} Arbeitstag${days !== 1 ? 'e' : ''}`;
+}
+
+async function mbSubmitUrlaub() {
+  const von = document.getElementById('mbUrlaubVon').value;
+  const bis = document.getElementById('mbUrlaubBis').value;
+  const tipo = document.getElementById('mbUrlaubTyp').value;
+  const motivo = document.getElementById('mbUrlaubMotivo').value.trim();
+  const result = document.getElementById('mbUrlaubResult');
+
+  if (!von || !bis) {
+    result.innerHTML = '<div class="mb-alert mb-alert-error">Bitte Von und Bis ausfüllen</div>';
+    return;
+  }
+  if (bis < von) {
+    result.innerHTML = '<div class="mb-alert mb-alert-error">Enddatum muss nach Startdatum liegen</div>';
+    return;
+  }
+
+  showLoading('Antrag wird gesendet…');
+  try {
+    const year = parseInt(von.slice(0, 4));
+    // Ensure vacation period exists
+    try {
+      await apiFetch(`/vacaciones/periodos`, {
+        method: 'POST',
+        body: JSON.stringify({ empleado_id: selectedEmp.id, anio: year, dias_totales: 30 })
+      });
+    } catch(e) { /* period may already exist */ }
+
+    await apiFetch('/vacaciones/solicitudes', {
+      method: 'POST',
+      body: JSON.stringify({
+        empleado_id: selectedEmp.id,
+        fecha_inicio: von,
+        fecha_fin: bis,
+        tipo: tipo,
+        motivo: motivo || undefined
+      })
+    });
+    hideLoading();
+    result.innerHTML = '<div class="mb-alert mb-alert-success">✓ Antrag erfolgreich eingereicht!</div>';
+    document.getElementById('mbUrlaubVon').value = '';
+    document.getElementById('mbUrlaubBis').value = '';
+    document.getElementById('mbUrlaubMotivo').value = '';
+    document.getElementById('mbDaysPreview').textContent = '';
+  } catch(e) {
+    hideLoading();
+    result.innerHTML = `<div class="mb-alert mb-alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+/* ── Meine Anträge ────────────────────────────────────── */
+async function showMeineAntraege() {
+  if (!selectedEmp) return;
+  const content = document.getElementById('mbAntraegeContent');
+  content.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px">Lade Anträge…</div>';
+  _showScreen('screen-meine-antraege');
+
+  const year = new Date().getFullYear();
+  try {
+    const res = await apiFetch(`/vacaciones/mis-solicitudes/${selectedEmp.id}?anio=${year}`);
+    const mine = res.data || [];
+
+    if (mine.length === 0) {
+      content.innerHTML = '<div class="mb-empty">Keine Anträge in ' + year + '</div>';
+      return;
+    }
+
+    const statusBadge = (estado) => {
+      const map = {
+        PENDIENTE: ['mb-badge-amber', 'Ausstehend'],
+        PROPUESTA: ['mb-badge-blue', 'Vorgeschlagen'],
+        APROBADA:  ['mb-badge-green', 'Genehmigt'],
+        RECHAZADA: ['mb-badge-red', 'Abgelehnt'],
+      };
+      const [cls, label] = map[estado] || ['mb-badge-gray', estado];
+      return `<span class="mb-badge ${cls}">${label}</span>`;
+    };
+
+    const tipoLabel = (tipo) => {
+      const map = { VACACIONES: '🌴 Urlaub', FZA: '⏱ FZA', BAJA_MEDICA: '🏥 Krank',
+        ASUNTOS_PROPIOS: '📋 Sonstiges', PERMISO_RETRIBUIDO: '✅ Freistellung' };
+      return map[tipo] || tipo;
+    };
+
+    content.innerHTML = `
+      <div class="mb-card" style="padding:0;overflow:hidden">
+        <table class="mb-table">
+          <thead><tr><th>Typ</th><th>Von</th><th>Bis</th><th>Tage</th><th>Status</th></tr></thead>
+          <tbody>
+            ${mine.map(u => `<tr>
+              <td>${tipoLabel(u.tipo || 'VACACIONES')}</td>
+              <td>${u.fecha_inicio}</td>
+              <td>${u.fecha_fin}</td>
+              <td><b>${u.dias}</b></td>
+              <td>${statusBadge(u.estado)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    content.innerHTML = `<div class="mb-alert mb-alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+/* ── Stundenkonto ─────────────────────────────────────── */
+async function showStundenkonto() {
+  if (!selectedEmp) return;
+  const content = document.getElementById('mbStundenContent');
+  const subtitle = document.getElementById('skSubtitle');
+  subtitle.textContent = fullName(selectedEmp);
+  content.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px">Lade Stundenkonto…</div>';
+  _showScreen('screen-stundenkonto');
+
+  const year = new Date().getFullYear();
+  try {
+    const data = await apiFetch(`/saldo-horas/${selectedEmp.id}?year=${year}`);
+    const meses = data.meses || [];
+    const r = data.resumen || {};
+    const monthlyH = data.empleado?.monthly_hours || 0;
+
+    const saldoTotal = r.saldo_total || 0;
+    const sign = saldoTotal >= 0 ? '+' : '';
+
+    content.innerHTML = `
+      <div class="mb-summary-grid" style="margin-bottom:16px">
+        <div class="mb-stat">
+          <div class="mb-stat-label">Soll ${year}</div>
+          <div class="mb-stat-value">${(r.total_planificado||0).toFixed(1)}h</div>
+          <div class="mb-stat-sub">${monthlyH}h/Monat</div>
+        </div>
+        <div class="mb-stat">
+          <div class="mb-stat-label">Ist ${year}</div>
+          <div class="mb-stat-value">${(r.total_real||0).toFixed(1)}h</div>
+        </div>
+        <div class="mb-stat" style="grid-column:1/-1">
+          <div class="mb-stat-label">Saldo ${year}</div>
+          <div class="mb-stat-value ${saldoTotal >= 0 ? 'sk-pos' : 'sk-neg'}">${sign}${saldoTotal.toFixed(1)}h</div>
+        </div>
+      </div>
+      <div class="mb-card" style="padding:0;overflow:hidden">
+        <table class="mb-table">
+          <thead><tr><th>Monat</th><th>Soll</th><th>Ist</th><th>Saldo</th><th>Kumuliert</th></tr></thead>
+          <tbody>
+            ${meses.map(m => {
+              const sc = m.saldo_mes > 0 ? 'sk-pos' : m.saldo_mes < 0 ? 'sk-neg' : '';
+              const ac = m.saldo_acumulado > 0 ? 'sk-pos' : m.saldo_acumulado < 0 ? 'sk-neg' : '';
+              return `<tr>
+                <td><b>${m.mes_nombre}</b></td>
+                <td>${m.horas_planificadas.toFixed(1)}</td>
+                <td>${m.horas_reales.toFixed(1)}</td>
+                <td class="${sc}">${m.saldo_mes >= 0 ? '+' : ''}${m.saldo_mes.toFixed(1)}</td>
+                <td class="${ac}">${m.saldo_acumulado >= 0 ? '+' : ''}${m.saldo_acumulado.toFixed(1)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    content.innerHTML = `<div class="mb-alert mb-alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DEEP INTERACTION TRACKING (forensic audit)
+══════════════════════════════════════════════════════════════ */
+const _ilog = {
+  queue: [],
+  timer: null,
+  screen: 'screen-employees',
+
+  push(action, target, detail) {
+    this.queue.push({
+      action,
+      target: (target || '').substring(0, 500),
+      detail: (detail || '').substring(0, 2000),
+      page: this.screen,
+      timestamp: new Date().toISOString(),
+    });
+    if (this.queue.length >= 10) this.flush();
+    if (!this.timer) this.timer = setInterval(() => this.flush(), 5000);
+  },
+
+  flush() {
+    if (!this.queue.length) return;
+    const batch = this.queue.splice(0, 50);
+    const token = getToken();
+    const empName = selectedEmp ? `${selectedEmp.nombre} ${selectedEmp.apellido||''}`.trim() : null;
+    const empId = selectedEmp ? String(selectedEmp.id) : null;
+    fetch(API + '/audit/interactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? {'Authorization': 'Bearer ' + token} : {}) },
+      body: JSON.stringify({
+        source: 'terminal',
+        user_nick: null,
+        employee_name: empName,
+        employee_id: empId,
+        events: batch,
+      }),
+    }).catch(() => {});
+  },
+};
+
+// Track screen navigations
+const _origShowScreen = _showScreen;
+_showScreen = function(id) {
+  _ilog.screen = id;
+  _ilog.push('navigate', id);
+  return _origShowScreen.apply(this, arguments);
+};
+
+// Track button clicks (delegated)
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('button, a, [onclick], .emp-tile');
+  if (!btn) return;
+  const label = btn.textContent?.trim().substring(0, 120) ||
+                btn.getAttribute('onclick')?.substring(0, 120) ||
+                btn.className;
+  _ilog.push('click', label, btn.id || btn.getAttribute('onclick') || '');
+}, true);
+
+// Track employee selection
+const _origSelectEmp = selectEmployee;
+selectEmployee = function(id) {
+  const emp = employees.find(e => String(e.id) === String(id));
+  if (emp) _ilog.push('select', `${emp.nombre} ${emp.apellido||''}`.trim(), `id=${id}`);
+  return _origSelectEmp.apply(this, arguments);
+};
+
+// Intercept API calls
+const _origApiFetch = apiFetch;
+apiFetch = async function(path, opts = {}) {
+  const method = opts.method || 'GET';
+  const t0 = Date.now();
+  try {
+    const result = await _origApiFetch.apply(this, arguments);
+    _ilog.push('api_call', `${method} ${path}`, `${Date.now() - t0}ms OK`);
+    return result;
+  } catch(e) {
+    _ilog.push('api_call', `${method} ${path}`, `${Date.now() - t0}ms ERROR: ${e.message}`);
+    throw e;
+  }
+};
+
+// Flush on page unload
+window.addEventListener('beforeunload', () => _ilog.flush());
 
 /* ══════════════════════════════════════════════════════════════
    INIT

@@ -13,6 +13,7 @@ from ..database import get_db
 from ..models.vacaciones import Festivo, TipoFestivo
 from ..auth import require_permission
 from ..permisos import TIMECLOCK_REGISTER, USERS_ADMIN
+from ..services.audit_service import log_action, diff_changes
 
 router = APIRouter(
     prefix="/festivos",
@@ -106,6 +107,12 @@ def crear_festivo(data: FestivoCreate, db: Session = Depends(get_db), _auth=Depe
         activo=data.activo,
     )
     db.add(festivo)
+    db.flush()
+    log_action(db, "CREATE", "festivo",
+               entidad_id=str(festivo.id),
+               entidad_label=f"{festivo.fecha.isoformat()} – {festivo.nombre}",
+               descripcion=f"Feiertag '{festivo.nombre}' ({festivo.bundesland}) erstellt",
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(festivo)
     return {"id": str(festivo.id), "message": "Festivo creado", **_to_dict(festivo)}
@@ -140,6 +147,9 @@ def crear_festivos_bulk(
         db.add(festivo)
         created += 1
 
+    log_action(db, "IMPORT", "festivo",
+               descripcion=f"Bulk-Import: {created} Feiertage erstellt, {skipped} übersprungen",
+               usuario_nick=_auth.nick)
     db.commit()
     return {
         "message": f"{created} festivos creados, {skipped} omitidos (ya existían)",
@@ -157,8 +167,16 @@ def actualizar_festivo(
     f = db.query(Festivo).filter(Festivo.id == festivo_id).first()
     if not f:
         raise HTTPException(404, "Feiertag nicht gefunden")
-    for field, value in data.model_dump(exclude_unset=True).items():
+    update_fields = data.model_dump(exclude_unset=True)
+    old_state = {k: str(getattr(f, k)) for k in update_fields}
+    for field, value in update_fields.items():
         setattr(f, field, value)
+    new_state = {k: str(getattr(f, k)) for k in update_fields}
+    log_action(db, "UPDATE", "festivo",
+               entidad_id=str(f.id),
+               entidad_label=f"{f.fecha.isoformat()} – {f.nombre}",
+               cambios=diff_changes(old_state, new_state),
+               usuario_nick=_auth.nick)
     db.commit()
     db.refresh(f)
     return {"message": "Festivo actualizado", **_to_dict(f)}
@@ -170,6 +188,11 @@ def eliminar_festivo(festivo_id: UUID, db: Session = Depends(get_db), _auth=Depe
     f = db.query(Festivo).filter(Festivo.id == festivo_id).first()
     if not f:
         raise HTTPException(404, "Feiertag nicht gefunden")
+    log_action(db, "DELETE", "festivo",
+               entidad_id=str(f.id),
+               entidad_label=f"{f.fecha.isoformat()} – {f.nombre}",
+               descripcion=f"Feiertag '{f.nombre}' ({f.bundesland}) gelöscht",
+               usuario_nick=_auth.nick)
     db.delete(f)
     db.commit()
     return {"message": "Festivo eliminado"}

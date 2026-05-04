@@ -17,6 +17,7 @@ from ..models.empleado import Empleado
 from ..models.aprobacion import AprobacionLog
 from ..auth import require_permission
 from ..permisos import TIMECLOCK_REGISTER, CORRECTIONS_REVIEW
+from ..services.audit_service import log_action
 
 router = APIRouter(prefix="/correcciones", tags=["Correcciones de Fichaje"])
 
@@ -105,6 +106,11 @@ def crear_correccion(data: CorreccionCreate, db: Session = Depends(get_db), _aut
         estado_final="PENDIENTE",
     )
     db.add(aprobacion)
+    log_action(db, "CREATE", "correccion_fichaje",
+               entidad_id=str(solicitud.id),
+               entidad_label=f"{empleado.nombre} {empleado.apellido or ''}".strip(),
+               descripcion=f"Korrekturantrag: {data.motivo}",
+               usuario_nick=data.solicitado_por)
     db.commit()
     db.refresh(solicitud)
 

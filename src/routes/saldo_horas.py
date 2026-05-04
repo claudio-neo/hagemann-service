@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
-from datetime import date
+from datetime import date, datetime
+
+from pydantic import BaseModel
 
 from ..database import get_db
 from ..models.empleado import Empleado
@@ -200,4 +202,91 @@ def historial_saldo(
         },
         "data": [_saldo_to_dict(s, emp) for s in saldos],
         "total": len(saldos),
+    }
+
+
+class AjusteManualBody(BaseModel):
+    horas_reales: float
+    horas_planificadas: Optional[float] = None   # None → usa monthly_hours del empleado
+    notas: Optional[str] = None
+
+
+@router.post("/{empleado_id}/mes/{mes}/ajuste")
+def ajuste_manual_mes(
+    empleado_id: UUID,
+    mes: int,
+    year: int = Query(..., ge=2020, le=2099),
+    body: AjusteManualBody = ...,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_permission(HOURS_CONTROL_TEAM)),
+):
+    """
+    Ajuste manual de un mes: permite al admin corregir horas reales y/o planificadas
+    y marca el mes como CERRADO para que no se recalcule automáticamente.
+    Útil para establecer el saldo de meses anteriores al inicio del sistema.
+    """
+    if not 1 <= mes <= 12:
+        raise HTTPException(400, "Mes entre 1 y 12")
+
+    emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
+    if not emp:
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
+
+    from ..services.calculo_saldo import _get_carryover_anterior, DEFAULT_LIMITE_KAPPUNG
+
+    horas_planificadas = Decimal(str(body.horas_planificadas)) if body.horas_planificadas is not None else Decimal(str(emp.monthly_hours))
+    horas_reales = Decimal(str(body.horas_reales))
+    saldo_mes = (horas_reales - horas_planificadas).quantize(Decimal("0.01"))
+    carryover = _get_carryover_anterior(db, empleado_id, year, mes)
+    saldo_acumulado = (saldo_mes + carryover).quantize(Decimal("0.01"))
+    kappung = DEFAULT_LIMITE_KAPPUNG
+    saldo_final = max(min(saldo_acumulado, kappung), -kappung)
+    kappung_aplicada = saldo_final != saldo_acumulado
+
+    existente = db.query(SaldoHorasMensual).filter(
+        SaldoHorasMensual.empleado_id == empleado_id,
+        SaldoHorasMensual.anio == year,
+        SaldoHorasMensual.mes == mes,
+    ).first()
+
+    if existente:
+        existente.horas_planificadas = horas_planificadas
+        existente.horas_reales = horas_reales
+        existente.saldo_mes = saldo_mes
+        existente.carryover_anterior = carryover
+        existente.saldo_acumulado = saldo_acumulado
+        existente.saldo_final = saldo_final
+        existente.kappung_aplicada = kappung_aplicada
+        existente.horas_cortadas = abs(saldo_acumulado - saldo_final)
+        existente.cerrado = True
+        existente.notas = body.notas
+        existente.calculado_en = datetime.utcnow()
+    else:
+        existente = SaldoHorasMensual(
+            empleado_id=empleado_id,
+            anio=year,
+            mes=mes,
+            horas_planificadas=horas_planificadas,
+            horas_reales=horas_reales,
+            saldo_mes=saldo_mes,
+            carryover_anterior=carryover,
+            saldo_acumulado=saldo_acumulado,
+            limite_kappung=kappung,
+            saldo_final=saldo_final,
+            kappung_aplicada=kappung_aplicada,
+            horas_cortadas=abs(saldo_acumulado - saldo_final),
+            cerrado=True,
+            notas=body.notas,
+            calculado_en=datetime.utcnow(),
+        )
+        db.add(existente)
+
+    db.commit()
+    db.refresh(existente)
+    return {
+        "ok": True,
+        "mes": f"{year}/{mes:02d}",
+        "empleado": emp.nombre,
+        "saldo_final": float(existente.saldo_final),
+        "notas": existente.notas,
     }
