@@ -136,6 +136,8 @@ class Grupo(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre = Column(String(250), nullable=False, unique=True)
     descripcion = Column(String(500), nullable=True)
+    color = Column(String(7), nullable=True,
+                   comment="Color hex para UI (ej: #8B5CF6)")
     activo = Column(Boolean, default=True)
     orden = Column(Integer, default=0)
 

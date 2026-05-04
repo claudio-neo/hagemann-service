@@ -22,10 +22,12 @@ router = APIRouter(
 class GruppeCreate(BaseModel):
     nombre: str
     descripcion: Optional[str] = None
+    color: Optional[str] = None
 
 class GruppeUpdate(BaseModel):
     nombre: Optional[str] = None
     descripcion: Optional[str] = None
+    color: Optional[str] = None
     activo: Optional[bool] = None
 
 class KostenstelleCreate(BaseModel):
@@ -57,7 +59,7 @@ def create_abteilung(data: GruppeCreate, db: Session = Depends(get_db), _auth=De
     existing = db.query(Grupo).filter(Grupo.nombre == data.nombre).first()
     if existing:
         raise HTTPException(409, f"Abteilung '{data.nombre}' existiert bereits")
-    g = Grupo(nombre=data.nombre, descripcion=data.descripcion)
+    g = Grupo(nombre=data.nombre, descripcion=data.descripcion, color=data.color)
     db.add(g)
     db.commit()
     db.refresh(g)
@@ -73,6 +75,8 @@ def update_abteilung(abt_id: UUID, data: GruppeUpdate, db: Session = Depends(get
         g.nombre = data.nombre
     if data.descripcion is not None:
         g.descripcion = data.descripcion
+    if data.color is not None:
+        g.color = data.color
     if data.activo is not None:
         g.activo = data.activo
     db.commit()
@@ -141,8 +145,8 @@ def delete_kostenstelle(ks_id: UUID, db: Session = Depends(get_db), _auth=Depend
 def _grupo_dict(g: Grupo) -> dict:
     return {
         "id": str(g.id), "nombre": g.nombre,
-        "descripcion": g.descripcion, "activo": g.activo,
-        "orden": g.orden,
+        "descripcion": g.descripcion, "color": g.color,
+        "activo": g.activo, "orden": g.orden,
     }
 
 def _cc_dict(c: CentroCoste) -> dict:

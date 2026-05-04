@@ -1117,6 +1117,56 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
   </div>
 </div>
 
+<!-- Modal: Stammdaten (Abteilung / Kostenstelle / Zeitgruppe) -->
+<div class="modal-overlay hidden" id="stammModal">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <h2 id="stammModalTitle">Bearbeiten</h2>
+      <button class="modal-close" onclick="closeModal('stammModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="stammId">
+      <input type="hidden" id="stammType">
+      <div class="form-group">
+        <label>Name *</label>
+        <input type="text" id="stammName" class="form-control">
+      </div>
+      <div class="form-group" id="stammCodeGroup" class="hidden">
+        <label>Code</label>
+        <input type="text" id="stammCode" class="form-control" placeholder="z.B. 4100">
+      </div>
+      <div class="form-group">
+        <label>Beschreibung</label>
+        <input type="text" id="stammDesc" class="form-control">
+      </div>
+      <div class="form-group" id="stammColorGroup">
+        <label>Farbe</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="stammColor" value="#3B82F6" style="width:50px;height:36px;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:2px">
+          <input type="text" id="stammColorHex" class="form-control" style="width:100px;font-family:monospace" placeholder="#3B82F6">
+          <span id="stammColorPreview" style="width:24px;height:24px;border-radius:6px;border:1px solid var(--border)"></span>
+        </div>
+      </div>
+      <div class="form-group" id="stammTipoGroup" style="display:none">
+        <label>Typ</label>
+        <select id="stammTipo" class="form-control">
+          <option value="GLEITZEIT">Gleitzeit</option>
+          <option value="VERWALTUNG">Verwaltung</option>
+          <option value="SCHICHT">Schicht</option>
+        </select>
+      </div>
+      <div class="form-group" id="stammMinStartGroup" style="display:none">
+        <label>Min. Startzeit</label>
+        <input type="time" id="stammMinStart" class="form-control">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('stammModal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="saveStamm()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== BENUTZERVERWALTUNG ===== -->
 <div id="page-benutzerverwaltung" class="page">
   <div class="container">
@@ -3153,6 +3203,7 @@ function switchStammdatenTab(tab) {
 async function initStammdaten() {
   const content = document.getElementById('stammdatenContent');
   content.innerHTML = '<div class="loading">Lade Daten</div>';
+  const esc = s => (s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
 
   try {
     if (stammdatenTab === 'abt') {
@@ -3162,15 +3213,16 @@ async function initStammdaten() {
         <div class="card">
           <div class="card-header" style="margin-bottom:12px">
             <span class="card-title">Abteilungen</span>
-            <button class="btn btn-primary btn-sm" onclick="promptStamm('abt')">+ Hinzufügen</button>
+            <button class="btn btn-primary btn-sm" onclick="openStammModal('abt')">+ Hinzufügen</button>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Name</th><th>Beschreibung</th><th>Status</th><th>Aktion</th></tr></thead>
+            <thead><tr><th>Farbe</th><th>Name</th><th>Beschreibung</th><th>Status</th><th>Aktion</th></tr></thead>
             <tbody>${items.map(g => `<tr>
+              <td><span style="display:inline-block;width:16px;height:16px;border-radius:4px;background:${g.color||'#cbd5e1'}"></span></td>
               <td><b>${g.nombre}</b></td>
               <td>${g.descripcion||'—'}</td>
               <td>${g.activo ? '<span class="badge badge-green">Aktiv</span>' : '<span class="badge badge-gray">Inaktiv</span>'}</td>
-              <td><button class="btn btn-sm btn-outline" onclick="editStamm('abt','${g.id}','${g.nombre.replace(/'/g,"\\'")}','${(g.descripcion||'').replace(/'/g,"\\'")}')">✎</button></td>
+              <td><button class="btn btn-sm btn-outline" onclick="openStammModal('abt','${g.id}')">✎</button></td>
             </tr>`).join('')}</tbody>
           </table></div>
         </div>`;
@@ -3182,16 +3234,16 @@ async function initStammdaten() {
         <div class="card">
           <div class="card-header" style="margin-bottom:12px">
             <span class="card-title">Kostenstellen</span>
-            <button class="btn btn-primary btn-sm" onclick="promptStamm('ks')">+ Hinzufügen</button>
+            <button class="btn btn-primary btn-sm" onclick="openStammModal('ks')">+ Hinzufügen</button>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Code</th><th>Name</th><th>Farbe</th><th>Status</th><th>Aktion</th></tr></thead>
+            <thead><tr><th>Farbe</th><th>Code</th><th>Name</th><th>Status</th><th>Aktion</th></tr></thead>
             <tbody>${items.map(k => `<tr>
+              <td><span style="display:inline-block;width:16px;height:16px;border-radius:4px;background:${k.color||'#cbd5e1'}"></span></td>
               <td><b>${k.codigo}</b></td>
               <td>${k.nombre}</td>
-              <td><span style="display:inline-block;width:16px;height:16px;border-radius:4px;background:${k.color||'#ccc'}"></span> ${k.color||'—'}</td>
               <td>${k.activo ? '<span class="badge badge-green">Aktiv</span>' : '<span class="badge badge-gray">Inaktiv</span>'}</td>
-              <td><button class="btn btn-sm btn-outline" onclick="editStammKs('${k.id}','${k.codigo.replace(/'/g,"\\'")}','${k.nombre.replace(/'/g,"\\'")}','${k.color||''}')">✎</button></td>
+              <td><button class="btn btn-sm btn-outline" onclick="openStammModal('ks','${k.id}')">✎</button></td>
             </tr>`).join('')}</tbody>
           </table></div>
         </div>`;
@@ -3204,7 +3256,7 @@ async function initStammdaten() {
         <div class="card">
           <div class="card-header" style="margin-bottom:12px">
             <span class="card-title">Zeitgruppen</span>
-            <button class="btn btn-primary btn-sm" onclick="promptStamm('zg')">+ Hinzufügen</button>
+            <button class="btn btn-primary btn-sm" onclick="openStammModal('zg')">+ Hinzufügen</button>
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>Name</th><th>Typ</th><th>Min. Startzeit</th><th>Turnus-Start</th><th>Wochenrotation</th><th>Aktion</th></tr></thead>
@@ -3214,7 +3266,7 @@ async function initStammdaten() {
               <td>${z.hora_minima_inicio||'—'}</td>
               <td>${z.usar_inicio_turno ? '✓' : '—'}</td>
               <td>${z.rotacion_semanal ? '✓' : '—'}</td>
-              <td><button class="btn btn-sm btn-outline" onclick="editStammZg('${z.id}','${z.nombre.replace(/'/g,"\\'")}','${z.tipo}','${z.hora_minima_inicio||''}',${z.usar_inicio_turno},${z.rotacion_semanal})">✎</button></td>
+              <td><button class="btn btn-sm btn-outline" onclick="openStammModal('zg','${z.id}')">✎</button></td>
             </tr>`).join('')}</tbody>
           </table></div>
         </div>`;
@@ -3224,57 +3276,92 @@ async function initStammdaten() {
   }
 }
 
-async function promptStamm(type) {
-  const name = prompt(type==='ks' ? 'Neuer Code:' : 'Neuer Name:');
-  if (!name) return;
+let _stammCache = {};
+async function openStammModal(type, id) {
+  document.getElementById('stammType').value = type;
+  document.getElementById('stammId').value = id || '';
+  document.getElementById('stammName').value = '';
+  document.getElementById('stammDesc').value = '';
+  document.getElementById('stammCode').value = '';
+  document.getElementById('stammColor').value = '#3B82F6';
+  document.getElementById('stammColorHex').value = '';
+  document.getElementById('stammTipo').value = 'GLEITZEIT';
+  document.getElementById('stammMinStart').value = '';
+
+  const isKs = type === 'ks';
+  const isZg = type === 'zg';
+  document.getElementById('stammCodeGroup').style.display = isKs ? '' : 'none';
+  document.getElementById('stammColorGroup').style.display = isZg ? 'none' : '';
+  document.getElementById('stammTipoGroup').style.display = isZg ? '' : 'none';
+  document.getElementById('stammMinStartGroup').style.display = isZg ? '' : 'none';
+
+  const labels = {abt:'Abteilung', ks:'Kostenstelle', zg:'Zeitgruppe'};
+  document.getElementById('stammModalTitle').textContent = (id ? '' : 'Neue ') + labels[type];
+
+  if (id) {
+    try {
+      let data;
+      if (type === 'abt') { const r = await api('/abteilungen/'); data = (r.data||[]).find(x => x.id === id); }
+      else if (type === 'ks') { const r = await api('/kostenstellen/'); data = (r.data||[]).find(x => x.id === id); }
+      else if (type === 'zg') { const r = await api('/zeitgruppen/'); data = (r.data||[]).find(x => x.id === id); }
+      if (data) {
+        document.getElementById('stammName').value = data.nombre || '';
+        document.getElementById('stammDesc').value = data.descripcion || '';
+        if (isKs) document.getElementById('stammCode').value = data.codigo || '';
+        if (data.color) {
+          document.getElementById('stammColor').value = data.color;
+          document.getElementById('stammColorHex').value = data.color;
+        }
+        if (isZg) {
+          document.getElementById('stammTipo').value = data.tipo || 'GLEITZEIT';
+          document.getElementById('stammMinStart').value = data.hora_minima_inicio || '';
+        }
+      }
+    } catch(e) { showGlobalAlert('error', e.message); return; }
+  }
+
+  // Sync color picker
+  const cp = document.getElementById('stammColor');
+  const ch = document.getElementById('stammColorHex');
+  const pv = document.getElementById('stammColorPreview');
+  cp.oninput = () => { ch.value = cp.value; pv.style.background = cp.value; };
+  ch.oninput = () => { if (/^#[0-9a-fA-F]{6}$/.test(ch.value)) { cp.value = ch.value; pv.style.background = ch.value; } };
+  pv.style.background = cp.value;
+
+  openModal('stammModal');
+}
+
+async function saveStamm() {
+  const type = document.getElementById('stammType').value;
+  const id = document.getElementById('stammId').value;
+  const name = document.getElementById('stammName').value.trim();
+  const desc = document.getElementById('stammDesc').value.trim() || null;
+  const color = document.getElementById('stammColorHex').value.trim() || document.getElementById('stammColor').value || null;
+
+  if (!name) { showGlobalAlert('error', 'Name ist Pflichtfeld'); return; }
+
   try {
-    if (type === 'abt') await api('/abteilungen/', {method:'POST', body: JSON.stringify({nombre: name})});
-    else if (type === 'ks') {
-      const nombre = prompt('Name:');
-      await api('/kostenstellen/', {method:'POST', body: JSON.stringify({codigo: name, nombre: nombre||name})});
+    if (type === 'abt') {
+      const body = {nombre: name, descripcion: desc, color: color};
+      if (id) await api(`/abteilungen/${id}`, {method:'PUT', body: JSON.stringify(body)});
+      else await api('/abteilungen/', {method:'POST', body: JSON.stringify(body)});
+    } else if (type === 'ks') {
+      const code = document.getElementById('stammCode').value.trim();
+      if (!code && !id) { showGlobalAlert('error', 'Code ist Pflichtfeld'); return; }
+      const body = {nombre: name, descripcion: desc, color: color};
+      if (code) body.codigo = code;
+      if (id) await api(`/kostenstellen/${id}`, {method:'PUT', body: JSON.stringify(body)});
+      else await api('/kostenstellen/', {method:'POST', body: JSON.stringify(body)});
     } else if (type === 'zg') {
-      const tipo = prompt('Typ (GLEITZEIT/VERWALTUNG/SCHICHT):', 'GLEITZEIT');
-      await api('/zeitgruppen/', {method:'POST', body: JSON.stringify({nombre: name, tipo: tipo||'GLEITZEIT'})});
+      const body = {
+        nombre: name, tipo: document.getElementById('stammTipo').value,
+        hora_minima_inicio: document.getElementById('stammMinStart').value || null,
+      };
+      if (id) await api(`/zeitgruppen/${id}`, {method:'PUT', body: JSON.stringify(body)});
+      else await api('/zeitgruppen/', {method:'POST', body: JSON.stringify(body)});
     }
-    showGlobalAlert('success', '✓ Erstellt');
-    initStammdaten();
-  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
-}
-
-async function editStamm(type, id, name, desc) {
-  const newName = prompt('Name:', name);
-  if (newName === null) return;
-  const newDesc = prompt('Beschreibung:', desc);
-  try {
-    await api(`/abteilungen/${id}`, {method:'PUT', body: JSON.stringify({nombre: newName, descripcion: newDesc})});
-    showGlobalAlert('success', '✓ Aktualisiert');
-    initStammdaten();
-  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
-}
-
-async function editStammKs(id, code, name, color) {
-  const newCode = prompt('Code:', code);
-  if (newCode === null) return;
-  const newName = prompt('Name:', name);
-  const newColor = prompt('Farbe (#hex):', color);
-  try {
-    await api(`/kostenstellen/${id}`, {method:'PUT', body: JSON.stringify({codigo: newCode, nombre: newName||name, color: newColor||null})});
-    showGlobalAlert('success', '✓ Aktualisiert');
-    initStammdaten();
-  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
-}
-
-async function editStammZg(id, name, tipo, minStart, useTurno, weekRot) {
-  const newName = prompt('Name:', name);
-  if (newName === null) return;
-  const newTipo = prompt('Typ (GLEITZEIT/VERWALTUNG/SCHICHT):', tipo);
-  const newMin = prompt('Min. Startzeit (HH:MM, leer=keine):', minStart);
-  try {
-    await api(`/zeitgruppen/${id}`, {method:'PUT', body: JSON.stringify({
-      nombre: newName, tipo: newTipo||tipo,
-      hora_minima_inicio: newMin||null,
-    })});
-    showGlobalAlert('success', '✓ Aktualisiert');
+    closeModal('stammModal');
+    showGlobalAlert('success', id ? '✓ Aktualisiert' : '✓ Erstellt');
     initStammdaten();
   } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
 }
@@ -3294,7 +3381,8 @@ async function runImport(dryRun) {
   formData.append('file', fileInput.files[0]);
   try {
     const url = API + `/import/mitarbeiter?dry_run=${dryRun}`;
-    const r = await fetch(url, {method:'POST', body: formData});
+    const token = getToken();
+    const r = await fetch(url, {method:'POST', body: formData, headers: token ? {'Authorization': 'Bearer ' + token} : {}});
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || data.message || 'Fehler');
 
