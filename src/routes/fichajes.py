@@ -229,18 +229,23 @@ def fichar_salida(data: PunchOut, db: Session = Depends(get_db), _auth=Depends(r
     db.flush()  # necesario con autoflush=False para que _calc_total_minutes vea el segmento cerrado
     minutos_brutos = _calc_total_minutes(db, fichaje.id)
 
+    # Descontar Raucherpausen registradas durante la jornada
+    minutos_rauch = calcular_minutos_rauch_descontables(fichaje.id, db)
+    minutos_netos = max(0, minutos_brutos - minutos_rauch)
+
     # HG-18: auto-calcular pausa ArbZG si no hay descanso manual registrado
+    # Se aplica sobre el neto (ya sin Raucherpausen)
     arbzg_pausa = None
     if not fichaje.minutos_descanso or fichaje.minutos_descanso == 0:
-        pausa_minima = calcular_pausa_minima(minutos_brutos)
+        pausa_minima = calcular_pausa_minima(minutos_netos)
         if pausa_minima > 0:
             fichaje.minutos_descanso = pausa_minima
             arbzg_pausa = pausa_minima
 
-    fichaje.minutos_trabajados = minutos_brutos
+    fichaje.minutos_trabajados = minutos_netos
 
-    # HG-18: warning por jornada máxima
-    arbzg_warning = verificar_jornada_maxima(minutos_brutos)
+    # HG-18: warning por jornada máxima (sobre netos)
+    arbzg_warning = verificar_jornada_maxima(minutos_netos)
 
     db.commit()
 
@@ -262,6 +267,8 @@ def fichar_salida(data: PunchOut, db: Session = Depends(get_db), _auth=Depends(r
             "nombre": f"{emp.nombre} {emp.apellido or ''}".strip(),
         },
         "segmentos": [_segment_dict(s, cc) for s, cc in segmentos],
+        "minutos_brutos": minutos_brutos,
+        "minutos_raucherpause": minutos_rauch,
         "total_minutos": fichaje.minutos_trabajados,
         "total_formateado": f"{fichaje.minutos_trabajados // 60}:{fichaje.minutos_trabajados % 60:02d}",
         "minutos_descanso": fichaje.minutos_descanso,
@@ -337,17 +344,21 @@ def cierre_forzado(
         # Calcular minutos de segmentos cerrados
         minutos_seg = _calc_total_minutes(db, fichaje.id)
 
-        # Aplicar pausa ArbZG si no hay descanso manual
+        # Descontar Raucherpausen registradas
+        minutos_rauch = calcular_minutos_rauch_descontables(fichaje.id, db)
+        minutos_netos = max(0, minutos_seg - minutos_rauch)
+
+        # Aplicar pausa ArbZG sobre el neto (sin Raucherpausen)
         pausa_aplicada = None
         if not fichaje.minutos_descanso or fichaje.minutos_descanso == 0:
-            pausa = calcular_pausa_minima(minutos_cap)
+            pausa = calcular_pausa_minima(minutos_netos)
             if pausa > 0:
                 fichaje.minutos_descanso = pausa
                 pausa_aplicada = pausa
 
         # Cerrar jornada
         fichaje.fecha_salida = ts_cierre
-        fichaje.minutos_trabajados = minutos_seg
+        fichaje.minutos_trabajados = minutos_netos
         fichaje.cierre_forzado = True
         fichaje.updated_at = ahora
 
@@ -359,10 +370,12 @@ def cierre_forzado(
             "fecha_entrada": _utc(fichaje.fecha_entrada),
             "fecha_salida_forzada": _utc(ts_cierre),
             "minutos_transcurridos": minutos_transcurridos,
-            "minutos_trabajados": minutos_seg,
+            "minutos_brutos": minutos_seg,
+            "minutos_raucherpause": minutos_rauch,
+            "minutos_trabajados": minutos_netos,
             "minutos_descanso": fichaje.minutos_descanso,
             "arbzg_pausa_aplicada": pausa_aplicada,
-            "arbzg_warning": verificar_jornada_maxima(minutos_cap),
+            "arbzg_warning": verificar_jornada_maxima(minutos_netos),
         })
 
     db.commit()
