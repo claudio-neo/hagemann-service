@@ -427,6 +427,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     <div class="tab-bar" style="margin-bottom:20px">
       <button class="tab-btn active" onclick="switchUrlaubTab('antraege')" id="utab-antraege">Anträge</button>
       <button class="tab-btn" onclick="switchUrlaubTab('saldo')" id="utab-saldo">Salden</button>
+      <button class="tab-btn" onclick="switchUrlaubTab('krankmeldung')" id="utab-krankmeldung">🏥 Krankmeldung</button>
     </div>
 
     <!-- ANTRÄGE -->
@@ -470,6 +471,45 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
       <div class="card" style="margin-bottom:16px">
         <div class="card-title" style="margin-bottom:12px">Urlaubssaldo pro Mitarbeiter</div>
         <div id="saldoGrid" class="saldo-grid"><div class="loading">Lade Daten</div></div>
+      </div>
+    </div>
+
+    <!-- KRANKMELDUNG -->
+    <div id="urlaubKrankmeldung" class="hidden">
+      <div class="grid-2">
+        <!-- New Krankmeldung form -->
+        <div class="card">
+          <div class="card-title" style="margin-bottom:16px">Neue Krankmeldung erfassen</div>
+          <div class="form-group">
+            <label>Mitarbeiter *</label>
+            <select id="kmEmp" class="form-control">
+              <option value="">— bitte wählen —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Von *</label>
+            <input type="date" id="kmVon" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>Bis (leer = 14 Tage)</label>
+            <input type="date" id="kmBis" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>Notizen</label>
+            <input type="text" id="kmNotas" class="form-control" placeholder="z.B. Grippe, Arztbesuch…">
+          </div>
+          <button class="btn btn-danger" onclick="submitKrankmeldung()" style="width:100%">🏥 Krankmeldung registrieren</button>
+        </div>
+
+        <!-- Active Krankmeldungen -->
+        <div class="card">
+          <div class="card-title" style="margin-bottom:16px">Aktive Krankmeldungen</div>
+          <table>
+            <thead><tr><th>Mitarbeiter</th><th>Von</th><th>Bis</th><th>Tage</th><th>Stv.</th><th></th></tr></thead>
+            <tbody id="kmTbody"><tr><td colspan="6"><div class="loading">Lade Daten…</div></td></tr></tbody>
+          </table>
+          <div id="kmEmpty" class="empty hidden">Keine aktiven Krankmeldungen</div>
+        </div>
       </div>
     </div>
   </div>
@@ -1796,9 +1836,12 @@ function switchUrlaubTab(tab) {
   urlaubTab = tab;
   document.getElementById('utab-antraege').classList.toggle('active', tab === 'antraege');
   document.getElementById('utab-saldo').classList.toggle('active', tab === 'saldo');
+  document.getElementById('utab-krankmeldung').classList.toggle('active', tab === 'krankmeldung');
   document.getElementById('urlaubAntraege').classList.toggle('hidden', tab !== 'antraege');
   document.getElementById('urlaubSaldo').classList.toggle('hidden', tab !== 'saldo');
+  document.getElementById('urlaubKrankmeldung').classList.toggle('hidden', tab !== 'krankmeldung');
   if (tab === 'saldo') loadSaldoGrid();
+  if (tab === 'krankmeldung') initKrankmeldung();
 }
 
 async function loadUrlaub() {
@@ -3405,6 +3448,70 @@ async function loadProtokoll() {
   } catch(e) {
     tbody.innerHTML = `<tr><td colspan="5"><div class="alert alert-error">Fehler: ${e.message}</div></td></tr>`;
   }
+}
+
+// =====================================================================
+// KRANKMELDUNG
+// =====================================================================
+function initKrankmeldung() {
+  const sel = document.getElementById('kmEmp');
+  sel.innerHTML = '<option value="">— bitte wählen —</option>' +
+    employees.map(e => `<option value="${e.id}">#${e.id_nummer} ${e.nombre} ${e.apellido||''}</option>`).join('');
+  document.getElementById('kmVon').value = new Date().toISOString().slice(0,10);
+  document.getElementById('kmBis').value = '';
+  document.getElementById('kmNotas').value = '';
+  loadKrankmeldungen();
+}
+
+async function loadKrankmeldungen() {
+  const tbody = document.getElementById('kmTbody');
+  const empty = document.getElementById('kmEmpty');
+  tbody.innerHTML = '<tr><td colspan="6"><div class="loading">Lade…</div></td></tr>';
+  try {
+    const res = await api('/vacaciones/krankmeldungen?activas=true');
+    const items = res.data || [];
+    empty.classList.toggle('hidden', items.length > 0);
+    if (!items.length) { tbody.innerHTML = ''; return; }
+    tbody.innerHTML = items.map(k => `<tr>
+      <td><b>${k.empleado_nombre||'—'}</b></td>
+      <td>${fmtDate(k.fecha_inicio)}</td>
+      <td>${fmtDate(k.fecha_fin)}</td>
+      <td>${k.dias}</td>
+      <td>${k.stellvertreter_aktiv ? '<span class="badge badge-blue">Stv. aktiv</span>' : '<span class="badge badge-gray">—</span>'}</td>
+      <td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick="beendenKrankmeldung('${k.id}')">Beenden</button></td>
+    </tr>`).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="alert alert-error">${e.message}</div></td></tr>`;
+  }
+}
+
+async function submitKrankmeldung() {
+  const empId = document.getElementById('kmEmp').value;
+  if (!empId) { showGlobalAlert('error', 'Mitarbeiter auswählen'); return; }
+  const body = {
+    empleado_id: empId,
+    fecha_inicio: document.getElementById('kmVon').value,
+    notas: document.getElementById('kmNotas').value || null,
+  };
+  const bis = document.getElementById('kmBis').value;
+  if (bis) body.fecha_fin = bis;
+
+  try {
+    const res = await api('/vacaciones/krankmeldung', {method:'POST', body: JSON.stringify(body)});
+    let msg = `✓ ${res.message} (${res.dias} Tage)`;
+    if (res.delegation) msg += ` — ${res.delegation.message}: ${res.delegation.stellvertreter_name}`;
+    showGlobalAlert('success', msg, 6000);
+    loadKrankmeldungen();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+async function beendenKrankmeldung(id) {
+  if (!confirm('Krankmeldung jetzt beenden?')) return;
+  try {
+    const res = await api(`/vacaciones/krankmeldung/${id}/beenden`, {method:'PUT'});
+    showGlobalAlert('success', `✓ ${res.message} — ${res.dias} Tage`);
+    loadKrankmeldungen();
+  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
 }
 
 // =====================================================================

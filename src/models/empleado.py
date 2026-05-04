@@ -123,6 +123,7 @@ class Empleado(Base):
         "Empleado",
         foreign_keys=[stellvertreter_id],
         primaryjoin="Empleado.stellvertreter_id == Empleado.id",
+        uselist=False,
     )
 
 
