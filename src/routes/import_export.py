@@ -22,7 +22,7 @@ from ..permisos import EMPLOYEES_EDIT, USERS_ADMIN
 
 router = APIRouter(tags=["Import / Export"])
 
-TELEGRAM_BOT_TOKEN = "8631473423:AAFFeU426CXzYdDDQEdvmVhHL48U8cmLGTU"
+TELEGRAM_BOT_TOKEN = "8669567506:AAEqqrgMJPC8716yIldDLqW6yaO_OliJzCE"
 # Bot sends to itself (saved messages) — admin must /start the bot first
 # We'll use a configurable chat_id
 TELEGRAM_BACKUP_CHAT_ID = None  # Set via POST /backup/config
