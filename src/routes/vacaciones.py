@@ -16,6 +16,7 @@ from ..auth import require_permission
 from ..permisos import (
     LEAVE_REQUEST, LEAVE_VIEW_OWN, LEAVE_VIEW_TEAM,
     LEAVE_APPROVE, APPROVALS_LEVEL2, USERS_ADMIN,
+    HOURS_CONTROL_TEAM,
 )
 from ..models.vacaciones import (
     PeriodoVacaciones, SolicitudVacaciones, LimiteVacaciones,
@@ -552,3 +553,177 @@ def crear_limite(data: LimiteCreate, db: Session = Depends(get_db), _auth=Depend
     db.commit()
     db.refresh(limite)
     return {"id": str(limite.id), "message": "Límite creado"}
+
+
+# ========== ENDPOINTS: KRANKMELDUNG ==========
+
+class KrankmeldungCreate(BaseModel):
+    empleado_id: UUID
+    fecha_inicio: date
+    fecha_fin: Optional[date] = None   # None → open-ended (set to +14 days default)
+    notas: Optional[str] = None
+    registrado_por: str = "Schichtführer"
+
+
+@router.post("/krankmeldung", status_code=201)
+def registrar_krankmeldung(
+    data: KrankmeldungCreate,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_permission(HOURS_CONTROL_TEAM)),
+):
+    """
+    Registers a sick leave (Krankmeldung) directly as APROBADA.
+    Bypasses the normal 2-level approval workflow.
+
+    This automatically activates the Stv. Schichtführer delegation
+    if the absent employee has a stellvertreter assigned.
+    """
+    emp = db.query(Empleado).filter(Empleado.id == data.empleado_id).first()
+    if not emp:
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
+
+    fecha_inicio = data.fecha_inicio
+    fecha_fin = data.fecha_fin or (fecha_inicio + timedelta(days=14))
+
+    if fecha_fin < fecha_inicio:
+        raise HTTPException(400, "Enddatum darf nicht vor Startdatum liegen")
+
+    # Check for overlapping sick leaves
+    overlap = db.query(SolicitudVacaciones).filter(
+        SolicitudVacaciones.empleado_id == data.empleado_id,
+        SolicitudVacaciones.tipo_ausencia == TipoAusencia.BAJA_MEDICA,
+        SolicitudVacaciones.estado == EstadoSolicitud.APROBADA,
+        SolicitudVacaciones.fecha_inicio <= fecha_fin,
+        SolicitudVacaciones.fecha_fin >= fecha_inicio,
+    ).first()
+    if overlap:
+        raise HTTPException(
+            409,
+            f"Überschneidung mit bestehender Krankmeldung "
+            f"({overlap.fecha_inicio.isoformat()} — {overlap.fecha_fin.isoformat()})"
+        )
+
+    # Find or create periodo for the year
+    anio = fecha_inicio.year
+    periodo = _get_periodo(db, data.empleado_id, anio)
+    if not periodo:
+        periodo = PeriodoVacaciones(
+            empleado_id=data.empleado_id,
+            anio=anio,
+            dias_contrato=30,
+        )
+        db.add(periodo)
+        db.flush()
+
+    dias = _calcular_dias_laborables(fecha_inicio, fecha_fin, db)
+
+    solicitud = SolicitudVacaciones(
+        empleado_id=data.empleado_id,
+        periodo_id=periodo.id,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        dias=dias,
+        tipo_ausencia=TipoAusencia.BAJA_MEDICA,
+        estado=EstadoSolicitud.APROBADA,
+        aprobado_por_nivel1=data.registrado_por,
+        fecha_nivel1=datetime.utcnow(),
+        aprobado_por_nivel2=data.registrado_por,
+        fecha_nivel2=datetime.utcnow(),
+        notas=data.notas or "Krankmeldung",
+    )
+    db.add(solicitud)
+    db.commit()
+    db.refresh(solicitud)
+
+    # Info about delegation activation
+    delegation_info = None
+    if emp.stellvertreter_id:
+        stv = db.query(Empleado).filter(Empleado.id == emp.stellvertreter_id).first()
+        delegation_info = {
+            "stellvertreter_id": str(emp.stellvertreter_id),
+            "stellvertreter_name": f"{stv.nombre} {stv.apellido or ''}".strip() if stv else None,
+            "message": "Stellvertretung automatisch aktiviert",
+        }
+
+    return {
+        "id": str(solicitud.id),
+        "message": f"Krankmeldung für {emp.nombre} {emp.apellido or ''} registriert",
+        "fecha_inicio": fecha_inicio.isoformat(),
+        "fecha_fin": fecha_fin.isoformat(),
+        "dias": dias,
+        "delegation": delegation_info,
+    }
+
+
+@router.put("/krankmeldung/{solicitud_id}/beenden")
+def beenden_krankmeldung(
+    solicitud_id: UUID,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_permission(HOURS_CONTROL_TEAM)),
+):
+    """
+    Ends a sick leave by setting fecha_fin to today.
+    Recalculates working days accordingly.
+    """
+    sol = db.query(SolicitudVacaciones).filter(
+        SolicitudVacaciones.id == solicitud_id,
+        SolicitudVacaciones.tipo_ausencia == TipoAusencia.BAJA_MEDICA,
+        SolicitudVacaciones.estado == EstadoSolicitud.APROBADA,
+    ).first()
+    if not sol:
+        raise HTTPException(404, "Krankmeldung nicht gefunden")
+
+    today = date.today()
+    if today < sol.fecha_inicio:
+        raise HTTPException(400, "Krankmeldung hat noch nicht begonnen")
+
+    sol.fecha_fin = today
+    sol.dias = _calcular_dias_laborables(sol.fecha_inicio, today, db)
+    sol.updated_at = datetime.utcnow()
+    sol.notas = (sol.notas or "") + f" | Beendet am {today.isoformat()}"
+    db.commit()
+
+    return {
+        "id": str(sol.id),
+        "message": "Krankmeldung beendet",
+        "fecha_fin": today.isoformat(),
+        "dias": sol.dias,
+    }
+
+
+@router.get("/krankmeldungen")
+def listar_krankmeldungen(
+    activas: bool = Query(True, description="Nur aktive (Enddatum >= heute)"),
+    db: Session = Depends(get_db),
+    _auth=Depends(require_permission(HOURS_CONTROL_TEAM)),
+):
+    """Lists sick leaves, optionally filtered to active only."""
+    query = (
+        db.query(SolicitudVacaciones)
+        .options(joinedload(SolicitudVacaciones.empleado))
+        .filter(
+            SolicitudVacaciones.tipo_ausencia == TipoAusencia.BAJA_MEDICA,
+            SolicitudVacaciones.estado == EstadoSolicitud.APROBADA,
+        )
+    )
+    if activas:
+        today = date.today()
+        query = query.filter(SolicitudVacaciones.fecha_fin >= today)
+
+    krankmeldungen = query.order_by(SolicitudVacaciones.fecha_inicio.desc()).all()
+
+    return {
+        "data": [
+            {
+                **_solicitud_dict(s),
+                "stellvertreter_aktiv": _has_active_deputy(s.empleado),
+            }
+            for s in krankmeldungen
+        ],
+        "total": len(krankmeldungen),
+    }
+
+
+def _has_active_deputy(emp) -> bool:
+    """Returns True if the employee has a stellvertreter assigned."""
+    return bool(emp and emp.stellvertreter_id)
