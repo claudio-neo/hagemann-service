@@ -2187,19 +2187,14 @@ async function loadUrlaub() {
   }
 
   try {
-    const res = await api(`/vacaciones/solicitudes?anio=${year}`);
-    allUrlaub = res.data || [];
-
-    // Benutzer: filter to own employee only
+    let res;
     if (isBasicUser() && currentUser.employee_id) {
-      const myEmp = employees.find(e => e.id === currentUser.employee_id);
-      if (myEmp) {
-        const myName = `${myEmp.nombre} ${myEmp.apellido||''}`.trim();
-        allUrlaub = allUrlaub.filter(u =>
-          u.empleado_id === currentUser.employee_id || u.empleado_nombre === myName
-        );
-      }
+      // Benutzer: usa endpoint propio (solo leave:view_own necesario)
+      res = await api(`/vacaciones/mis-solicitudes/${currentUser.employee_id}?anio=${year}`);
+    } else {
+      res = await api(`/vacaciones/solicitudes?anio=${year}`);
     }
+    allUrlaub = res.data || [];
 
     const pending = allUrlaub.filter(u => u.estado === 'PENDIENTE').length;
     document.getElementById('urlaubPending').textContent = `${pending} ausstehend`;
