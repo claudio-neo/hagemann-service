@@ -124,6 +124,7 @@ def seed_usuarios(db: Session):
         {"nick": "schicht1", "email": "schicht1@hagemann.de","password": "schicht123","role": ROLE_SCHICHTFUEHRER},
         {"nick": "stv1",     "email": "stv1@hagemann.de",   "password": "stv123",    "role": ROLE_STV_SCHICHTFUEHRER},
         {"nick": "emp1",     "email": "emp1@hagemann.de",   "password": "emp123",    "role": ROLE_BENUTZER},
+        {"nick": "Test",     "email": None,                  "password": "123456",    "role": ROLE_BENUTZER},
     ]
     for s in seeds:
         exists = db.query(Usuario).filter(
