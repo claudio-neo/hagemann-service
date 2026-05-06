@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hagemann — NFC Zuordnung</title>
+<style>
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+  height:100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  background: #f0f4f8; color: #1e293b;
+}
+:root {
+  --blue: #2563eb; --green: #16a34a; --red: #dc2626;
+  --amber: #d97706; --border: #e2e8f0; --muted: #64748b;
+}
+
+/* Layout */
+.container { max-width:700px; margin:0 auto; padding:24px 16px; }
+h1 { font-size:24px; margin-bottom:4px; }
+.subtitle { color:var(--muted); margin-bottom:24px; }
+
+/* Cards */
+.card {
+  background:#fff; border-radius:12px; border:1px solid var(--border);
+  padding:24px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.06);
+}
+.card h2 { font-size:18px; margin-bottom:12px; }
+
+/* NFC visual */
+.nfc-area {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-height:200px; border:3px dashed var(--border); border-radius:16px;
+  transition: all .3s; cursor:pointer; position:relative;
+}
+.nfc-area.scanning { border-color:var(--blue); background:rgba(37,99,235,.04); }
+.nfc-area.success  { border-color:var(--green); background:rgba(22,163,74,.06); }
+.nfc-area.error    { border-color:var(--red); background:rgba(220,38,38,.06); }
+.nfc-icon { font-size:64px; margin-bottom:12px; }
+.nfc-status { font-size:16px; font-weight:600; text-align:center; }
+.nfc-detail { font-size:13px; color:var(--muted); margin-top:6px; text-align:center; }
+.nfc-uid {
+  font-family:'SF Mono',Consolas,monospace; font-size:20px; font-weight:700;
+  background:#f1f5f9; padding:8px 20px; border-radius:8px; margin-top:12px;
+  letter-spacing:2px;
+}
+
+/* Buttons */
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  padding:10px 20px; border-radius:8px; font-size:14px; font-weight:600;
+  border:none; cursor:pointer; transition:opacity .15s;
+}
+.btn:hover { opacity:.85; }
+.btn:disabled { opacity:.4; cursor:not-allowed; }
+.btn-blue   { background:var(--blue); color:#fff; }
+.btn-green  { background:var(--green); color:#fff; }
+.btn-red    { background:var(--red); color:#fff; }
+.btn-outline{ background:none; border:1px solid var(--border); color:#1e293b; }
+
+/* Employee selector */
+.emp-select {
+  width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border);
+  font-size:15px; background:#fff; margin-bottom:12px;
+}
+
+/* Result / status badges */
+.badge {
+  display:inline-block; padding:3px 10px; border-radius:20px;
+  font-size:12px; font-weight:600;
+}
+.badge-green  { background:#dcfce7; color:#166534; }
+.badge-amber  { background:#fef3c7; color:#92400e; }
+.badge-red    { background:#fee2e2; color:#991b1b; }
+.badge-blue   { background:#dbeafe; color:#1e40af; }
+
+/* Table */
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th { text-align:left; font-weight:600; padding:8px 10px; border-bottom:2px solid var(--border); }
+td { padding:8px 10px; border-bottom:1px solid #f1f5f9; }
+
+/* Alert */
+.alert {
+  padding:12px 16px; border-radius:8px; font-size:14px; margin-bottom:12px;
+}
+.alert-success { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+.alert-error   { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
+.alert-warn    { background:#fef3c7; color:#92400e; border:1px solid #fde68a; }
+.alert-info    { background:#dbeafe; color:#1e40af; border:1px solid #bfdbfe; }
+
+/* Not supported banner */
+.not-supported {
+  text-align:center; padding:40px 20px;
+}
+.not-supported h2 { color:var(--red); margin-bottom:12px; }
+
+/* Login overlay */
+.login-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex;
+  align-items:center; justify-content:center; z-index:999;
+}
+.login-box {
+  background:#fff; padding:32px; border-radius:16px; width:90%; max-width:360px;
+  text-align:center;
+}
+.login-box h2 { margin-bottom:16px; }
+.login-box input {
+  width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px;
+  font-size:15px; margin-bottom:10px;
+}
+.login-error { color:var(--red); font-size:13px; display:none; margin-bottom:8px; }
+
+/* Log */
+.log-wrap { max-height:300px; overflow-y:auto; }
+
+/* Hidden */
+.hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginOverlay" class="login-overlay">
+  <div class="login-box">
+    <h2>NFC-Zuordnung</h2>
+    <p style="color:var(--muted);margin-bottom:16px;font-size:14px">Nur Administratoren</p>
+    <input type="text" id="loginUser" placeholder="Benutzername" autocomplete="username">
+    <input type="password" id="loginPass" placeholder="Passwort" autocomplete="current-password"
+           onkeydown="if(event.key==='Enter')doLogin()">
+    <div id="loginError" class="login-error">Benutzername oder Passwort falsch</div>
+    <button class="btn btn-blue" style="width:100%" onclick="doLogin()">Anmelden</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+    <div>
+      <h1>NFC-Zuordnung</h1>
+      <p class="subtitle">NFC-Tag einem Mitarbeiter zuweisen</p>
+    </div>
+    <a href="admin.html" class="btn btn-outline">Zur Verwaltung</a>
+  </div>
+
+  <!-- Browser support check -->
+  <div id="notSupported" class="card not-supported hidden">
+    <h2>Web NFC nicht verfügbar</h2>
+    <p style="margin-bottom:12px">Dieser Browser unterstützt kein Web NFC.</p>
+    <div class="alert alert-info">
+      <b>Voraussetzungen:</b><br>
+      - Google Chrome auf Android<br>
+      - HTTPS-Verbindung<br>
+      - NFC im Gerät aktiviert
+    </div>
+    <div style="margin-top:16px">
+      <p style="font-size:14px;color:var(--muted);margin-bottom:8px">Alternativ: Tag-UID manuell eingeben</p>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="manualUid" class="emp-select" style="margin:0" placeholder="z.B. 04:A3:2B:1C:7E:00:90">
+        <button class="btn btn-blue" onclick="useManualUid()">Verwenden</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NFC Reader area -->
+  <div id="nfcCard" class="card">
+    <div id="nfcArea" class="nfc-area" onclick="startScan()">
+      <div class="nfc-icon" id="nfcIcon">📡</div>
+      <div class="nfc-status" id="nfcStatus">NFC-Tag scannen</div>
+      <div class="nfc-detail" id="nfcDetail">Hier tippen, um den Scanner zu starten</div>
+      <div class="nfc-uid hidden" id="nfcUid"></div>
+    </div>
+  </div>
+
+  <!-- Tag detected — assignment panel -->
+  <div id="assignPanel" class="card hidden">
+    <h2>Tag zuweisen</h2>
+    <div id="tagCurrentOwner" class="alert alert-warn hidden" style="margin-bottom:12px"></div>
+    <div style="margin-bottom:12px">
+      <label style="font-weight:600;display:block;margin-bottom:4px">Mitarbeiter auswählen</label>
+      <select id="empSelect" class="emp-select">
+        <option value="">— Mitarbeiter wählen —</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="btnAssign" class="btn btn-green" onclick="assignTag()" disabled>Zuweisen</button>
+      <button class="btn btn-outline" onclick="resetScan()">Neuen Tag scannen</button>
+    </div>
+    <div id="assignResult" style="margin-top:12px"></div>
+  </div>
+
+  <!-- Assigned tags table -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2>Aktuelle NFC-Zuordnungen</h2>
+      <button class="btn btn-outline" onclick="loadEmployees()" style="padding:6px 12px;font-size:13px">Aktualisieren</button>
+    </div>
+    <div class="log-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Name</th><th>NFC-Tag</th><th>Aktion</th></tr>
+        </thead>
+        <tbody id="nfcTableBody">
+          <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Lade...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   AUTH
+══════════════════════════════════════════════════════════════ */
+const basePath = window.location.pathname.replace(/\/static.*$/, '').replace(/\/+$/, '');
+const API = window.location.origin + basePath + '/api/v1';
+
+function getToken() { return localStorage.getItem('hg_token'); }
+function setToken(t) { localStorage.setItem('hg_token', t); }
+
+async function doLogin() {
+  const nick = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  document.getElementById('loginError').style.display = 'none';
+  try {
+    const r = await fetch(API + '/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: nick, password: pass}),
+    });
+    if (!r.ok) { document.getElementById('loginError').style.display = 'block'; return; }
+    const data = await r.json();
+    setToken(data.access_token);
+    document.getElementById('loginOverlay').style.display = 'none';
+    init();
+  } catch(e) { document.getElementById('loginError').style.display = 'block'; }
+}
+
+async function apiFetch(path, opts = {}) {
+  const token = getToken();
+  const r = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json', ...(token ? {'Authorization': 'Bearer ' + token} : {}) },
+    ...opts
+  });
+  if (r.status === 401) { localStorage.removeItem('hg_token'); location.reload(); }
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: r.statusText }));
+    let msg = err.detail || `HTTP ${r.status}`;
+    if (Array.isArray(msg)) msg = msg.map(e => e.msg || JSON.stringify(e)).join('; ');
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+  return r.json();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════════════════ */
+let employees = [];
+let scannedUid = null;
+let nfcReader = null;
+let scanning = false;
+
+/* ══════════════════════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════════════════════ */
+function init() {
+  loadEmployees();
+  checkNfcSupport();
+}
+
+function checkNfcSupport() {
+  if (!('NDEFReader' in window)) {
+    document.getElementById('notSupported').classList.remove('hidden');
+    // Keep NFC card visible but change its message
+    const area = document.getElementById('nfcArea');
+    area.onclick = null;
+    document.getElementById('nfcIcon').textContent = '⚠️';
+    document.getElementById('nfcStatus').textContent = 'Web NFC nicht verfügbar';
+    document.getElementById('nfcDetail').textContent = 'UID manuell eingeben (siehe oben)';
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EMPLOYEES
+══════════════════════════════════════════════════════════════ */
+async function loadEmployees() {
+  try {
+    const res = await apiFetch('/empleados/?limit=500');
+    employees = (res.data || res || []).filter(e => e.activo !== false);
+    renderSelect();
+    renderTable();
+  } catch(e) {
+    document.getElementById('nfcTableBody').innerHTML =
+      `<tr><td colspan="4"><div class="alert alert-error">Fehler: ${e.message}</div></td></tr>`;
+  }
+}
+
+function renderSelect() {
+  const sel = document.getElementById('empSelect');
+  sel.innerHTML = '<option value="">— Mitarbeiter wählen —</option>' +
+    employees
+      .sort((a,b) => (a.nombre||'').localeCompare(b.nombre||''))
+      .map(e => {
+        const name = `${e.nombre} ${e.apellido||''}`.trim();
+        const tag = e.nfc_tag ? ` [NFC: ${e.nfc_tag}]` : '';
+        return `<option value="${e.id}">#${e.id_nummer} ${name}${tag}</option>`;
+      }).join('');
+  sel.onchange = () => {
+    document.getElementById('btnAssign').disabled = !sel.value || !scannedUid;
+  };
+}
+
+function renderTable() {
+  const tbody = document.getElementById('nfcTableBody');
+  const withTag = employees.filter(e => e.nfc_tag);
+  const withoutTag = employees.filter(e => !e.nfc_tag);
+
+  if (employees.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Keine Mitarbeiter gefunden</td></tr>';
+    return;
+  }
+
+  let html = '';
+  // First: employees WITH NFC tags
+  for (const e of withTag) {
+    const name = `${e.nombre} ${e.apellido||''}`.trim();
+    html += `<tr>
+      <td>${e.id_nummer}</td>
+      <td>${name}</td>
+      <td><code style="background:#dcfce7;padding:2px 8px;border-radius:4px;font-size:12px">${e.nfc_tag}</code></td>
+      <td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick="removeTag('${e.id}','${name}')">Entfernen</button></td>
+    </tr>`;
+  }
+  // Then: employees without tags
+  for (const e of withoutTag) {
+    const name = `${e.nombre} ${e.apellido||''}`.trim();
+    html += `<tr style="opacity:.6">
+      <td>${e.id_nummer}</td>
+      <td>${name}</td>
+      <td style="color:var(--muted);font-size:13px">— kein Tag —</td>
+      <td></td>
+    </tr>`;
+  }
+  tbody.innerHTML = html;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   NFC SCANNING
+══════════════════════════════════════════════════════════════ */
+async function startScan() {
+  if (scanning) return;
+  if (!('NDEFReader' in window)) return;
+
+  const area = document.getElementById('nfcArea');
+  const icon = document.getElementById('nfcIcon');
+  const status = document.getElementById('nfcStatus');
+  const detail = document.getElementById('nfcDetail');
+  const uidEl = document.getElementById('nfcUid');
+
+  try {
+    nfcReader = new NDEFReader();
+    await nfcReader.scan();
+    scanning = true;
+
+    area.className = 'nfc-area scanning';
+    icon.textContent = '📱';
+    status.textContent = 'Warte auf NFC-Tag...';
+    detail.textContent = 'Tag jetzt an das Gerät halten';
+    uidEl.classList.add('hidden');
+
+    nfcReader.onreading = (event) => {
+      const uid = event.serialNumber || 'unbekannt';
+      onTagDetected(uid);
+    };
+
+    nfcReader.onreadingerror = () => {
+      area.className = 'nfc-area error';
+      icon.textContent = '❌';
+      status.textContent = 'Lesefehler';
+      detail.textContent = 'Tag erneut versuchen';
+      setTimeout(() => {
+        if (scanning) {
+          area.className = 'nfc-area scanning';
+          icon.textContent = '📱';
+          status.textContent = 'Warte auf NFC-Tag...';
+          detail.textContent = 'Tag jetzt an das Gerät halten';
+        }
+      }, 2000);
+    };
+  } catch(e) {
+    area.className = 'nfc-area error';
+    icon.textContent = '❌';
+    status.textContent = 'NFC-Fehler';
+    detail.textContent = e.message;
+    scanning = false;
+  }
+}
+
+function onTagDetected(uid) {
+  scanning = false;
+  scannedUid = uid;
+
+  const area = document.getElementById('nfcArea');
+  const icon = document.getElementById('nfcIcon');
+  const status = document.getElementById('nfcStatus');
+  const detail = document.getElementById('nfcDetail');
+  const uidEl = document.getElementById('nfcUid');
+
+  area.className = 'nfc-area success';
+  icon.textContent = '✅';
+  status.textContent = 'Tag erkannt!';
+  uidEl.textContent = uid;
+  uidEl.classList.remove('hidden');
+
+  // Check if this tag is already assigned
+  const existing = employees.find(e => e.nfc_tag === uid);
+  const ownerEl = document.getElementById('tagCurrentOwner');
+  if (existing) {
+    const name = `${existing.nombre} ${existing.apellido||''}`.trim();
+    ownerEl.innerHTML = `Dieser Tag ist bereits zugewiesen an: <b>${name}</b> (#${existing.id_nummer}).<br>Bei Neuzuweisung wird der alte Eintrag ersetzt.`;
+    ownerEl.classList.remove('hidden');
+    detail.textContent = `Aktuell: ${name}`;
+  } else {
+    ownerEl.classList.add('hidden');
+    detail.textContent = 'Neuer Tag — noch nicht zugewiesen';
+  }
+
+  // Show assignment panel
+  document.getElementById('assignPanel').classList.remove('hidden');
+  document.getElementById('assignResult').innerHTML = '';
+  document.getElementById('btnAssign').disabled = !document.getElementById('empSelect').value;
+}
+
+function useManualUid() {
+  const input = document.getElementById('manualUid');
+  const uid = input.value.trim();
+  if (!uid) return;
+  onTagDetected(uid);
+}
+
+function resetScan() {
+  scannedUid = null;
+  scanning = false;
+
+  const area = document.getElementById('nfcArea');
+  area.className = 'nfc-area';
+  document.getElementById('nfcIcon').textContent = '📡';
+  document.getElementById('nfcStatus').textContent = 'NFC-Tag scannen';
+  document.getElementById('nfcDetail').textContent = 'Hier tippen, um den Scanner zu starten';
+  document.getElementById('nfcUid').classList.add('hidden');
+  document.getElementById('assignPanel').classList.add('hidden');
+  document.getElementById('tagCurrentOwner').classList.add('hidden');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ASSIGN / REMOVE TAG
+══════════════════════════════════════════════════════════════ */
+async function assignTag() {
+  const empId = document.getElementById('empSelect').value;
+  if (!empId || !scannedUid) return;
+
+  const emp = employees.find(e => String(e.id) === empId);
+  const empName = emp ? `${emp.nombre} ${emp.apellido||''}`.trim() : empId;
+  const resultEl = document.getElementById('assignResult');
+
+  // If another employee has this tag, remove it first
+  const oldOwner = employees.find(e => e.nfc_tag === scannedUid && String(e.id) !== empId);
+  try {
+    if (oldOwner) {
+      await apiFetch(`/empleados/${oldOwner.id}/nfc`, {
+        method: 'PUT',
+        body: JSON.stringify({ id_nfc: '', motivo: `Tag übertragen an ${empName}` }),
+      });
+    }
+
+    await apiFetch(`/empleados/${empId}/nfc`, {
+      method: 'PUT',
+      body: JSON.stringify({ id_nfc: scannedUid, motivo: 'NFC-Zuordnung via NFC-Tool' }),
+    });
+
+    resultEl.innerHTML = `<div class="alert alert-success">Tag <b>${scannedUid}</b> erfolgreich zugewiesen an <b>${empName}</b></div>`;
+    await loadEmployees();
+
+    // Auto-reset after 3s
+    setTimeout(() => resetScan(), 3000);
+  } catch(e) {
+    resultEl.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
+  }
+}
+
+async function removeTag(empId, empName) {
+  if (!confirm(`NFC-Tag von ${empName} wirklich entfernen?`)) return;
+  try {
+    await apiFetch(`/empleados/${empId}/nfc`, {
+      method: 'PUT',
+      body: JSON.stringify({ id_nfc: '', motivo: 'Tag entfernt via NFC-Tool' }),
+    });
+    await loadEmployees();
+  } catch(e) {
+    alert('Fehler: ' + e.message);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   STARTUP
+══════════════════════════════════════════════════════════════ */
+if (getToken()) {
+  document.getElementById('loginOverlay').style.display = 'none';
+  init();
+}
+</script>
+</body>
+</html>
