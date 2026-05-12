@@ -204,6 +204,27 @@ header {
   background: rgba(16,185,129,0.06);
 }
 .emp-tile:not(.present):hover { border-color: var(--blue); background: rgba(59,130,246,.06); }
+/* Read-only tiles (RFID-only selection) — no interactivity */
+.emp-tile.readonly { cursor: default; }
+.emp-tile.readonly:active { transform: none; }
+.emp-tile.readonly:not(.present):hover { border-color: #e2e8f0; background: #ffffff; }
+.emp-tile.readonly.no-tag { opacity: 0.55; }
+/* Highlight animation when RFID matches a tile */
+.emp-tile.rfid-flash {
+  animation: rfidFlash 0.8s ease-out;
+}
+@keyframes rfidFlash {
+  0%   { border-color: var(--blue); background: rgba(59,130,246,.5);  transform: scale(1.08); box-shadow: 0 0 30px rgba(59,130,246,.6); }
+  100% { border-color: #e2e8f0;     background: #ffffff;               transform: scale(1);    box-shadow: none; }
+}
+/* RFID prompt states */
+#rfidPrompt.success { background: linear-gradient(135deg,#16a34a,#15803d) !important; }
+#rfidPrompt.error   { background: linear-gradient(135deg,#dc2626,#b91c1c) !important; }
+#rfidPrompt.scanning .rfid-icon { animation: pulse 1.2s infinite; }
+@keyframes pulse {
+  0%,100% { transform: scale(1); opacity: 1; }
+  50%     { transform: scale(1.15); opacity: 0.7; }
+}
 .emp-status-dot {
   position: absolute;
   top: 10px; right: 10px;
@@ -670,11 +691,23 @@ header {
 
   <!-- ═══════════════ SCREEN 1: MITARBEITER-AUSWAHL ═══════════════ -->
   <div class="screen" id="screen-employees">
-    <div style="padding: 16px 20px 8px; flex-shrink:0;">
+    <!-- RFID prompt banner -->
+    <div id="rfidPrompt" style="padding:18px 20px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;display:flex;align-items:center;justify-content:center;gap:16px;flex-shrink:0;box-shadow:0 2px 8px rgba(37,99,235,.25)">
+      <div style="font-size:36px">📡</div>
+      <div style="text-align:center">
+        <div id="rfidPromptTitle" style="font-size:18px;font-weight:700;letter-spacing:.3px">RFID-Karte vor das Lesegerät halten</div>
+        <div id="rfidPromptSub" style="font-size:13px;opacity:.85;margin-top:2px">Warten auf Tag…</div>
+      </div>
+    </div>
+    <!-- Hidden input that captures RFID keyboard emulation -->
+    <input type="text" id="rfidCapture" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+           style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;left:-100px"
+           onkeydown="onTerminalRfidKey(event)">
+    <div style="padding: 12px 20px 8px; flex-shrink:0;">
       <div class="search-bar">
         <span class="search-icon">🔍</span>
         <input type="text" id="searchInput" placeholder="Mitarbeiter suchen…"
-               oninput="filterEmployees(this.value)">
+               oninput="filterEmployees(this.value)" onblur="refocusRfid()">
       </div>
     </div>
     <div class="employee-scroll" style="padding: 0 20px 12px;">
@@ -1028,6 +1061,7 @@ async function loadData(silent = false) {
     openFichajes = openRes.data || openRes || [];
     renderEmployeeGrid();
     updateBadge();
+    if (typeof refocusRfid === 'function') setTimeout(refocusRfid, 100);
   } catch (e) {
     showError('Verbindungsfehler: ' + e.message);
     if (!silent) {
@@ -1080,12 +1114,14 @@ function renderEmployeeGrid() {
   grid.innerHTML = sorted.map(e => {
     const fich = getOpenFichajeForEmp(e.id);
     const isPresent = !!fich;
+    const hasTag = !!e.nfc_tag;
     const deptName = fich && fich.centro_coste_actual ? fich.centro_coste_actual.nombre : '';
-    return `<div class="emp-tile ${isPresent ? 'present' : ''}" onclick="selectEmployee('${e.id}')">
+    return `<div class="emp-tile readonly ${isPresent ? 'present' : ''} ${!hasTag ? 'no-tag' : ''}" data-emp-id="${e.id}">
       <div class="emp-status-dot ${isPresent ? 'green' : 'gray'}"></div>
       <div class="emp-nr">${e.id_nummer || e.id}</div>
       <div class="emp-name">${escHtml(fullName(e))}</div>
       ${isPresent && deptName ? `<div class="emp-dept">● ${escHtml(deptName)}</div>` : ''}
+      ${!hasTag ? '<div style="position:absolute;top:4px;right:6px;font-size:11px;color:#dc2626" title="Kein RFID-Tag">⚠</div>' : ''}
     </div>`;
   }).join('');
 }
@@ -1100,6 +1136,98 @@ function escHtml(s) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+/* ══════════════════════════════════════════════════════════════
+   RFID CAPTURE (HID keyboard emulation)
+══════════════════════════════════════════════════════════════ */
+let _rfidBuffer = '';
+let _rfidLastKey = 0;
+
+function isOnEmployeeScreen() {
+  return !document.getElementById('screen-employees').classList.contains('hidden');
+}
+
+function refocusRfid() {
+  if (!isOnEmployeeScreen()) return;
+  // Don't steal focus from search input if user is actively typing there
+  const search = document.getElementById('searchInput');
+  if (document.activeElement === search) return;
+  const rfid = document.getElementById('rfidCapture');
+  if (rfid) rfid.focus();
+}
+
+function onTerminalRfidKey(event) {
+  if (!isOnEmployeeScreen()) return;
+
+  const now = Date.now();
+  if (now - _rfidLastKey > 500) _rfidBuffer = '';
+  _rfidLastKey = now;
+
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    const uid = _rfidBuffer.trim();
+    _rfidBuffer = '';
+    event.target.value = '';
+    if (uid.length >= 4) processRfidTag(uid);
+    return;
+  }
+
+  if (event.key.length === 1 && /[a-zA-Z0-9:\-_]/.test(event.key)) {
+    _rfidBuffer += event.key;
+  }
+}
+
+function setRfidPromptState(state, title, sub) {
+  const banner = document.getElementById('rfidPrompt');
+  banner.classList.remove('success', 'error', 'scanning');
+  if (state) banner.classList.add(state);
+  if (title) document.getElementById('rfidPromptTitle').textContent = title;
+  if (sub)   document.getElementById('rfidPromptSub').textContent = sub;
+}
+
+function processRfidTag(uid) {
+  // Find employee by nfc_tag — try exact match first, then case-insensitive
+  let emp = employees.find(e => e.nfc_tag === uid);
+  if (!emp) emp = employees.find(e => (e.nfc_tag || '').toLowerCase() === uid.toLowerCase());
+
+  if (!emp) {
+    setRfidPromptState('error', '❌ Tag nicht erkannt', `UID: ${uid} — nicht zugewiesen`);
+    if (typeof _ilog !== 'undefined') _ilog.push('error', 'rfid_unknown', `uid=${uid}`);
+    setTimeout(() => setRfidPromptState(null, 'RFID-Karte vor das Lesegerät halten', 'Warten auf Tag…'), 2500);
+    return;
+  }
+
+  // Visual feedback: flash the matched tile + green banner
+  setRfidPromptState('success', `✓ ${fullName(emp)}`, `#${emp.id_nummer || ''}`);
+  const tile = document.querySelector(`.emp-tile[data-emp-id="${emp.id}"]`);
+  if (tile) {
+    tile.classList.add('rfid-flash');
+    tile.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  if (typeof _ilog !== 'undefined') _ilog.push('select', fullName(emp), `via_rfid uid=${uid}`);
+
+  // Trigger selection after a brief delay so user sees the confirmation
+  setTimeout(() => {
+    selectEmployee(emp.id);
+    // Reset banner for next time
+    setRfidPromptState(null, 'RFID-Karte vor das Lesegerät halten', 'Warten auf Tag…');
+  }, 600);
+}
+
+// Keep RFID input focused whenever on the employees screen
+document.addEventListener('click', (e) => {
+  if (!isOnEmployeeScreen()) return;
+  // Don't refocus if user clicks the search field or an interactive child of it
+  if (e.target.closest('#searchInput')) return;
+  setTimeout(refocusRfid, 50);
+});
+
+// Refocus when window gets focus
+window.addEventListener('focus', refocusRfid);
+window.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refocusRfid();
+});
 
 /* ══════════════════════════════════════════════════════════════
    EMPLOYEE SELECTION
@@ -1677,7 +1805,12 @@ const _origShowScreen = _showScreen;
 _showScreen = function(id) {
   _ilog.screen = id;
   _ilog.push('navigate', id);
-  return _origShowScreen.apply(this, arguments);
+  const result = _origShowScreen.apply(this, arguments);
+  // Re-focus RFID input when returning to employee screen
+  if (id === 'screen-employees') {
+    setTimeout(refocusRfid, 100);
+  }
+  return result;
 };
 
 // Track button clicks (delegated)
