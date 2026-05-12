@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hagemann — NFC Zuordnung</title>
+<title>Hagemann — RFID/NFC Zuordnung</title>
 <style>
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 html, body {
@@ -138,38 +138,46 @@ td { padding:8px 10px; border-bottom:1px solid #f1f5f9; }
   <!-- Header -->
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
     <div>
-      <h1>NFC-Zuordnung</h1>
-      <p class="subtitle">NFC-Tag einem Mitarbeiter zuweisen</p>
+      <h1>RFID/NFC-Zuordnung</h1>
+      <p class="subtitle">Tag einem Mitarbeiter zuweisen</p>
     </div>
     <a href="admin.html" class="btn btn-outline">Zur Verwaltung</a>
   </div>
 
-  <!-- Browser support check -->
-  <div id="notSupported" class="card not-supported hidden">
-    <h2>Web NFC nicht verfügbar</h2>
-    <p style="margin-bottom:12px">Dieser Browser unterstützt kein Web NFC.</p>
-    <div class="alert alert-info">
-      <b>Voraussetzungen:</b><br>
-      - Google Chrome auf Android<br>
-      - HTTPS-Verbindung<br>
-      - NFC im Gerät aktiviert
-    </div>
-    <div style="margin-top:16px">
-      <p style="font-size:14px;color:var(--muted);margin-bottom:8px">Alternativ: Tag-UID manuell eingeben</p>
-      <div style="display:flex;gap:8px">
-        <input type="text" id="manualUid" class="emp-select" style="margin:0" placeholder="z.B. 04:A3:2B:1C:7E:00:90">
-        <button class="btn btn-blue" onclick="useManualUid()">Verwenden</button>
-      </div>
+  <!-- Mode selector -->
+  <div class="card" style="padding:12px 16px;margin-bottom:12px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span style="font-weight:600;font-size:14px">Lese-Modus:</span>
+      <button id="modeRfid" class="btn btn-blue" style="padding:6px 14px;font-size:13px" onclick="setMode('rfid')">⌨ RFID-Lesegerät</button>
+      <button id="modeNfc"  class="btn btn-outline" style="padding:6px 14px;font-size:13px" onclick="setMode('nfc')">📱 Web NFC (Android)</button>
+      <button id="modeManual" class="btn btn-outline" style="padding:6px 14px;font-size:13px" onclick="setMode('manual')">✎ Manuell</button>
     </div>
   </div>
 
-  <!-- NFC Reader area -->
+  <!-- Reader area -->
   <div id="nfcCard" class="card">
-    <div id="nfcArea" class="nfc-area" onclick="startScan()">
+    <div id="nfcArea" class="nfc-area">
       <div class="nfc-icon" id="nfcIcon">📡</div>
-      <div class="nfc-status" id="nfcStatus">NFC-Tag scannen</div>
-      <div class="nfc-detail" id="nfcDetail">Hier tippen, um den Scanner zu starten</div>
+      <div class="nfc-status" id="nfcStatus">Bereit für RFID-Tag</div>
+      <div class="nfc-detail" id="nfcDetail">Tag an das Lesegerät halten</div>
       <div class="nfc-uid hidden" id="nfcUid"></div>
+
+      <!-- Hidden input that captures RFID HID keyboard emulation -->
+      <input type="text" id="rfidInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+             style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px"
+             onkeydown="onRfidKey(event)">
+
+      <!-- Manual input panel -->
+      <div id="manualPanel" class="hidden" style="width:100%;max-width:400px;margin-top:16px">
+        <div style="display:flex;gap:8px">
+          <input type="text" id="manualUid" class="emp-select" style="margin:0" placeholder="UID eingeben oder einfügen"
+                 onkeydown="if(event.key==='Enter')useManualUid()">
+          <button class="btn btn-blue" onclick="useManualUid()">OK</button>
+        </div>
+      </div>
+
+      <!-- Start button for Web NFC mode -->
+      <button id="nfcStartBtn" class="btn btn-blue hidden" style="margin-top:16px" onclick="startScan()">Scanner starten</button>
     </div>
   </div>
 
@@ -261,26 +269,125 @@ let employees = [];
 let scannedUid = null;
 let nfcReader = null;
 let scanning = false;
+let currentMode = 'rfid';       // rfid | nfc | manual
+let rfidBuffer = '';
+let rfidLastKeyTime = 0;
 
 /* ══════════════════════════════════════════════════════════════
    INIT
 ══════════════════════════════════════════════════════════════ */
 function init() {
   loadEmployees();
-  checkNfcSupport();
+  setMode('rfid');             // default: RFID reader (most universal)
 }
 
-function checkNfcSupport() {
-  if (!('NDEFReader' in window)) {
-    document.getElementById('notSupported').classList.remove('hidden');
-    // Keep NFC card visible but change its message
-    const area = document.getElementById('nfcArea');
-    area.onclick = null;
-    document.getElementById('nfcIcon').textContent = '⚠️';
-    document.getElementById('nfcStatus').textContent = 'Web NFC nicht verfügbar';
-    document.getElementById('nfcDetail').textContent = 'UID manuell eingeben (siehe oben)';
+/* ══════════════════════════════════════════════════════════════
+   MODE SWITCHING
+══════════════════════════════════════════════════════════════ */
+function setMode(mode) {
+  currentMode = mode;
+
+  // Update buttons
+  for (const m of ['rfid','nfc','manual']) {
+    const btn = document.getElementById('mode' + m.charAt(0).toUpperCase() + m.slice(1));
+    btn.className = (m === mode ? 'btn btn-blue' : 'btn btn-outline');
+    btn.style.padding = '6px 14px';
+    btn.style.fontSize = '13px';
+  }
+
+  const area = document.getElementById('nfcArea');
+  const icon = document.getElementById('nfcIcon');
+  const status = document.getElementById('nfcStatus');
+  const detail = document.getElementById('nfcDetail');
+  const startBtn = document.getElementById('nfcStartBtn');
+  const manualPanel = document.getElementById('manualPanel');
+  const rfidInput = document.getElementById('rfidInput');
+
+  // Reset visuals
+  area.className = 'nfc-area';
+  document.getElementById('nfcUid').classList.add('hidden');
+  manualPanel.classList.add('hidden');
+  startBtn.classList.add('hidden');
+  area.onclick = null;
+
+  // Stop any active NFC scan
+  if (nfcReader) { try { /* NDEFReader has no stop, just drop ref */ } catch(e){} nfcReader = null; }
+  scanning = false;
+
+  if (mode === 'rfid') {
+    icon.textContent = '⌨';
+    status.textContent = 'Bereit für RFID-Tag';
+    detail.textContent = 'Tag an das Lesegerät halten — die UID wird automatisch erfasst';
+    area.className = 'nfc-area scanning';
+    // Keep the hidden input focused so HID keystrokes land here
+    rfidInput.focus();
+    rfidBuffer = '';
+  } else if (mode === 'nfc') {
+    icon.textContent = '📱';
+    if ('NDEFReader' in window) {
+      status.textContent = 'Web NFC bereit';
+      detail.textContent = 'Klick auf "Scanner starten" und Tag an das Gerät halten';
+      startBtn.classList.remove('hidden');
+    } else {
+      icon.textContent = '⚠️';
+      status.textContent = 'Web NFC nicht verfügbar';
+      detail.textContent = 'Nur Chrome auf Android unterstützt Web NFC. Bitte RFID- oder manuellen Modus verwenden.';
+    }
+  } else if (mode === 'manual') {
+    icon.textContent = '✎';
+    status.textContent = 'Manuelle Eingabe';
+    detail.textContent = 'UID eingeben oder einfügen';
+    manualPanel.classList.remove('hidden');
+    setTimeout(() => document.getElementById('manualUid').focus(), 50);
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   RFID HID KEYBOARD CAPTURE
+══════════════════════════════════════════════════════════════ */
+function onRfidKey(event) {
+  if (currentMode !== 'rfid') return;
+
+  const now = Date.now();
+  // If too much time elapsed, reset buffer (manual typing vs RFID burst)
+  if (now - rfidLastKeyTime > 500) rfidBuffer = '';
+  rfidLastKeyTime = now;
+
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    const uid = rfidBuffer.trim();
+    rfidBuffer = '';
+    event.target.value = '';
+    if (uid.length >= 4) {   // Reasonable minimum length
+      onTagDetected(uid);
+    }
+    return;
+  }
+
+  // Accept alphanumeric and some separator chars
+  if (event.key.length === 1 && /[a-zA-Z0-9:\-_]/.test(event.key)) {
+    rfidBuffer += event.key;
+  }
+}
+
+// Keep RFID input focused — refocus when user clicks elsewhere
+document.addEventListener('click', (e) => {
+  if (currentMode !== 'rfid') return;
+  // Don't refocus if clicking an interactive element
+  if (e.target.closest('button, select, input, a, [onclick]')) return;
+  setTimeout(() => {
+    const rfid = document.getElementById('rfidInput');
+    if (rfid && currentMode === 'rfid') rfid.focus();
+  }, 50);
+});
+
+// Refocus when window gets focus
+window.addEventListener('focus', () => {
+  if (currentMode === 'rfid') {
+    const rfid = document.getElementById('rfidInput');
+    if (rfid) rfid.focus();
+  }
+});
 
 /* ══════════════════════════════════════════════════════════════
    EMPLOYEES
@@ -350,8 +457,10 @@ function renderTable() {
    NFC SCANNING
 ══════════════════════════════════════════════════════════════ */
 async function startScan() {
+  if (currentMode !== 'nfc') return;
   if (scanning) return;
   if (!('NDEFReader' in window)) return;
+  document.getElementById('nfcStartBtn').classList.add('hidden');
 
   const area = document.getElementById('nfcArea');
   const icon = document.getElementById('nfcIcon');
@@ -443,15 +552,10 @@ function useManualUid() {
 function resetScan() {
   scannedUid = null;
   scanning = false;
-
-  const area = document.getElementById('nfcArea');
-  area.className = 'nfc-area';
-  document.getElementById('nfcIcon').textContent = '📡';
-  document.getElementById('nfcStatus').textContent = 'NFC-Tag scannen';
-  document.getElementById('nfcDetail').textContent = 'Hier tippen, um den Scanner zu starten';
-  document.getElementById('nfcUid').classList.add('hidden');
   document.getElementById('assignPanel').classList.add('hidden');
   document.getElementById('tagCurrentOwner').classList.add('hidden');
+  // Re-arm current mode
+  setMode(currentMode);
 }
 
 /* ══════════════════════════════════════════════════════════════
