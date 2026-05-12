@@ -699,15 +699,11 @@ header {
         <div id="rfidPromptSub" style="font-size:13px;opacity:.85;margin-top:2px">Warten auf Tag…</div>
       </div>
     </div>
-    <!-- Hidden input that captures RFID keyboard emulation -->
-    <input type="text" id="rfidCapture" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-           style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;left:-100px"
-           onkeydown="onTerminalRfidKey(event)">
     <div style="padding: 12px 20px 8px; flex-shrink:0;">
       <div class="search-bar">
         <span class="search-icon">🔍</span>
         <input type="text" id="searchInput" placeholder="Mitarbeiter suchen…"
-               oninput="filterEmployees(this.value)" onblur="refocusRfid()">
+               oninput="filterEmployees(this.value)">
       </div>
     </div>
     <div class="employee-scroll" style="padding: 0 20px 12px;">
@@ -1138,44 +1134,45 @@ function escHtml(s) {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   RFID CAPTURE (HID keyboard emulation)
+   RFID CAPTURE (HID keyboard emulation) — document-level listener
+   so no input gets focus → no virtual keyboard on tablets
 ══════════════════════════════════════════════════════════════ */
 let _rfidBuffer = '';
 let _rfidLastKey = 0;
+const _RFID_KEY_GAP_MS = 80;   // HID typically <50ms between keys; humans >100ms
 
 function isOnEmployeeScreen() {
   return !document.getElementById('screen-employees').classList.contains('hidden');
 }
 
-function refocusRfid() {
-  if (!isOnEmployeeScreen()) return;
-  // Don't steal focus from search input if user is actively typing there
-  const search = document.getElementById('searchInput');
-  if (document.activeElement === search) return;
-  const rfid = document.getElementById('rfidCapture');
-  if (rfid) rfid.focus();
-}
+// Stub kept for backwards compatibility (older code may still call it)
+function refocusRfid() { /* no-op — document-level capture, no input focus needed */ }
 
-function onTerminalRfidKey(event) {
+document.addEventListener('keydown', (event) => {
   if (!isOnEmployeeScreen()) return;
+  // Ignore if the user is actively typing in the search box (manual filter)
+  if (document.activeElement && document.activeElement.id === 'searchInput') return;
 
   const now = Date.now();
+  // Reset buffer if too much time elapsed since last key (filter accidental key presses)
   if (now - _rfidLastKey > 500) _rfidBuffer = '';
   _rfidLastKey = now;
 
   if (event.key === 'Enter') {
+    if (_rfidBuffer.length === 0) return;  // bare Enter — ignore
     event.preventDefault();
     const uid = _rfidBuffer.trim();
     _rfidBuffer = '';
-    event.target.value = '';
     if (uid.length >= 4) processRfidTag(uid);
     return;
   }
 
+  // Accept alphanumeric + common separator chars from RFID readers
   if (event.key.length === 1 && /[a-zA-Z0-9:\-_]/.test(event.key)) {
     _rfidBuffer += event.key;
+    event.preventDefault();  // avoid keys leaking into UI
   }
-}
+}, true);  // capture phase, runs before any UI handlers
 
 function setRfidPromptState(state, title, sub) {
   const banner = document.getElementById('rfidPrompt');
@@ -1215,19 +1212,6 @@ function processRfidTag(uid) {
   }, 600);
 }
 
-// Keep RFID input focused whenever on the employees screen
-document.addEventListener('click', (e) => {
-  if (!isOnEmployeeScreen()) return;
-  // Don't refocus if user clicks the search field or an interactive child of it
-  if (e.target.closest('#searchInput')) return;
-  setTimeout(refocusRfid, 50);
-});
-
-// Refocus when window gets focus
-window.addEventListener('focus', refocusRfid);
-window.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') refocusRfid();
-});
 
 /* ══════════════════════════════════════════════════════════════
    EMPLOYEE SELECTION
@@ -1805,12 +1789,12 @@ const _origShowScreen = _showScreen;
 _showScreen = function(id) {
   _ilog.screen = id;
   _ilog.push('navigate', id);
-  const result = _origShowScreen.apply(this, arguments);
-  // Re-focus RFID input when returning to employee screen
-  if (id === 'screen-employees') {
-    setTimeout(refocusRfid, 100);
+  // Blur any focused element when going back to employee screen
+  // so the virtual keyboard hides on tablets
+  if (id === 'screen-employees' && document.activeElement && document.activeElement !== document.body) {
+    document.activeElement.blur();
   }
-  return result;
+  return _origShowScreen.apply(this, arguments);
 };
 
 // Track button clicks (delegated)
