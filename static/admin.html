@@ -1248,6 +1248,36 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
   </div>
 </div>
 
+<!-- ===== MODAL: STELLVERTRETER ===== -->
+<div id="stvModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h2>Stellvertreter verwalten</h2>
+      <button class="modal-close" onclick="closeModal('stvModal')">✕</button>
+    </div>
+    <div id="stvModalAlert" class="hidden"></div>
+    <p style="font-size:13px; color:var(--muted); margin-bottom:8px">Mitarbeiter: <b id="stvEmpName">—</b></p>
+    <p id="stvCurrent" style="font-size:13px; margin-bottom:16px; padding:8px 12px; background:#f1f5f9; border-radius:6px"></p>
+    <div class="form-group">
+      <label>Stellvertreter *</label>
+      <select id="stvSelect" class="form-control">
+        <option value="">— Kein Stellvertreter —</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Vertretung bis (optional)</label>
+      <input type="date" id="stvBis" class="form-control">
+      <small style="color:var(--muted);font-size:12px">Leer lassen = unbefristete Vertretung</small>
+    </div>
+    <input type="hidden" id="stvEmpId">
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('stvModal')">Abbrechen</button>
+      <button class="btn btn-danger" id="stvRemoveBtn" onclick="removeStellvertreter()" style="margin-right:auto">Stellvertretung aufheben</button>
+      <button class="btn btn-primary" onclick="saveStellvertreter()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Stammdaten (Abteilung / Kostenstelle / Zeitgruppe) -->
 <div class="modal-overlay hidden" id="stammModal">
   <div class="modal" style="max-width:460px">
@@ -2662,9 +2692,8 @@ function filterEmployees() {
 
   tbody.innerHTML = data.map(e => {
     const name = `${e.nombre} ${e.apellido||''}`.trim();
-    let actions = `<button class="btn btn-sm btn-outline" onclick='openNewEmpModal(${JSON.stringify(e)})' title="Bearbeiten">✏</button>
-      <button class="btn btn-sm btn-outline" onclick="openNfcModal('${e.id}','${name.replace(/'/g,"\\'")}') " title="NFC ändern">📡</button>
-      <button class="btn btn-sm btn-outline" onclick="manageStellvertreter('${e.id}','${name.replace(/'/g,"\\'")}','${e.stellvertreter_id||''}','${e.stellvertreter_nombre||''}','${e.stellvertretung_hasta||''}')" title="Stellvertreter verwalten">👤</button>`;
+    let actions = `<button class="btn btn-sm btn-outline" onclick='openNewEmpModal(${JSON.stringify(e)})' title="Bearbeiten">📝 Bearbeiten</button>
+      <button class="btn btn-sm btn-outline" onclick="openStellvertreterModal('${e.id}','${name.replace(/'/g,"\\'")}','${e.stellvertreter_id||''}','${e.stellvertreter_nombre||''}','${e.stellvertretung_hasta||''}')" title="Stellvertreter verwalten">👤 Stellv.</button>`;
     if (e.activo) {
       actions += ` <button class="btn btn-sm btn-danger" onclick="deactivateEmployee('${e.id}','${name.replace(/'/g,"\\'")}') " title="Deaktivieren">⊘</button>`;
     } else {
@@ -3938,56 +3967,70 @@ async function runBackup() {
 // =====================================================================
 // STELLVERTRETER
 // =====================================================================
-async function manageStellvertreter(empId, empName, currentStvId, currentStvName, currentBis) {
-  const info = currentStvName
-    ? `Aktueller Stellvertreter: ${currentStvName}${currentBis ? ' bis ' + currentBis : ''}`
-    : 'Kein Stellvertreter zugewiesen';
+function openStellvertreterModal(empId, empName, currentStvId, currentStvName, currentBis) {
+  document.getElementById('stvEmpId').value = empId;
+  document.getElementById('stvEmpName').textContent = empName;
 
-  const options = allEmployeesAll
+  // Mostrar estado actual
+  const currentEl = document.getElementById('stvCurrent');
+  if (currentStvName) {
+    currentEl.innerHTML = `Aktueller Stellvertreter: <b>${currentStvName}</b>` + (currentBis ? ` bis ${currentBis}` : ' (unbefristet)');
+    document.getElementById('stvRemoveBtn').classList.remove('hidden');
+  } else {
+    currentEl.textContent = 'Kein Stellvertreter zugewiesen';
+    document.getElementById('stvRemoveBtn').classList.add('hidden');
+  }
+
+  // Llenar dropdown con empleados activos (excepto el actual)
+  const sel = document.getElementById('stvSelect');
+  sel.innerHTML = '<option value="">— Bitte wählen —</option>';
+  allEmployeesAll
     .filter(e => e.id !== empId && e.activo)
-    .map(e => `${e.id_nummer}: ${e.nombre} ${e.apellido||''}`.trim());
+    .sort((a,b) => (a.nombre||'').localeCompare(b.nombre||''))
+    .forEach(e => {
+      const name = `${e.nombre} ${e.apellido||''}`.trim();
+      sel.innerHTML += `<option value="${e.id}">#${e.id_nummer} ${name}</option>`;
+    });
+  if (currentStvId) sel.value = currentStvId;
 
-  const selected = prompt(
-    `Stellvertreter für ${empName}\n${info}\n\nNummer oder Name eingeben (leer = entfernen):\n${options.slice(0,10).join('\n')}`,
-    currentStvName || ''
-  );
-  if (selected === null) return; // Abbrechen
+  document.getElementById('stvBis').value = currentBis || '';
+  document.getElementById('stvModalAlert').innerHTML = '';
+  document.getElementById('stvModalAlert').classList.add('hidden');
+  openModal('stvModal');
+}
 
-  if (selected.trim() === '') {
-    // Entfernen
-    try {
-      await api(`/empleados/${empId}/stellvertretung`, {
-        method: 'PUT', body: JSON.stringify({stellvertreter_id: null})
-      });
-      showGlobalAlert('success', '✓ Stellvertretung aufgehoben');
-      allEmployeesAll = [];
-      await renderEmployees();
-    } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+async function saveStellvertreter() {
+  const empId = document.getElementById('stvEmpId').value;
+  const stvId = document.getElementById('stvSelect').value;
+  const bis   = document.getElementById('stvBis').value || null;
+
+  if (!stvId) {
+    showModalAlert('stvModalAlert', 'error', 'Bitte einen Stellvertreter auswählen');
     return;
   }
-
-  // Buscar empleado por número o nombre
-  const query = selected.trim().toLowerCase();
-  const found = allEmployeesAll.find(e =>
-    String(e.id_nummer) === query.split(':')[0].trim() ||
-    `${e.nombre} ${e.apellido||''}`.toLowerCase().includes(query)
-  );
-  if (!found) {
-    showGlobalAlert('error', 'Mitarbeiter nicht gefunden: ' + selected);
-    return;
-  }
-
-  const bis = prompt(`Stellvertretung bis (YYYY-MM-DD, leer = unbefristet):`, '') || null;
-
   try {
     await api(`/empleados/${empId}/stellvertretung`, {
       method: 'PUT',
-      body: JSON.stringify({stellvertreter_id: found.id, stellvertretung_hasta: bis || null})
+      body: JSON.stringify({stellvertreter_id: stvId, stellvertretung_hasta: bis})
     });
-    showGlobalAlert('success', `✓ ${found.nombre} ${found.apellido||''} als Stellvertreter zugewiesen`);
+    closeModal('stvModal');
+    showGlobalAlert('success', '✓ Stellvertreter zugewiesen');
     allEmployeesAll = [];
     await renderEmployees();
-  } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+  } catch(e) { showModalAlert('stvModalAlert', 'error', 'Fehler: ' + e.message); }
+}
+
+async function removeStellvertreter() {
+  const empId = document.getElementById('stvEmpId').value;
+  try {
+    await api(`/empleados/${empId}/stellvertretung`, {
+      method: 'PUT', body: JSON.stringify({stellvertreter_id: null})
+    });
+    closeModal('stvModal');
+    showGlobalAlert('success', '✓ Stellvertretung aufgehoben');
+    allEmployeesAll = [];
+    await renderEmployees();
+  } catch(e) { showModalAlert('stvModalAlert', 'error', 'Fehler: ' + e.message); }
 }
 
 // =====================================================================
