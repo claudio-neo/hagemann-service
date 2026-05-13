@@ -1183,9 +1183,25 @@ function setRfidPromptState(state, title, sub) {
 }
 
 function processRfidTag(uid) {
-  // Find employee by nfc_tag — try exact match first, then case-insensitive
+  // Find employee by nfc_tag — multiple match strategies for robustness
+  // against readers that strip/add leading zeros
   let emp = employees.find(e => e.nfc_tag === uid);
+
+  // Case-insensitive fallback
   if (!emp) emp = employees.find(e => (e.nfc_tag || '').toLowerCase() === uid.toLowerCase());
+
+  // Leading-zero tolerant fallback: strip leading zeros from both sides
+  if (!emp) {
+    const uidStripped = uid.replace(/^0+/, '');
+    if (uidStripped) {
+      const matches = employees.filter(e => {
+        const t = (e.nfc_tag || '').replace(/^0+/, '');
+        return t === uidStripped && t.length > 0;
+      });
+      // Only auto-match if there's a single unambiguous result
+      if (matches.length === 1) emp = matches[0];
+    }
+  }
 
   if (!emp) {
     setRfidPromptState('error', '❌ Tag nicht erkannt', `UID: ${uid} — nicht zugewiesen`);

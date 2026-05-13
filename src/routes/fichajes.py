@@ -62,11 +62,26 @@ def _utc(dt: datetime) -> str:
 
 
 def _resolve_empleado(db: Session, nfc_tag: str = None, empleado_id: UUID = None) -> Empleado:
-    """Busca empleado por NFC tag o ID"""
+    """Busca empleado por NFC tag o ID. Tolerante a ceros a la izquierda."""
     if empleado_id:
         emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     elif nfc_tag:
+        # 1) Match exacto
         emp = db.query(Empleado).filter(Empleado.nfc_tag == nfc_tag).first()
+        # 2) Fallback: ignorar ceros a la izquierda en ambos lados (algunos lectores
+        #    HID transmiten sin ceros a la izquierda). Sólo si hay un único match.
+        if not emp:
+            from sqlalchemy import func
+            stripped = nfc_tag.lstrip("0")
+            if stripped:
+                candidatos = (
+                    db.query(Empleado)
+                    .filter(Empleado.nfc_tag.isnot(None))
+                    .filter(func.ltrim(Empleado.nfc_tag, "0") == stripped)
+                    .all()
+                )
+                if len(candidatos) == 1:
+                    emp = candidatos[0]
     else:
         raise HTTPException(400, "nfc_tag oder empleado_id erforderlich")
     if not emp:
