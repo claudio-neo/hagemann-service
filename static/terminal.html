@@ -1248,9 +1248,21 @@ async function selectEmployee(id) {
 
   if (selectedFichaje) {
     showPresentScreen();
-  } else {
-    await showEntryScreen();
+    return;
   }
+
+  // Auto-Eingang: si el empleado tiene Standard-Kostenstelle, fichar directamente
+  // sin pantalla de selección. Reduce errores de elección manual.
+  if (selectedEmp.kostenstelle_id) {
+    const cc = costCenters.find(c => String(c.id) === String(selectedEmp.kostenstelle_id));
+    if (cc && cc.activo !== false) {
+      await doPunchIn(cc.id, cc.nombre);
+      return;
+    }
+  }
+
+  // Sin Standard-Kostenstelle (o el CC ya no está activo) → selección manual
+  await showEntryScreen();
 }
 
 /* ══════════════════════════════════════════════════════════════

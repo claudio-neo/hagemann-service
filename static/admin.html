@@ -1212,6 +1212,13 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
         <option value="">— keine —</option>
       </select>
     </div>
+    <div class="form-group">
+      <label>Standard-Kostenstelle</label>
+      <select id="neKostenstelle" class="form-control">
+        <option value="">— keine (manuelle Auswahl beim Eingang) —</option>
+      </select>
+      <small style="color:var(--muted);font-size:12px">Wenn gesetzt, wird beim Einstempeln automatisch diese Kostenstelle gewählt — keine manuelle Auswahl mehr nötig.</small>
+    </div>
     <input type="hidden" id="neEditId">
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('newEmpModal')">Abbrechen</button>
@@ -3431,6 +3438,7 @@ async function downloadExcel() {
 // =====================================================================
 let editEmpId = null;
 let allGrupos = [];
+let allKostenstellen = [];
 
 async function loadGruposIntoSelect(selectId) {
   if (allGrupos.length === 0) {
@@ -3443,6 +3451,23 @@ async function loadGruposIntoSelect(selectId) {
   if (sel) {
     sel.innerHTML = '<option value="">— keine —</option>';
     allGrupos.forEach(g => { sel.innerHTML += `<option value="${g.id}">${g.nombre}</option>`; });
+  }
+}
+
+async function loadKostenstellenIntoSelect(selectId, placeholder = '— keine —') {
+  if (allKostenstellen.length === 0) {
+    try {
+      const res = await api('/centros-coste/?limit=200');
+      allKostenstellen = res.data || res || [];
+    } catch(e) { allKostenstellen = []; }
+  }
+  const sel = document.getElementById(selectId);
+  if (sel) {
+    sel.innerHTML = `<option value="">${placeholder}</option>`;
+    allKostenstellen
+      .filter(k => k.activo !== false)
+      .sort((a,b) => (a.nombre||'').localeCompare(b.nombre||''))
+      .forEach(k => { sel.innerHTML += `<option value="${k.id}">${k.codigo ? k.codigo + ' — ' : ''}${k.nombre}</option>`; });
   }
 }
 
@@ -3461,6 +3486,9 @@ function openNewEmpModal(emp) {
   loadGruposIntoSelect('neGrupo').then(() => {
     if (emp?.grupo_id) document.getElementById('neGrupo').value = emp.grupo_id;
   });
+  loadKostenstellenIntoSelect('neKostenstelle', '— keine (manuelle Auswahl beim Eingang) —').then(() => {
+    if (emp?.kostenstelle_id) document.getElementById('neKostenstelle').value = emp.kostenstelle_id;
+  });
   openModal('newEmpModal');
 }
 
@@ -3472,6 +3500,7 @@ async function saveEmployee() {
   const pin = document.getElementById('nePin').value.trim();
   const nfc_tag = document.getElementById('neNfc').value.trim();
   const grupo_id = document.getElementById('neGrupo').value || null;
+  const kostenstelle_id = document.getElementById('neKostenstelle').value || null;
 
   if (!nombre || !id_nummer || !monthly_hours) {
     showModalAlert('newEmpModalAlert', 'error', 'Vorname, Nr. und Stunden sind Pflichtfelder');
@@ -3481,6 +3510,8 @@ async function saveEmployee() {
   if (pin) body.pin = pin;
   if (nfc_tag) body.nfc_tag = nfc_tag;
   if (grupo_id) body.grupo_id = parseInt(grupo_id);
+  // kostenstelle_id is a UUID, send always (even null) so it can be cleared
+  body.kostenstelle_id = kostenstelle_id;
 
   try {
     if (editEmpId) {

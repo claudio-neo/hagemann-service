@@ -36,6 +36,7 @@ class EmpleadoCreate(BaseModel):
     nfc_tag: Optional[str] = None
     keytag: Optional[str] = None
     grupo_id: Optional[UUID] = None
+    kostenstelle_id: Optional[UUID] = None     # Kostenstelle por defecto
     monthly_hours: int = 160
     salary_hour: Optional[float] = None
     telefono: Optional[str] = None
@@ -50,6 +51,7 @@ class EmpleadoUpdate(BaseModel):
     nfc_tag: Optional[str] = None
     keytag: Optional[str] = None
     grupo_id: Optional[UUID] = None
+    kostenstelle_id: Optional[UUID] = None     # Kostenstelle por defecto
     monthly_hours: Optional[int] = None
     salary_hour: Optional[float] = None
     telefono: Optional[str] = None
@@ -190,6 +192,7 @@ def crear_empleado(data: EmpleadoCreate, db: Session = Depends(get_db), _auth=De
         nfc_tag=nfc_tag,
         keytag=data.keytag,
         grupo_id=data.grupo_id,
+        kostenstelle_id=data.kostenstelle_id,
         monthly_hours=data.monthly_hours,
         salary_hour=data.salary_hour,
         telefono=data.telefono,
