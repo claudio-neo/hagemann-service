@@ -522,10 +522,21 @@ header {
 /* ══════════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════════ */
-@media (max-width: 600px) {
-  header { padding: 0 16px; height: 64px; }
+/* Tablets / pantallas medias — evitar solapamiento de header */
+@media (max-width: 900px) {
+  header { padding: 0 12px; height: 60px; gap: 8px; }
+  .logo-icon { width: 36px; height: 36px; font-size: 18px; border-radius: 8px; }
   .logo-name { font-size: 16px; }
-  .header-clock { font-size: 28px; }
+  .logo-sub { display: none; }            /* "ZEITERFASSUNG" ocupa espacio sin valor */
+  .header-clock { font-size: 24px; letter-spacing: 1px; }
+  .header-date { display: none; }         /* la fecha completa no cabe en tablet */
+  .badge-present { padding: 4px 10px; font-size: 12px; }
+  .header-right { gap: 8px; }
+}
+@media (max-width: 600px) {
+  header { padding: 0 10px; height: 56px; }
+  .logo-name { font-size: 14px; }
+  .header-clock { font-size: 22px; letter-spacing: 0.5px; }
   .employee-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
   .emp-tile { min-height: 90px; padding: 14px 10px 12px; }
   .emp-tile .emp-name { font-size: 14px; }
@@ -535,6 +546,10 @@ header {
   .confirm-detail { font-size: 18px; }
   .screen-title { font-size: 22px; }
   .big-btn { font-size: 19px; padding: 22px 28px; min-height: 78px; }
+}
+/* Pantallas muy estrechas (<420px) — esconder logo-text completamente, solo icono */
+@media (max-width: 420px) {
+  .logo-text { display: none; }
 }
 @media (min-width: 1200px) {
   .employee-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
