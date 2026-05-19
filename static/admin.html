@@ -3538,7 +3538,8 @@ async function saveEmployee() {
   const body = { nombre, apellido, id_nummer, monthly_hours };
   if (pin) body.pin = pin;
   if (nfc_tag) body.nfc_tag = nfc_tag;
-  if (grupo_id) body.grupo_id = parseInt(grupo_id);
+  // grupo_id es un UUID (string), no entero — no usar parseInt
+  if (grupo_id) body.grupo_id = grupo_id;
   // kostenstelle_id is a UUID, send always (even null) so it can be cleared
   body.kostenstelle_id = kostenstelle_id;
 
