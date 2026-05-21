@@ -87,14 +87,59 @@ def calcular_saldo_mes(
     if existente and existente.cerrado and not forzar_recalculo:
         return _saldo_to_dict(existente, emp)
 
+    # ── Determinar si el mes está fuera del rango de cálculo del empleado ──
+    # Antes de beginn_berechnung (o fecha_alta), o después de fecha_baja: 0/0/0
+    # También: meses futuros nunca generan saldo negativo
+    hoy = date.today()
+    mes_fin = date(anio, mes, 28)  # representa "fin de mes" en sentido amplio
+    mes_inicio = date(anio, mes, 1)
+    inicio_calculo = emp.beginn_berechnung or emp.fecha_alta
+    fuera_de_rango = False
+    if inicio_calculo and mes_fin < inicio_calculo:
+        fuera_de_rango = True
+    elif emp.fecha_baja and mes_inicio > emp.fecha_baja:
+        fuera_de_rango = True
+    elif mes_inicio > hoy:
+        # Mes futuro: no calculamos planificadas hasta que llegue
+        fuera_de_rango = True
+
     # Calcular valores
     kappung = limite_kappung if limite_kappung is not None else DEFAULT_LIMITE_KAPPUNG
 
-    horas_planificadas = Decimal(str(emp.monthly_hours))
-    horas_reales = _get_horas_reales_mes(db, empleado_id, anio, mes)
-    saldo_mes = (horas_reales - horas_planificadas).quantize(Decimal("0.01"))
-    carryover_anterior = _get_carryover_anterior(db, empleado_id, anio, mes)
-    saldo_acumulado = (saldo_mes + carryover_anterior).quantize(Decimal("0.01"))
+    if fuera_de_rango:
+        horas_planificadas = Decimal("0.00")
+        horas_reales = Decimal("0.00")
+        saldo_mes = Decimal("0.00")
+        carryover_anterior = _get_carryover_anterior(db, empleado_id, anio, mes)
+        saldo_acumulado = carryover_anterior.quantize(Decimal("0.01"))
+    else:
+        from calendar import monthrange
+        dias_mes = monthrange(anio, mes)[1]
+
+        # Horas planificadas: prorrateadas si el mes está parcial
+        #  - mes en curso → días desde inicio hasta hoy
+        #  - mes que contiene beginn_berechnung → desde ese día hasta fin
+        #  - mes que contiene fecha_baja → desde día 1 hasta esa fecha
+        #  - mes completo → todas las horas del contrato
+        primer_dia_efectivo = mes_inicio
+        if inicio_calculo and inicio_calculo.year == anio and inicio_calculo.month == mes:
+            primer_dia_efectivo = inicio_calculo
+        ultimo_dia_efectivo = date(anio, mes, dias_mes)
+        if emp.fecha_baja and emp.fecha_baja.year == anio and emp.fecha_baja.month == mes:
+            ultimo_dia_efectivo = emp.fecha_baja
+        if mes_inicio.year == hoy.year and mes_inicio.month == hoy.month:
+            # mes en curso: no contar más allá de hoy
+            if hoy < ultimo_dia_efectivo:
+                ultimo_dia_efectivo = hoy
+
+        dias_efectivos = max(0, (ultimo_dia_efectivo - primer_dia_efectivo).days + 1)
+        ratio = Decimal(dias_efectivos) / Decimal(dias_mes)
+        horas_planificadas = (Decimal(str(emp.monthly_hours)) * ratio).quantize(Decimal("0.01"))
+
+        horas_reales = _get_horas_reales_mes(db, empleado_id, anio, mes)
+        saldo_mes = (horas_reales - horas_planificadas).quantize(Decimal("0.01"))
+        carryover_anterior = _get_carryover_anterior(db, empleado_id, anio, mes)
+        saldo_acumulado = (saldo_mes + carryover_anterior).quantize(Decimal("0.01"))
 
     # Stundenkappung: limitar saldo acumulado positivo
     kappung_aplicada = False
