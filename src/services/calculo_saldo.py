@@ -95,11 +95,12 @@ def calcular_saldo_mes(
     mes_inicio = date(anio, mes, 1)
     inicio_calculo = emp.beginn_berechnung or emp.fecha_alta
     fuera_de_rango = False
+    es_futuro = mes_inicio > hoy
     if inicio_calculo and mes_fin < inicio_calculo:
         fuera_de_rango = True
     elif emp.fecha_baja and mes_inicio > emp.fecha_baja:
         fuera_de_rango = True
-    elif mes_inicio > hoy:
+    elif es_futuro:
         # Mes futuro: no calculamos planificadas hasta que llegue
         fuera_de_rango = True
 
@@ -110,8 +111,10 @@ def calcular_saldo_mes(
         horas_planificadas = Decimal("0.00")
         horas_reales = Decimal("0.00")
         saldo_mes = Decimal("0.00")
-        carryover_anterior = _get_carryover_anterior(db, empleado_id, anio, mes)
-        saldo_acumulado = carryover_anterior.quantize(Decimal("0.01"))
+        # Meses futuros: no arrastrar carryover (aún no han ocurrido)
+        # Meses fuera por baja/antes de inicio: tampoco
+        carryover_anterior = Decimal("0.00")
+        saldo_acumulado = Decimal("0.00")
     else:
         from calendar import monthrange
         dias_mes = monthrange(anio, mes)[1]
@@ -157,6 +160,31 @@ def calcular_saldo_mes(
         kappung_aplicada = True
 
     now = datetime.utcnow()
+
+    # Para meses fuera de rango (futuros, antes del inicio, después de baja)
+    # no guardamos registro: serían 0/0/0 inútiles y ensucian el carryover futuro.
+    # Devolvemos un dict transitorio sin persistir.
+    if fuera_de_rango:
+        if existente and not existente.cerrado:
+            db.delete(existente)
+            db.commit()
+        ficticio = SaldoHorasMensual(
+            empleado_id=empleado_id,
+            anio=anio,
+            mes=mes,
+            horas_planificadas=horas_planificadas,
+            horas_reales=horas_reales,
+            saldo_mes=saldo_mes,
+            carryover_anterior=carryover_anterior,
+            saldo_acumulado=saldo_acumulado,
+            limite_kappung=kappung,
+            saldo_final=saldo_final,
+            kappung_aplicada=False,
+            horas_cortadas=Decimal("0.00"),
+            cerrado=False,
+            calculado_en=now,
+        )
+        return _saldo_to_dict(ficticio, emp)
 
     if existente:
         existente.horas_planificadas = horas_planificadas
