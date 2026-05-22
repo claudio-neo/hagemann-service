@@ -1974,7 +1974,11 @@ async function loadReport() {
         return;
       }
 
-      content.innerHTML = `<div class="grid-2" style="gap:20px">${details.map(det => {
+      // Guardar para uso en detalles/PDF
+      window._rptDetails = details;
+      window._rptPeriod = { from, to };
+
+      content.innerHTML = `<div class="grid-2" style="gap:20px">${details.map((det, idx) => {
         const ccBars = (det.por_centro_coste || []).map(cc => {
           const color = costCenters.find(c => c.id === cc.centro_coste_id)?.color || 'var(--blue)';
           return `<div class="bar-row">
@@ -1992,6 +1996,11 @@ async function loadReport() {
             <span style="font-size:24px;font-weight:700;color:var(--blue)">${det.total_formateado}</span>
           </div>
           <div class="bar-chart">${ccBars || '<div class="empty">Keine Kostenstellen</div>'}</div>
+          <div style="display:flex;gap:8px;margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+            <button class="btn btn-outline btn-sm" onclick="toggleEmpDetails(${idx})" id="btnDet${idx}">📋 Details anzeigen</button>
+            <button class="btn btn-primary btn-sm" onclick="openEmpPdf(${idx})">🖨 PDF / Druck</button>
+          </div>
+          <div id="empDetails${idx}" class="hidden" style="margin-top:12px"></div>
         </div>`;
       }).join('')}</div>`;
 
@@ -2086,6 +2095,140 @@ async function loadReport() {
   } catch(e) {
     content.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
   }
+}
+
+// =====================================================================
+// BERICHTE — Detail-Tabelle + PDF / Druck per Mitarbeiter
+// =====================================================================
+function _fmtDateDE(s) {
+  const d = new Date(s + (s.includes('T') ? '' : 'T00:00:00'));
+  return d.toLocaleDateString('de-DE', { weekday:'short', day:'2-digit', month:'2-digit', year:'numeric' });
+}
+function _fmtMin(m) {
+  m = Math.max(0, parseInt(m||0));
+  return `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;
+}
+
+function _renderDetailHTML(det) {
+  const dias = det.detalle_diario || [];
+  if (!dias.length) return '<div class="empty">Keine Bewegungen im Zeitraum</div>';
+
+  const rows = dias.map(d => {
+    const segRows = (d.segmentos || []).map(s => `
+      <tr>
+        <td style="padding:6px 10px">${s.inicio}</td>
+        <td style="padding:6px 10px">${s.en_curso ? '<span style="color:#dc2626;font-weight:600">— läuft —</span>' : s.fin}</td>
+        <td style="padding:6px 10px">${s.centro_coste}</td>
+        <td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums">${_fmtMin(s.minutos)}</td>
+      </tr>`).join('');
+    return `<tr style="background:#f1f5f9;font-weight:700">
+        <td colspan="3" style="padding:8px 10px">${_fmtDateDE(d.fecha)}</td>
+        <td style="padding:8px 10px;text-align:right">${_fmtMin(d.total_minutos)}</td>
+      </tr>${segRows}`;
+  }).join('');
+
+  return `<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#e2e8f0;text-align:left">
+          <th style="padding:8px 10px">Eingang</th>
+          <th style="padding:8px 10px">Ausgang</th>
+          <th style="padding:8px 10px">Kostenstelle</th>
+          <th style="padding:8px 10px;text-align:right">Dauer</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function toggleEmpDetails(idx) {
+  const det = (window._rptDetails || [])[idx];
+  if (!det) return;
+  const el = document.getElementById('empDetails' + idx);
+  const btn = document.getElementById('btnDet' + idx);
+  if (el.classList.contains('hidden')) {
+    el.innerHTML = _renderDetailHTML(det);
+    el.classList.remove('hidden');
+    btn.textContent = '🔼 Details ausblenden';
+  } else {
+    el.classList.add('hidden');
+    btn.textContent = '📋 Details anzeigen';
+  }
+}
+
+function openEmpPdf(idx) {
+  const det = (window._rptDetails || [])[idx];
+  const p = window._rptPeriod || {};
+  if (!det) return;
+  const emp = det.emp;
+  const empName = `${emp.nombre} ${emp.apellido||''}`.trim();
+  const ccRows = (det.por_centro_coste || []).map(cc => `
+    <tr>
+      <td>${cc.codigo || ''} — ${cc.nombre}</td>
+      <td style="text-align:right">${cc.formateado}</td>
+      <td style="text-align:right">${cc.porcentaje}%</td>
+    </tr>`).join('');
+
+  const detailHTML = _renderDetailHTML(det);
+  const periodLabel = `${_fmtDateDE(p.from)} bis ${_fmtDateDE(p.to)}`;
+  const today = new Date().toLocaleDateString('de-DE');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Stundenbericht ${empName} ${p.from}–${p.to}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;margin:24px;font-size:12px}
+  h1{font-size:20px;margin:0 0 4px 0}
+  h2{font-size:14px;margin:24px 0 8px 0;border-bottom:1px solid #94a3b8;padding-bottom:4px}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #1e293b;padding-bottom:10px;margin-bottom:16px}
+  .meta{color:#64748b;font-size:11px}
+  .stats{display:flex;gap:12px;margin:12px 0}
+  .stat{flex:1;border:1px solid #cbd5e1;border-radius:6px;padding:10px}
+  .stat .label{font-size:10px;color:#64748b;text-transform:uppercase}
+  .stat .val{font-size:20px;font-weight:700;margin-top:4px}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th,td{padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:left}
+  th{background:#e2e8f0;font-weight:700}
+  .footer{margin-top:32px;font-size:10px;color:#64748b;text-align:center;border-top:1px solid #cbd5e1;padding-top:8px}
+  @media print { body{margin:0;padding:16px} button.noprint{display:none} }
+</style>
+</head><body>
+  <div class="hdr">
+    <div>
+      <h1>Stundenbericht</h1>
+      <div class="meta">Hagemann — Zeiterfassung</div>
+    </div>
+    <div style="text-align:right">
+      <div><b>${empName}</b> — Personalnummer: #${emp.id_nummer}</div>
+      <div class="meta">Zeitraum: ${periodLabel}</div>
+      <div class="meta">Erstellt am ${today}</div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="label">Gesamtstunden</div><div class="val">${det.total_formateado}</div></div>
+    <div class="stat"><div class="label">Kostenstellen</div><div class="val">${(det.por_centro_coste||[]).length}</div></div>
+    <div class="stat"><div class="label">Arbeitstage</div><div class="val">${(det.detalle_diario||[]).length}</div></div>
+  </div>
+
+  <h2>Stunden nach Kostenstelle</h2>
+  <table>
+    <thead><tr><th>Kostenstelle</th><th style="text-align:right">Stunden</th><th style="text-align:right">Anteil</th></tr></thead>
+    <tbody>${ccRows || '<tr><td colspan="3" style="text-align:center;color:#64748b">Keine Daten</td></tr>'}</tbody>
+  </table>
+
+  <h2>Detail nach Tag</h2>
+  ${detailHTML}
+
+  <div class="footer">Hagemann Zeiterfassung — automatisch generiert</div>
+  <div style="margin-top:16px;text-align:center" class="noprint">
+    <button onclick="window.print()" style="padding:10px 24px;font-size:14px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer">🖨 Drucken / Als PDF speichern</button>
+  </div>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
 }
 
 // =====================================================================
