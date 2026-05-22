@@ -3,7 +3,7 @@ API de Reportes — doble vista empleado↔departamento + horas por tipo de turn
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, or_
 from typing import Optional
 from uuid import UUID
 from datetime import date, datetime
@@ -20,6 +20,30 @@ router = APIRouter(
     tags=["Reportes"],
     dependencies=[Depends(require_permission(REPORTS_VIEW))],
 )
+
+
+def _seg_minutos(seg_inicio: datetime, seg_fin: Optional[datetime], seg_minutos: Optional[int],
+                 hasta_dt: datetime, now_dt: datetime) -> int:
+    """Minutos efectivos del segmento. Si está abierto, cuenta hasta min(now, hasta_dt)."""
+    if seg_fin is not None:
+        return int(seg_minutos or 0)
+    # Segmento abierto — contar hasta el corte del período
+    cutoff = min(now_dt, hasta_dt)
+    if cutoff <= seg_inicio:
+        return 0
+    return int((cutoff - seg_inicio).total_seconds() / 60)
+
+
+def _periodo_filter(desde_dt: datetime, hasta_dt: datetime):
+    """Filtro: segmentos cerrados dentro del rango O abiertos que empezaron en el rango."""
+    return and_(
+        SegmentoTiempo.inicio >= desde_dt,
+        SegmentoTiempo.inicio <= hasta_dt,
+        or_(
+            SegmentoTiempo.fin.is_(None),                 # abiertos
+            SegmentoTiempo.fin <= hasta_dt,               # cerrados dentro del rango
+        ),
+    )
 
 
 @router.get("/horas-empleado")
@@ -39,32 +63,14 @@ def horas_por_empleado(
 
     desde_dt = datetime.combine(desde, datetime.min.time())
     hasta_dt = datetime.combine(hasta, datetime.max.time())
+    now_dt = datetime.utcnow()
 
-    # Total por centro de coste
-    by_cc = (
-        db.query(
-            CentroCoste.id,
-            CentroCoste.codigo,
-            CentroCoste.nombre,
-            func.coalesce(func.sum(SegmentoTiempo.minutos), 0).label("total_min"),
-        )
-        .join(SegmentoTiempo, SegmentoTiempo.centro_coste_id == CentroCoste.id)
-        .filter(
-            SegmentoTiempo.empleado_id == empleado_id,
-            SegmentoTiempo.inicio >= desde_dt,
-            SegmentoTiempo.fin <= hasta_dt,
-            SegmentoTiempo.fin.isnot(None),
-        )
-        .group_by(CentroCoste.id, CentroCoste.codigo, CentroCoste.nombre)
-        .all()
-    )
-
-    total_minutes = sum(r.total_min for r in by_cc)
-
-    # Detalle diario
-    daily = (
+    # Cargar segmentos cerrados y abiertos del período (incluye jornadas en curso)
+    segmentos = (
         db.query(
             func.date(SegmentoTiempo.inicio).label("dia"),
+            CentroCoste.id.label("cc_id"),
+            CentroCoste.codigo.label("cc_codigo"),
             CentroCoste.nombre.label("cc_nombre"),
             SegmentoTiempo.inicio,
             SegmentoTiempo.fin,
@@ -73,27 +79,36 @@ def horas_por_empleado(
         .join(CentroCoste, SegmentoTiempo.centro_coste_id == CentroCoste.id)
         .filter(
             SegmentoTiempo.empleado_id == empleado_id,
-            SegmentoTiempo.inicio >= desde_dt,
-            SegmentoTiempo.fin <= hasta_dt,
-            SegmentoTiempo.fin.isnot(None),
+            _periodo_filter(desde_dt, hasta_dt),
         )
         .order_by(SegmentoTiempo.inicio)
         .all()
     )
 
-    # Agrupar por día
+    # Agregar por centro de coste y por día
+    by_cc_map = {}
     daily_grouped = {}
-    for row in daily:
-        day_key = str(row.dia)
+    for s in segmentos:
+        m = _seg_minutos(s.inicio, s.fin, s.minutos, hasta_dt, now_dt)
+        cc_key = str(s.cc_id)
+        if cc_key not in by_cc_map:
+            by_cc_map[cc_key] = {"id": cc_key, "codigo": s.cc_codigo, "nombre": s.cc_nombre, "minutos": 0}
+        by_cc_map[cc_key]["minutos"] += m
+
+        day_key = str(s.dia)
         if day_key not in daily_grouped:
             daily_grouped[day_key] = {"fecha": day_key, "total_minutos": 0, "segmentos": []}
         daily_grouped[day_key]["segmentos"].append({
-            "centro_coste": row.cc_nombre,
-            "inicio": row.inicio.strftime("%H:%M"),
-            "fin": row.fin.strftime("%H:%M") if row.fin else None,
-            "minutos": row.minutos,
+            "centro_coste": s.cc_nombre,
+            "inicio": s.inicio.strftime("%H:%M"),
+            "fin": s.fin.strftime("%H:%M") if s.fin else None,
+            "en_curso": s.fin is None,
+            "minutos": m,
         })
-        daily_grouped[day_key]["total_minutos"] += (row.minutos or 0)
+        daily_grouped[day_key]["total_minutos"] += m
+
+    by_cc = list(by_cc_map.values())
+    total_minutes = sum(r["minutos"] for r in by_cc)
 
     return {
         "empleado": {
@@ -106,12 +121,12 @@ def horas_por_empleado(
         "total_formateado": f"{total_minutes // 60}:{total_minutes % 60:02d}",
         "por_centro_coste": [
             {
-                "centro_coste_id": str(r.id),
-                "codigo": r.codigo,
-                "nombre": r.nombre,
-                "minutos": r.total_min,
-                "formateado": f"{r.total_min // 60}:{r.total_min % 60:02d}",
-                "porcentaje": round(r.total_min / total_minutes * 100, 1) if total_minutes else 0,
+                "centro_coste_id": r["id"],
+                "codigo": r["codigo"],
+                "nombre": r["nombre"],
+                "minutos": r["minutos"],
+                "formateado": f"{r['minutos'] // 60}:{r['minutos'] % 60:02d}",
+                "porcentaje": round(r["minutos"] / total_minutes * 100, 1) if total_minutes else 0,
             }
             for r in by_cc
         ],
@@ -136,28 +151,39 @@ def horas_por_centro_coste(
 
     desde_dt = datetime.combine(desde, datetime.min.time())
     hasta_dt = datetime.combine(hasta, datetime.max.time())
+    now_dt = datetime.utcnow()
 
-    by_emp = (
+    segmentos = (
         db.query(
-            Empleado.id,
+            Empleado.id.label("emp_id"),
             Empleado.id_nummer,
             Empleado.nombre,
             Empleado.apellido,
-            func.coalesce(func.sum(SegmentoTiempo.minutos), 0).label("total_min"),
+            SegmentoTiempo.inicio,
+            SegmentoTiempo.fin,
+            SegmentoTiempo.minutos,
         )
         .join(SegmentoTiempo, SegmentoTiempo.empleado_id == Empleado.id)
         .filter(
             SegmentoTiempo.centro_coste_id == centro_coste_id,
-            SegmentoTiempo.inicio >= desde_dt,
-            SegmentoTiempo.fin <= hasta_dt,
-            SegmentoTiempo.fin.isnot(None),
+            _periodo_filter(desde_dt, hasta_dt),
         )
-        .group_by(Empleado.id, Empleado.id_nummer, Empleado.nombre, Empleado.apellido)
-        .order_by(func.sum(SegmentoTiempo.minutos).desc())
         .all()
     )
 
-    total_minutes = sum(r.total_min for r in by_emp)
+    by_emp_map = {}
+    for s in segmentos:
+        m = _seg_minutos(s.inicio, s.fin, s.minutos, hasta_dt, now_dt)
+        key = str(s.emp_id)
+        if key not in by_emp_map:
+            by_emp_map[key] = {
+                "id": key, "id_nummer": s.id_nummer,
+                "nombre": f"{s.nombre} {s.apellido or ''}".strip(),
+                "minutos": 0,
+            }
+        by_emp_map[key]["minutos"] += m
+    by_emp = sorted(by_emp_map.values(), key=lambda x: -x["minutos"])
+    total_minutes = sum(r["minutos"] for r in by_emp)
 
     return {
         "centro_coste": {
@@ -171,12 +197,12 @@ def horas_por_centro_coste(
         "empleados_count": len(by_emp),
         "por_empleado": [
             {
-                "empleado_id": str(r.id),
-                "id_nummer": r.id_nummer,
-                "nombre": f"{r.nombre} {r.apellido or ''}".strip(),
-                "minutos": r.total_min,
-                "formateado": f"{r.total_min // 60}:{r.total_min % 60:02d}",
-                "porcentaje": round(r.total_min / total_minutes * 100, 1) if total_minutes else 0,
+                "empleado_id": r["id"],
+                "id_nummer": r["id_nummer"],
+                "nombre": r["nombre"],
+                "minutos": r["minutos"],
+                "formateado": f"{r['minutos'] // 60}:{r['minutos'] % 60:02d}",
+                "porcentaje": round(r["minutos"] / total_minutes * 100, 1) if total_minutes else 0,
             }
             for r in by_emp
         ],
@@ -194,30 +220,45 @@ def resumen_centros_coste(
     """
     desde_dt = datetime.combine(desde, datetime.min.time())
     hasta_dt = datetime.combine(hasta, datetime.max.time())
+    now_dt = datetime.utcnow()
 
-    results = (
+    # Cargar todos los segmentos del período (cerrados + abiertos)
+    segmentos = (
         db.query(
-            CentroCoste.id,
-            CentroCoste.codigo,
-            CentroCoste.nombre,
-            CentroCoste.color,
-            func.coalesce(func.sum(SegmentoTiempo.minutos), 0).label("total_min"),
-            func.count(func.distinct(SegmentoTiempo.empleado_id)).label("emp_count"),
+            SegmentoTiempo.centro_coste_id,
+            SegmentoTiempo.empleado_id,
+            SegmentoTiempo.inicio,
+            SegmentoTiempo.fin,
+            SegmentoTiempo.minutos,
         )
-        .outerjoin(
-            SegmentoTiempo,
-            and_(
-                SegmentoTiempo.centro_coste_id == CentroCoste.id,
-                SegmentoTiempo.inicio >= desde_dt,
-                SegmentoTiempo.fin <= hasta_dt,
-                SegmentoTiempo.fin.isnot(None),
-            )
-        )
+        .filter(_periodo_filter(desde_dt, hasta_dt))
+        .all()
+    )
+
+    # Agregar por CC
+    cc_agg = {}  # cc_id -> {"min": int, "emp_ids": set()}
+    for s in segmentos:
+        m = _seg_minutos(s.inicio, s.fin, s.minutos, hasta_dt, now_dt)
+        key = str(s.centro_coste_id)
+        if key not in cc_agg:
+            cc_agg[key] = {"min": 0, "emp_ids": set()}
+        cc_agg[key]["min"] += m
+        cc_agg[key]["emp_ids"].add(s.empleado_id)
+
+    # Listar todos los CCs activos para incluir los que tienen 0 minutos
+    centros = (
+        db.query(CentroCoste.id, CentroCoste.codigo, CentroCoste.nombre, CentroCoste.color)
         .filter(CentroCoste.activo == True)
-        .group_by(CentroCoste.id, CentroCoste.codigo, CentroCoste.nombre, CentroCoste.color)
         .order_by(CentroCoste.codigo)
         .all()
     )
+    results = []
+    for c in centros:
+        agg = cc_agg.get(str(c.id), {"min": 0, "emp_ids": set()})
+        results.append(type("Row", (), {
+            "id": c.id, "codigo": c.codigo, "nombre": c.nombre, "color": c.color,
+            "total_min": agg["min"], "emp_count": len(agg["emp_ids"]),
+        }))
 
     grand_total = sum(r.total_min for r in results)
 
