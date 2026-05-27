@@ -1920,11 +1920,17 @@ async function loadReport() {
       );
       const details = await Promise.all(detailRequests);
 
+      // Store data for Excel export
+      window._rptCCData = { ccs, details: details.filter(Boolean), total_formateado: res.total_formateado };
+
       content.innerHTML = `
         <div class="card" style="margin-bottom:20px">
           <div class="card-header">
             <span class="card-title">Stunden nach Kostenstelle</span>
-            <span class="badge badge-blue">${res.total_formateado || '0:00'} gesamt</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span class="badge badge-blue">${res.total_formateado || '0:00'} gesamt</span>
+              <button class="btn btn-success btn-sm" onclick="downloadReportExcelCC()" title="Excel herunterladen">📥 Excel</button>
+            </div>
           </div>
           <div class="bar-chart">
             ${ccs.length === 0 ? '<div class="empty">Keine Daten</div>' : ccs.map(cc => `
@@ -1978,7 +1984,8 @@ async function loadReport() {
       window._rptDetails = details;
       window._rptPeriod = { from, to };
 
-      content.innerHTML = `<div class="grid-2" style="gap:20px">${details.map((det, idx) => {
+      content.innerHTML = `<div style="margin-bottom:16px;text-align:right"><button class="btn btn-success btn-sm" onclick="downloadReportExcelEmp()" title="Excel herunterladen">📥 Alle Mitarbeiter als Excel</button></div>
+      <div class="grid-2" style="gap:20px">${details.map((det, idx) => {
         const ccBars = (det.por_centro_coste || []).map(cc => {
           const color = costCenters.find(c => c.id === cc.centro_coste_id)?.color || 'var(--blue)';
           return `<div class="bar-row">
@@ -2015,6 +2022,9 @@ async function loadReport() {
         content.innerHTML = '<div class="empty card">Keine Daten für diesen Zeitraum</div>';
         return;
       }
+
+      // Store data for Excel export
+      window._rptTurnoData = { modelos, emps, totales };
 
       const thModelos = modelos.map(m =>
         `<th style="text-align:right;min-width:80px">
@@ -2055,7 +2065,10 @@ async function loadReport() {
         <div class="card">
           <div class="card-header" style="margin-bottom:16px">
             <span class="card-title">🌙 Stunden nach Schichtmodell</span>
-            <span class="badge badge-blue">${totales.total ? totales.total.formateado : '0:00'} gesamt</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span class="badge badge-blue">${totales.total ? totales.total.formateado : '0:00'} gesamt</span>
+              <button class="btn btn-success btn-sm" onclick="downloadReportExcelTurno()" title="Excel herunterladen">📥 Excel</button>
+            </div>
           </div>
           <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#92400e">
             ℹ️ <b>Hinweis:</b> Tatsächliche Arbeitsstunden pro geplantem Schichtmodell. Für Nachtzuschläge gelten tarifliche Regelungen.
@@ -2229,6 +2242,142 @@ function openEmpPdf(idx) {
   const w = window.open('', '_blank');
   w.document.write(html);
   w.document.close();
+}
+
+// =====================================================================
+// BERICHTE — Excel-Export (SheetJS)
+// =====================================================================
+function _xlsxPeriodStr() {
+  const f = document.getElementById('rptFrom').value || '';
+  const t = document.getElementById('rptTo').value || '';
+  return `${f}_${t}`;
+}
+
+function _xlsxSave(wb, name) {
+  if (typeof XLSX === 'undefined') { showGlobalAlert('error', 'SheetJS nicht geladen — bitte Seite neu laden'); return; }
+  XLSX.writeFile(wb, name);
+  showGlobalAlert('success', `Excel "${name}" heruntergeladen`);
+}
+
+function downloadReportExcelCC() {
+  const data = window._rptCCData;
+  if (!data) { showGlobalAlert('error', 'Keine Daten — bitte zuerst Bericht laden'); return; }
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Summary per CC
+  const summaryRows = [['Kostenstelle', 'Code', 'Stunden (Dezimal)', 'Stunden (HH:MM)', 'Mitarbeiter']];
+  (data.ccs || []).forEach(cc => {
+    summaryRows.push([cc.nombre, cc.codigo || '', +(cc.total_minutos / 60).toFixed(2), cc.total_formateado || '0:00', cc.empleados_count || 0]);
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
+  ws1['!cols'] = [{ wch: 28 }, { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Kostenstellen');
+
+  // Sheet 2: Detail per CC with employee breakdown
+  const detRows = [['Kostenstelle', 'Code', 'Pers.Nr.', 'Mitarbeiter', 'Stunden (Dezimal)', 'Stunden (HH:MM)', 'Anteil (%)']];
+  (data.details || []).forEach(det => {
+    const ccName = det.centro_coste?.nombre || '—';
+    const ccCode = det.codigo || '';
+    (det.por_empleado || []).forEach(e => {
+      detRows.push([ccName, ccCode, e.id_nummer || '', e.nombre, +(e.minutos / 60).toFixed(2), e.formateado, e.porcentaje]);
+    });
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(detRows);
+  ws2['!cols'] = [{ wch: 28 }, { wch: 10 }, { wch: 10 }, { wch: 25 }, { wch: 16 }, { wch: 14 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Detail');
+
+  _xlsxSave(wb, `Bericht_Kostenstelle_${_xlsxPeriodStr()}.xlsx`);
+}
+
+function downloadReportExcelEmp() {
+  const details = window._rptDetails;
+  const period = window._rptPeriod;
+  if (!details || !details.length) { showGlobalAlert('error', 'Keine Daten — bitte zuerst Bericht laden'); return; }
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Summary per employee
+  const summaryRows = [['Pers.Nr.', 'Mitarbeiter', 'Stunden (Dezimal)', 'Stunden (HH:MM)', 'Arbeitstage', 'Kostenstellen']];
+  details.forEach(det => {
+    const empName = `${det.emp.nombre} ${det.emp.apellido || ''}`.trim();
+    const ccList = (det.por_centro_coste || []).map(cc => cc.nombre).join(', ');
+    summaryRows.push([det.emp.id_nummer || '', empName, +(det.total_minutos / 60).toFixed(2), det.total_formateado, (det.detalle_diario || []).length, ccList]);
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
+  ws1['!cols'] = [{ wch: 10 }, { wch: 25 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 35 }];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Mitarbeiter');
+
+  // Sheet 2: CC breakdown per employee
+  const ccRows = [['Pers.Nr.', 'Mitarbeiter', 'Kostenstelle', 'Code', 'Stunden (Dezimal)', 'Stunden (HH:MM)', 'Anteil (%)']];
+  details.forEach(det => {
+    const empName = `${det.emp.nombre} ${det.emp.apellido || ''}`.trim();
+    (det.por_centro_coste || []).forEach(cc => {
+      ccRows.push([det.emp.id_nummer || '', empName, cc.nombre, cc.codigo || '', +(cc.minutos / 60).toFixed(2), cc.formateado, cc.porcentaje]);
+    });
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(ccRows);
+  ws2['!cols'] = [{ wch: 10 }, { wch: 25 }, { wch: 28 }, { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Nach Kostenstelle');
+
+  // Sheet 3: Daily detail for all employees
+  const dayRows = [['Pers.Nr.', 'Mitarbeiter', 'Datum', 'Eingang', 'Ausgang', 'Kostenstelle', 'Minuten', 'Stunden (HH:MM)']];
+  details.forEach(det => {
+    const empName = `${det.emp.nombre} ${det.emp.apellido || ''}`.trim();
+    (det.detalle_diario || []).forEach(d => {
+      (d.segmentos || []).forEach(s => {
+        dayRows.push([det.emp.id_nummer || '', empName, d.fecha, s.inicio || '', s.en_curso ? '(laufend)' : (s.fin || ''), s.centro_coste || '', s.minutos || 0, _fmtMin(s.minutos)]);
+      });
+    });
+  });
+  const ws3 = XLSX.utils.aoa_to_sheet(dayRows);
+  ws3['!cols'] = [{ wch: 10 }, { wch: 25 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 28 }, { wch: 10 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Tagesdetail');
+
+  _xlsxSave(wb, `Bericht_Mitarbeiter_${_xlsxPeriodStr()}.xlsx`);
+}
+
+function downloadReportExcelTurno() {
+  const data = window._rptTurnoData;
+  if (!data) { showGlobalAlert('error', 'Keine Daten — bitte zuerst Bericht laden'); return; }
+  const wb = XLSX.utils.book_new();
+  const { modelos, emps, totales } = data;
+
+  // Header row
+  const header = ['Pers.Nr.', 'Mitarbeiter'];
+  modelos.forEach(m => header.push(m.codigo + ' (' + m.nombre + ')'));
+  header.push('Ohne Plan', 'Gesamt (Dezimal)', 'Gesamt (HH:MM)');
+
+  const rows = [header];
+  emps.forEach(e => {
+    const row = [e.id_nummer || '', e.nombre];
+    modelos.forEach(m => {
+      const d = e.por_modelo[m.codigo];
+      row.push(d ? +(d.minutos / 60).toFixed(2) : 0);
+    });
+    row.push(e.sin_plan_minutos > 0 ? +(e.sin_plan_minutos / 60).toFixed(2) : 0);
+    row.push(+(e.total_minutos / 60).toFixed(2));
+    row.push(e.total_formateado);
+    rows.push(row);
+  });
+
+  // Total row
+  const totalRow = ['', 'Gesamt'];
+  modelos.forEach(m => {
+    const t = totales[m.codigo];
+    totalRow.push(t ? +(t.minutos / 60).toFixed(2) : 0);
+  });
+  totalRow.push(totales.sin_plan ? +(totales.sin_plan.minutos / 60).toFixed(2) : 0);
+  totalRow.push(totales.total ? +(totales.total.minutos / 60).toFixed(2) : 0);
+  totalRow.push(totales.total ? totales.total.formateado : '0:00');
+  rows.push(totalRow);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const colWidths = [{ wch: 10 }, { wch: 25 }];
+  modelos.forEach(() => colWidths.push({ wch: 18 }));
+  colWidths.push({ wch: 12 }, { wch: 16 }, { wch: 14 });
+  ws['!cols'] = colWidths;
+  XLSX.utils.book_append_sheet(wb, ws, 'Schichtstunden');
+
+  _xlsxSave(wb, `Bericht_Schichtstunden_${_xlsxPeriodStr()}.xlsx`);
 }
 
 // =====================================================================
@@ -4660,5 +4809,6 @@ async function loadInteractions() {
   }
 }
 </script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </body>
 </html>
