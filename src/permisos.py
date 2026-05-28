@@ -23,6 +23,7 @@ from .models.usuario import (
     ROLE_SCHICHTFUEHRER,
     ROLE_STV_SCHICHTFUEHRER,
     ROLE_BENUTZER,
+    ROLE_GRUPPENADMIN,
 )
 
 # ── Permission constants ──────────────────────────────────────────────────────
@@ -89,6 +90,7 @@ _BASE_ADMIN: frozenset[str] = _BASE_SHIFT_LEAD | frozenset({
 
 PERMISSIONS_BY_ROLE: dict[int, frozenset[str]] = {
     ROLE_ADMIN:              _BASE_ADMIN,
+    ROLE_GRUPPENADMIN:       _BASE_ADMIN,    # mismos permisos que Admin, pero filtrado por grupo
     ROLE_SCHICHTFUEHRER:     _BASE_SHIFT_LEAD,
     ROLE_STV_SCHICHTFUEHRER: _BASE_USER,    # expanded dynamically when substituting
     ROLE_BENUTZER:           _BASE_USER,
@@ -142,3 +144,50 @@ def _substitution_permissions(employee_id, db: "Session") -> frozenset[str]:
         .first()
     )
     return DEPUTY_SUBSTITUTION_PERMISSIONS if absent else frozenset()
+
+
+# ── Group scoping (Gruppenadmin) ──────────────────────────────────────────────
+
+def scoped_grupo_id(user: "Usuario"):
+    """
+    Returns the UUID of the Gruppe a Gruppenadmin is restricted to,
+    or None if the user has no group restriction (Admin/Personalabteilung,
+    or a Gruppenadmin with grupo_id=NULL → treated as full access).
+    """
+    if getattr(user, "role", None) == ROLE_GRUPPENADMIN and getattr(user, "grupo_id", None):
+        return user.grupo_id
+    return None
+
+
+def scoped_empleado_ids(user: "Usuario", db: "Session"):
+    """
+    Returns the list of empleado IDs a user may access:
+      - None  → unrestricted (Admin / Gruppenadmin without group)
+      - list  → only employees belonging to the Gruppenadmin's group
+    """
+    from .models.empleado import Empleado
+
+    gid = scoped_grupo_id(user)
+    if gid is None:
+        return None
+    rows = db.query(Empleado.id).filter(Empleado.grupo_id == gid).all()
+    return [r[0] for r in rows]
+
+
+def assert_empleado_accesible(user: "Usuario", db: "Session", empleado_id) -> None:
+    """
+    Raises HTTP 403 if a Gruppenadmin tries to access an employee outside their group.
+    No-op for unrestricted users.
+    """
+    from fastapi import HTTPException, status
+    from .models.empleado import Empleado
+
+    gid = scoped_grupo_id(user)
+    if gid is None:
+        return
+    emp = db.query(Empleado.grupo_id).filter(Empleado.id == empleado_id).first()
+    if emp is None or emp[0] != gid:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Kein Zugriff auf Mitarbeiter außerhalb Ihrer Gruppe",
+        )

@@ -14,7 +14,10 @@ import logging
 from ..database import get_db
 from ..models.empleado import Empleado, Grupo
 from ..auth import require_permission
-from ..permisos import HOURS_CONTROL_TEAM, EMPLOYEES_EDIT, DEPUTY_ASSIGN, TIMECLOCK_REGISTER
+from ..permisos import (
+    HOURS_CONTROL_TEAM, EMPLOYEES_EDIT, DEPUTY_ASSIGN, TIMECLOCK_REGISTER,
+    scoped_grupo_id, assert_empleado_accesible,
+)
 from ..services.audit_service import log_action, diff_changes
 
 logger = logging.getLogger(__name__)
@@ -142,7 +145,11 @@ def listar_empleados(
     query = db.query(Empleado).options(joinedload(Empleado.grupo))
     if activo is not None:
         query = query.filter(Empleado.activo == activo)
-    if grupo_id:
+    # Gruppenadmin: forzar filtro a su grupo, ignorando cualquier grupo_id pedido.
+    scope_gid = scoped_grupo_id(_auth)
+    if scope_gid is not None:
+        query = query.filter(Empleado.grupo_id == scope_gid)
+    elif grupo_id:
         query = query.filter(Empleado.grupo_id == grupo_id)
     if q:
         query = query.filter(
@@ -155,6 +162,7 @@ def listar_empleados(
 
 @router.get("/{empleado_id}")
 def obtener_empleado(empleado_id: UUID, db: Session = Depends(get_db), _auth=Depends(require_permission(HOURS_CONTROL_TEAM))):
+    assert_empleado_accesible(_auth, db, empleado_id)
     e = (db.query(Empleado)
          .options(joinedload(Empleado.grupo))
          .filter(Empleado.id == empleado_id)
@@ -184,6 +192,10 @@ def crear_empleado(data: EmpleadoCreate, db: Session = Depends(get_db), _auth=De
     # Resolver nfc_tag (id_nfc es alias)
     nfc_tag = data.id_nfc or data.nfc_tag
 
+    # Gruppenadmin: el nuevo empleado se crea forzosamente en su grupo.
+    scope_gid = scoped_grupo_id(_auth)
+    grupo_id = scope_gid if scope_gid is not None else data.grupo_id
+
     emp = Empleado(
         id_nummer=id_nummer,
         nombre=data.nombre,
@@ -191,7 +203,7 @@ def crear_empleado(data: EmpleadoCreate, db: Session = Depends(get_db), _auth=De
         email=data.email,
         nfc_tag=nfc_tag,
         keytag=data.keytag,
-        grupo_id=data.grupo_id,
+        grupo_id=grupo_id,
         kostenstelle_id=data.kostenstelle_id,
         monthly_hours=data.monthly_hours,
         salary_hour=data.salary_hour,
@@ -221,6 +233,7 @@ def actualizar_empleado(
     _auth=Depends(require_permission(EMPLOYEES_EDIT)),
 ):
     """Actualiza todos los campos relevantes del empleado."""
+    assert_empleado_accesible(_auth, db, empleado_id)
     emp = (db.query(Empleado)
            .options(joinedload(Empleado.grupo))
            .filter(Empleado.id == empleado_id)
@@ -229,6 +242,10 @@ def actualizar_empleado(
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     update_fields = data.model_dump(exclude_unset=True)
+    # Gruppenadmin no puede mover un empleado a otro grupo.
+    scope_gid = scoped_grupo_id(_auth)
+    if scope_gid is not None and update_fields.get("grupo_id") not in (None, scope_gid):
+        raise HTTPException(403, "Mitarbeiter darf nicht in eine andere Gruppe verschoben werden")
     old_state = {k: str(getattr(emp, k)) for k in update_fields}
 
     for field, value in update_fields.items():
@@ -257,6 +274,7 @@ def cambiar_nfc(
     Cambia el NFC tag del empleado.
     Registra el cambio en el log con motivo.
     """
+    assert_empleado_accesible(_auth, db, empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -299,6 +317,7 @@ def desactivar_empleado(
     Soft delete: marca al empleado como inactivo (activo=False).
     NO elimina el registro de la base de datos.
     """
+    assert_empleado_accesible(_auth, db, empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -337,6 +356,7 @@ def reactivar_empleado(
     Reactiva un empleado previamente desactivado (activo=True).
     Limpia la fecha_baja.
     """
+    assert_empleado_accesible(_auth, db, empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -382,6 +402,7 @@ def set_stellvertretung(
     Asigna (o elimina) un Stv. Schichtführer como suplente del empleado.
     El suplente hereda permisos de Schichtführer mientras esté activa.
     """
+    assert_empleado_accesible(_auth, db, empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")

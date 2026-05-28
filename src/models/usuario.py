@@ -14,23 +14,27 @@ from ..database import Base
 
 """
 Roles del sistema Hagemann:
-  1 = Admin              — Acceso completo sin restricciones
+  1 = Admin              — Acceso completo sin restricciones (Personalabteilung)
   2 = Schichtführer      — Liberar horas, control horas, vista vacaciones equipo,
                            elegir suplente (Stellvertreter)
   3 = Stv. Schichtführer — Como Benutzer + actúa como Schichtführer al sustituir
   4 = Benutzer           — Login/Logout, Raucherpause, solicitar vacaciones/FZA,
                            ver propias horas/vacaciones
+  5 = Gruppenadmin       — Como Admin pero limitado a una única Gruppe (grupo_id).
+                           Solo ve/gestiona empleados de su grupo asignado.
 """
 ROLE_ADMIN = 1
 ROLE_SCHICHTFUEHRER = 2
 ROLE_STV_SCHICHTFUEHRER = 3
 ROLE_BENUTZER = 4
+ROLE_GRUPPENADMIN = 5
 
 ROLE_LABELS = {
     ROLE_ADMIN: "Admin",
     ROLE_SCHICHTFUEHRER: "Schichtführer",
     ROLE_STV_SCHICHTFUEHRER: "Stv. Schichtführer",
     ROLE_BENUTZER: "Benutzer",
+    ROLE_GRUPPENADMIN: "Gruppenadmin",
 }
 
 
@@ -47,12 +51,18 @@ class Usuario(Base):
     email = Column(String(255), nullable=True, unique=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(Integer, nullable=False, default=ROLE_BENUTZER,
-                  comment="1=Admin, 2=Schichtführer, 3=Stv.Schichtführer, 4=Benutzer")
+                  comment="1=Admin, 2=Schichtführer, 3=Stv.Schichtführer, 4=Benutzer, 5=Gruppenadmin")
 
     # FK opcional al empleado
     empleado_id = Column(UUID(as_uuid=True),
                          ForeignKey("hagemann.empleados.id"),
                          nullable=True)
+
+    # FK opcional a la Gruppe — solo relevante para role=Gruppenadmin (5).
+    # NULL = sin restricción de grupo (Admin/Personalabteilung ve todo).
+    grupo_id = Column(UUID(as_uuid=True),
+                      ForeignKey("hagemann.grupos.id"),
+                      nullable=True)
 
     activo = Column(Boolean, nullable=False, default=True)
     last_login = Column(DateTime, nullable=True)
@@ -63,3 +73,4 @@ class Usuario(Base):
 
     # Relaciones
     empleado = relationship("Empleado", foreign_keys=[empleado_id])
+    grupo = relationship("Grupo", foreign_keys=[grupo_id])

@@ -10,8 +10,8 @@ from uuid import UUID
 from datetime import datetime
 
 from ..database import get_db
-from ..models.usuario import Usuario, ROLE_LABELS
-from ..models.empleado import Empleado
+from ..models.usuario import Usuario, ROLE_LABELS, ROLE_GRUPPENADMIN
+from ..models.empleado import Empleado, Grupo
 from ..auth import require_permission, hash_password, get_current_user
 from ..permisos import USERS_ADMIN
 from ..services.audit_service import log_action, diff_changes
@@ -31,6 +31,7 @@ class UsuarioCreate(BaseModel):
     password: str
     role: int = 4
     empleado_id: Optional[UUID] = None
+    grupo_id: Optional[UUID] = None
     activo: bool = True
 
 
@@ -39,6 +40,7 @@ class UsuarioUpdate(BaseModel):
     email: Optional[str] = None
     role: Optional[int] = None
     empleado_id: Optional[UUID] = None
+    grupo_id: Optional[UUID] = None
     activo: Optional[bool] = None
 
 
@@ -60,6 +62,8 @@ def _to_dict(u: Usuario) -> dict:
             f"{u.empleado.nombre} {u.empleado.apellido or ''}".strip()
             if u.empleado else None
         ),
+        "grupo_id": str(u.grupo_id) if u.grupo_id else None,
+        "grupo_nombre": u.grupo.nombre if u.grupo else None,
         "activo": u.activo,
         "last_login": u.last_login.isoformat() + "Z" if u.last_login else None,
         "created_at": u.created_at.isoformat() + "Z" if u.created_at else None,
@@ -72,7 +76,7 @@ def _to_dict(u: Usuario) -> dict:
 def listar_usuarios(db: Session = Depends(get_db)):
     usuarios = (
         db.query(Usuario)
-        .options(joinedload(Usuario.empleado))
+        .options(joinedload(Usuario.empleado), joinedload(Usuario.grupo))
         .order_by(Usuario.role, Usuario.nick)
         .all()
     )
@@ -81,7 +85,7 @@ def listar_usuarios(db: Session = Depends(get_db)):
 
 @router.get("/{usuario_id}")
 def obtener_usuario(usuario_id: UUID, db: Session = Depends(get_db)):
-    u = db.query(Usuario).options(joinedload(Usuario.empleado)).filter(Usuario.id == usuario_id).first()
+    u = db.query(Usuario).options(joinedload(Usuario.empleado), joinedload(Usuario.grupo)).filter(Usuario.id == usuario_id).first()
     if not u:
         raise HTTPException(404, "Benutzer nicht gefunden")
     return _to_dict(u)
@@ -99,6 +103,14 @@ def crear_usuario(data: UsuarioCreate, db: Session = Depends(get_db),
     if data.empleado_id:
         if not db.query(Empleado).filter(Empleado.id == data.empleado_id).first():
             raise HTTPException(404, "Mitarbeiter nicht gefunden")
+    grupo_id = data.grupo_id
+    if data.role == ROLE_GRUPPENADMIN:
+        if not grupo_id:
+            raise HTTPException(400, "Gruppenadmin benötigt eine zugewiesene Gruppe")
+        if not db.query(Grupo).filter(Grupo.id == grupo_id).first():
+            raise HTTPException(404, "Gruppe nicht gefunden")
+    else:
+        grupo_id = None  # solo Gruppenadmin usa grupo_id
 
     u = Usuario(
         nick=data.nick,
@@ -106,6 +118,7 @@ def crear_usuario(data: UsuarioCreate, db: Session = Depends(get_db),
         password_hash=hash_password(data.password),
         role=data.role,
         empleado_id=data.empleado_id,
+        grupo_id=grupo_id,
         activo=data.activo,
     )
     db.add(u)
@@ -129,6 +142,7 @@ def actualizar_usuario(usuario_id: UUID, data: UsuarioUpdate, db: Session = Depe
 
     old_state = {"nick": u.nick, "email": u.email, "role": u.role,
                  "empleado_id": str(u.empleado_id) if u.empleado_id else None,
+                 "grupo_id": str(u.grupo_id) if u.grupo_id else None,
                  "activo": u.activo}
 
     if data.nick is not None:
@@ -153,12 +167,25 @@ def actualizar_usuario(usuario_id: UUID, data: UsuarioUpdate, db: Session = Depe
             raise HTTPException(404, "Mitarbeiter nicht gefunden")
         u.empleado_id = data.empleado_id
 
+    if data.grupo_id is not None:
+        if not db.query(Grupo).filter(Grupo.id == data.grupo_id).first():
+            raise HTTPException(404, "Gruppe nicht gefunden")
+        u.grupo_id = data.grupo_id
+
+    # Consistencia rol↔grupo: Gruppenadmin exige grupo; otros roles lo limpian.
+    if u.role == ROLE_GRUPPENADMIN:
+        if not u.grupo_id:
+            raise HTTPException(400, "Gruppenadmin benötigt eine zugewiesene Gruppe")
+    else:
+        u.grupo_id = None
+
     if data.activo is not None:
         u.activo = data.activo
 
     u.updated_at = datetime.utcnow()
     new_state = {"nick": u.nick, "email": u.email, "role": u.role,
                  "empleado_id": str(u.empleado_id) if u.empleado_id else None,
+                 "grupo_id": str(u.grupo_id) if u.grupo_id else None,
                  "activo": u.activo}
     log_action(db, "UPDATE", "usuario",
                entidad_id=str(u.id),

@@ -15,7 +15,10 @@ from ..database import get_db
 from ..models.empleado import Empleado
 from ..models.saldo_horas import SaldoHorasMensual
 from ..auth import require_permission
-from ..permisos import TIMECLOCK_VIEW_OWN, HOURS_CONTROL_TEAM, HOURS_RELEASE_TEAM
+from ..permisos import (
+    TIMECLOCK_VIEW_OWN, HOURS_CONTROL_TEAM, HOURS_RELEASE_TEAM,
+    assert_empleado_accesible,
+)
 from ..services.calculo_saldo import (
     calcular_saldo_mes,
     calcular_saldo_anio,
@@ -52,6 +55,7 @@ def saldo_horas_empleado(
     - **saldo_final**: después de aplicar Stundenkappung
     - **kappung_aplicada**: si se recortó el saldo
     """
+    assert_empleado_accesible(_auth, db, empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -97,6 +101,7 @@ def saldo_mes_empleado(
     if not 1 <= mes <= 12:
         raise HTTPException(400, "Der Monat muss zwischen 1 und 12 liegen")
 
+    assert_empleado_accesible(_auth, db, empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -122,6 +127,7 @@ def cerrar_mes_empleado(
     Marca el saldo de un mes como CERRADO.
     Un saldo cerrado no se recalcula automáticamente (requiere forzar=True).
     """
+    assert_empleado_accesible(_auth, db, empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -163,6 +169,9 @@ def cierre_mensual(
 
     Devuelve resumen con todos los empleados procesados.
     """
+    from ..permisos import scoped_grupo_id
+    if scoped_grupo_id(_auth) is not None:
+        raise HTTPException(403, "Monatsabschluss ist nur der Personalabteilung (Admin) vorbehalten")
     limite = Decimal(str(kappung)) if kappung is not None else None
     resultado = cierre_mensual_todos(
         db, year, mes,
@@ -180,6 +189,7 @@ def historial_saldo(
     _auth=Depends(require_permission(TIMECLOCK_VIEW_OWN)),
 ):
     """Historial de saldos guardados para un empleado (los últimos N meses)."""
+    assert_empleado_accesible(_auth, db, empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -228,6 +238,7 @@ def ajuste_manual_mes(
     if not 1 <= mes <= 12:
         raise HTTPException(400, "Mes entre 1 y 12")
 
+    assert_empleado_accesible(_auth, db, empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")

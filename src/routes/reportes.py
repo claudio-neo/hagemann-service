@@ -12,8 +12,8 @@ from ..database import get_db
 from ..models.empleado import Empleado, CentroCoste
 from ..models.fichaje import Fichaje, SegmentoTiempo
 from ..models.turno import PlanTurno, ModeloTurno
-from ..auth import require_permission
-from ..permisos import REPORTS_VIEW
+from ..auth import require_permission, get_current_user
+from ..permisos import REPORTS_VIEW, scoped_empleado_ids, assert_empleado_accesible
 
 router = APIRouter(
     prefix="/reportes",
@@ -52,11 +52,13 @@ def horas_por_empleado(
     desde: date = Query(...),
     hasta: date = Query(...),
     db: Session = Depends(get_db),
+    _auth=Depends(get_current_user),
 ):
     """
     Horas de un empleado desglosadas por centro de coste.
     Vista: ¿Cuántas horas trabajó René y en qué departamentos?
     """
+    assert_empleado_accesible(_auth, db, empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -140,6 +142,7 @@ def horas_por_centro_coste(
     desde: date = Query(...),
     hasta: date = Query(...),
     db: Session = Depends(get_db),
+    _auth=Depends(get_current_user),
 ):
     """
     Horas de un departamento desglosadas por trabajador.
@@ -153,7 +156,8 @@ def horas_por_centro_coste(
     hasta_dt = datetime.combine(hasta, datetime.max.time())
     now_dt = datetime.utcnow()
 
-    segmentos = (
+    scope_ids = scoped_empleado_ids(_auth, db)
+    seg_query = (
         db.query(
             Empleado.id.label("emp_id"),
             Empleado.id_nummer,
@@ -168,8 +172,10 @@ def horas_por_centro_coste(
             SegmentoTiempo.centro_coste_id == centro_coste_id,
             _periodo_filter(desde_dt, hasta_dt),
         )
-        .all()
     )
+    if scope_ids is not None:
+        seg_query = seg_query.filter(SegmentoTiempo.empleado_id.in_(scope_ids))
+    segmentos = seg_query.all()
 
     by_emp_map = {}
     for s in segmentos:
@@ -214,6 +220,7 @@ def resumen_centros_coste(
     desde: date = Query(...),
     hasta: date = Query(...),
     db: Session = Depends(get_db),
+    _auth=Depends(get_current_user),
 ):
     """
     Vista gerencial: todos los centros de coste con total de horas y empleados.
@@ -223,7 +230,8 @@ def resumen_centros_coste(
     now_dt = datetime.utcnow()
 
     # Cargar todos los segmentos del período (cerrados + abiertos)
-    segmentos = (
+    scope_ids = scoped_empleado_ids(_auth, db)
+    seg_query = (
         db.query(
             SegmentoTiempo.centro_coste_id,
             SegmentoTiempo.empleado_id,
@@ -232,8 +240,10 @@ def resumen_centros_coste(
             SegmentoTiempo.minutos,
         )
         .filter(_periodo_filter(desde_dt, hasta_dt))
-        .all()
     )
+    if scope_ids is not None:
+        seg_query = seg_query.filter(SegmentoTiempo.empleado_id.in_(scope_ids))
+    segmentos = seg_query.all()
 
     # Agregar por CC
     cc_agg = {}  # cc_id -> {"min": int, "emp_ids": set()}
@@ -297,6 +307,7 @@ def horas_por_turno(
     hasta: date = Query(...),
     empleado_id: Optional[UUID] = Query(None, description="Filtrar por empleado"),
     db: Session = Depends(get_db),
+    _auth=Depends(get_current_user),
 ):
     """
     HG-22: Horas reales trabajadas por empleado desglosadas por tipo de turno.
@@ -304,6 +315,9 @@ def horas_por_turno(
 
     Útil para calcular Nachtzuschläge, Frühschicht-Zulagen, etc.
     """
+    if empleado_id:
+        assert_empleado_accesible(_auth, db, empleado_id)
+    scope_ids = scoped_empleado_ids(_auth, db)
     desde_dt = datetime.combine(desde, datetime.min.time())
     hasta_dt = datetime.combine(hasta, datetime.max.time())
 
@@ -319,6 +333,8 @@ def horas_por_turno(
     )
     if empleado_id:
         q = q.filter(Fichaje.empleado_id == empleado_id)
+    elif scope_ids is not None:
+        q = q.filter(Fichaje.empleado_id.in_(scope_ids))
     fichajes = q.order_by(Fichaje.empleado_id, Fichaje.fecha_entrada).all()
 
     if not fichajes:

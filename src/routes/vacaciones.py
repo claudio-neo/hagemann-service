@@ -17,6 +17,7 @@ from ..permisos import (
     LEAVE_REQUEST, LEAVE_VIEW_OWN, LEAVE_VIEW_TEAM,
     LEAVE_APPROVE, APPROVALS_LEVEL2, USERS_ADMIN,
     HOURS_CONTROL_TEAM,
+    scoped_empleado_ids, assert_empleado_accesible,
 )
 from ..services.audit_service import log_action
 from ..models.vacaciones import (
@@ -163,6 +164,7 @@ def _solicitud_dict(s: SolicitudVacaciones) -> dict:
 @router.post("/periodos", status_code=201)
 def crear_periodo(data: PeriodoCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(USERS_ADMIN))):
     """Crea un periodo vacacional para un empleado."""
+    assert_empleado_accesible(_auth, db, data.empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == data.empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -196,6 +198,7 @@ def listar_periodos_empleado(
     _auth=Depends(require_permission(LEAVE_VIEW_OWN)),
 ):
     """Lista todos los periodos de un empleado."""
+    assert_empleado_accesible(_auth, db, empleado_id)
     periodos = db.query(PeriodoVacaciones).filter(
         PeriodoVacaciones.empleado_id == empleado_id
     ).order_by(PeriodoVacaciones.anio.desc()).all()
@@ -217,6 +220,7 @@ def saldo_vacaciones(
     - dias_pendientes: suma de solicitudes PENDIENTES o PROPUESTAS
     - dias_disponibles: totales - usados - pendientes
     """
+    assert_empleado_accesible(_auth, db, empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -269,6 +273,7 @@ def crear_solicitud(data: SolicitudCreate, db: Session = Depends(get_db), _auth=
     El empleado la crea → queda en estado PENDIENTE.
     Calcula automáticamente los días laborables (excluye fines de semana y festivos).
     """
+    assert_empleado_accesible(_auth, db, data.empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == data.empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -368,6 +373,9 @@ def listar_solicitudes(
     query = db.query(SolicitudVacaciones).options(
         joinedload(SolicitudVacaciones.empleado)
     )
+    scope_ids = scoped_empleado_ids(_auth, db)
+    if scope_ids is not None:
+        query = query.filter(SolicitudVacaciones.empleado_id.in_(scope_ids))
     if empleado_id:
         query = query.filter(SolicitudVacaciones.empleado_id == empleado_id)
     if estado:
@@ -399,6 +407,7 @@ def mis_solicitudes(
     _auth=Depends(require_permission(LEAVE_VIEW_OWN)),
 ):
     """Solicitudes propias del empleado — requiere solo leave:view_own."""
+    assert_empleado_accesible(_auth, db, empleado_id)
     query = db.query(SolicitudVacaciones).options(
         joinedload(SolicitudVacaciones.empleado)
     ).filter(SolicitudVacaciones.empleado_id == empleado_id)
@@ -416,6 +425,7 @@ def obtener_solicitud(solicitud_id: UUID, db: Session = Depends(get_db), _auth=D
     ).filter(SolicitudVacaciones.id == solicitud_id).first()
     if not s:
         raise HTTPException(404, "Antrag nicht gefunden")
+    assert_empleado_accesible(_auth, db, s.empleado_id)
     return _solicitud_dict(s)
 
 
@@ -436,6 +446,7 @@ def accion_nivel1(
     ).filter(SolicitudVacaciones.id == solicitud_id).first()
     if not s:
         raise HTTPException(404, "Antrag nicht gefunden")
+    assert_empleado_accesible(_auth, db, s.empleado_id)
     if s.estado != EstadoSolicitud.PENDIENTE:
         raise HTTPException(
             409,
@@ -483,6 +494,7 @@ def accion_nivel2(
     ).filter(SolicitudVacaciones.id == solicitud_id).first()
     if not s:
         raise HTTPException(404, "Antrag nicht gefunden")
+    assert_empleado_accesible(_auth, db, s.empleado_id)
     if s.estado != EstadoSolicitud.PROPUESTA:
         raise HTTPException(
             409,
@@ -530,6 +542,7 @@ def cancelar_solicitud(
     ).first()
     if not s:
         raise HTTPException(404, "Antrag nicht gefunden")
+    assert_empleado_accesible(_auth, db, s.empleado_id)
     if s.estado in (EstadoSolicitud.APROBADA, EstadoSolicitud.RECHAZADA):
         raise HTTPException(409, f"No se puede cancelar en estado '{s.estado}'")
 
@@ -620,6 +633,7 @@ def registrar_krankmeldung(
     This automatically activates the Stv. Schichtführer delegation
     if the absent employee has a stellvertreter assigned.
     """
+    assert_empleado_accesible(_auth, db, data.empleado_id)
     emp = db.query(Empleado).filter(Empleado.id == data.empleado_id).first()
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -720,6 +734,7 @@ def beenden_krankmeldung(
     ).first()
     if not sol:
         raise HTTPException(404, "Krankmeldung nicht gefunden")
+    assert_empleado_accesible(_auth, db, sol.empleado_id)
 
     today = date.today()
     if today < sol.fecha_inicio:
@@ -758,6 +773,9 @@ def listar_krankmeldungen(
             SolicitudVacaciones.estado == EstadoSolicitud.APROBADA,
         )
     )
+    scope_ids = scoped_empleado_ids(_auth, db)
+    if scope_ids is not None:
+        query = query.filter(SolicitudVacaciones.empleado_id.in_(scope_ids))
     if activas:
         today = date.today()
         query = query.filter(SolicitudVacaciones.fecha_fin >= today)
