@@ -436,7 +436,11 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     <div class="page-header">
       <div><h1>Urlaub</h1><p>Urlaubsanträge und Salden</p></div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-        <select id="urlaubYear" class="form-control" style="width:100px" onchange="loadUrlaub()"></select>
+        <select id="urlaubYear" class="form-control" style="width:100px" onchange="onUrlaubYearChange()"></select>
+        <label style="font-size:13px; color:var(--muted); font-weight:600">Von</label>
+        <input type="date" id="urlaubVon" class="form-control" style="width:auto" onchange="filterUrlaub()">
+        <label style="font-size:13px; color:var(--muted); font-weight:600">Bis</label>
+        <input type="date" id="urlaubBis" class="form-control" style="width:auto" onchange="filterUrlaub()">
         <button class="btn btn-primary" onclick="openUrlaubModal()">+ Neuer Antrag</button>
         <button class="btn btn-success btn-sm" onclick="downloadUrlaubExcel()" title="Excel herunterladen">📥 Excel</button>
       </div>
@@ -2546,11 +2550,22 @@ function switchUrlaubTab(tab) {
   if (tab === 'krankmeldung') initKrankmeldung();
 }
 
+function onUrlaubYearChange() {
+  const year = document.getElementById('urlaubYear').value;
+  document.getElementById('urlaubVon').value = `${year}-01-01`;
+  document.getElementById('urlaubBis').value = `${year}-12-31`;
+  loadUrlaub();
+}
+
 async function loadUrlaub() {
   const year = document.getElementById('urlaubYear').value;
   const tbody = document.getElementById('urlaubTbody');
   const leer  = document.getElementById('urlaubLeer');
   tbody.innerHTML = '<tr><td colspan="7"><div class="loading">Lade Daten</div></td></tr>';
+
+  // Set default Von/Bis if empty
+  if (!document.getElementById('urlaubVon').value) document.getElementById('urlaubVon').value = `${year}-01-01`;
+  if (!document.getElementById('urlaubBis').value) document.getElementById('urlaubBis').value = `${year}-12-31`;
 
   // Hide Krankmeldung tab and Saldo-all for Benutzer (they see only own data)
   if (isBasicUser()) {
@@ -2560,7 +2575,6 @@ async function loadUrlaub() {
   try {
     let res;
     if (isBasicUser() && currentUser.employee_id) {
-      // Benutzer: usa endpoint propio (solo leave:view_own necesario)
       res = await api(`/vacaciones/mis-solicitudes/${currentUser.employee_id}?anio=${year}`);
     } else {
       res = await api(`/vacaciones/solicitudes?anio=${year}`);
@@ -2575,13 +2589,29 @@ async function loadUrlaub() {
   }
 }
 
+function _urlaubDateFilter(items) {
+  const von = document.getElementById('urlaubVon').value;
+  const bis = document.getElementById('urlaubBis').value;
+  if (!von && !bis) return items;
+  return items.filter(u => {
+    if (von && u.fecha_fin < von) return false;
+    if (bis && u.fecha_inicio > bis) return false;
+    return true;
+  });
+}
+
 function filterUrlaub() {
   renderUrlaubTable();
+  // Refresh Salden if visible
+  if (urlaubTab === 'saldo') loadSaldoGrid();
+  // Refresh Krankmeldungen if visible
+  if (urlaubTab === 'krankmeldung') loadKrankmeldungen();
 }
 
 function renderUrlaubTable() {
   const filter = document.getElementById('urlaubStatusFilter').value;
-  const data = filter ? allUrlaub.filter(u => u.estado === filter) : allUrlaub;
+  let data = filter ? allUrlaub.filter(u => u.estado === filter) : allUrlaub;
+  data = _urlaubDateFilter(data);
   const tbody = document.getElementById('urlaubTbody');
   const leer  = document.getElementById('urlaubLeer');
 
@@ -2684,6 +2714,8 @@ async function confirmReject() {
 
 async function loadSaldoGrid() {
   const year = document.getElementById('urlaubYear').value;
+  const von = document.getElementById('urlaubVon').value;
+  const bis = document.getElementById('urlaubBis').value;
   const grid = document.getElementById('saldoGrid');
   grid.innerHTML = '<div class="loading">Lade Salden</div>';
 
@@ -2705,7 +2737,24 @@ async function loadSaldoGrid() {
       return;
     }
 
-    grid.innerHTML = valid.map(s => `
+    // Count approved days within Von/Bis range per employee
+    const approvedInRange = {};
+    if (von || bis) {
+      const filtered = _urlaubDateFilter(allUrlaub.filter(u => u.estado === 'APROBADA'));
+      filtered.forEach(u => {
+        const key = u.empleado_id || u.empleado_nombre;
+        approvedInRange[key] = (approvedInRange[key] || 0) + u.dias;
+      });
+    }
+
+    const hasRange = von && bis && !(von.endsWith('-01-01') && bis.endsWith('-12-31') && von.startsWith(year));
+
+    grid.innerHTML = valid.map(s => {
+      const empId = s.emp?.id || '';
+      const rangeInfo = hasRange
+        ? `<div class="saldo-row" style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px"><span class="key">Im Zeitraum</span><span class="val" style="color:var(--blue);font-weight:700">${approvedInRange[empId] || 0} Tage</span></div>`
+        : '';
+      return `
       <div class="saldo-card">
         <div class="emp-name">${s.empleado?.nombre || s.emp.nombre} ${s.emp.apellido||''}</div>
         <div class="saldo-big ${s.dias_disponibles < 5 ? 'warn' : ''}">${s.dias_disponibles} Tage</div>
@@ -2715,8 +2764,9 @@ async function loadSaldoGrid() {
         <div class="saldo-row"><span class="key">Genutzt</span><span class="val">${s.dias_usados}</span></div>
         <div class="saldo-row"><span class="key">Ausstehend</span><span class="val">${s.dias_pendientes}</span></div>
         <div class="saldo-row"><span class="key">Verfügbar</span><span class="val"><b>${s.dias_disponibles}</b></span></div>
-      </div>
-    `).join('');
+        ${rangeInfo}
+      </div>`;
+    }).join('');
   } catch(e) {
     grid.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
   }
@@ -4436,8 +4486,10 @@ async function loadKrankmeldungen() {
   const empty = document.getElementById('kmEmpty');
   tbody.innerHTML = '<tr><td colspan="6"><div class="loading">Lade…</div></td></tr>';
   try {
-    const res = await api('/vacaciones/krankmeldungen?activas=true');
-    const items = res.data || [];
+    const res = await api('/vacaciones/krankmeldungen?activas=false');
+    let items = res.data || [];
+    // Apply Von/Bis date filter
+    items = _urlaubDateFilter(items);
     empty.classList.toggle('hidden', items.length > 0);
     if (!items.length) { tbody.innerHTML = ''; return; }
     tbody.innerHTML = items.map(k => `<tr>
@@ -4488,16 +4540,26 @@ async function beendenKrankmeldung(id) {
 async function downloadUrlaubExcel() {
   if (typeof XLSX === 'undefined') { showGlobalAlert('error', 'SheetJS nicht geladen'); return; }
   const year = document.getElementById('urlaubYear').value;
-  const tab = urlaubTab;
+  const von = document.getElementById('urlaubVon').value;
+  const bis = document.getElementById('urlaubBis').value;
   const wb = XLSX.utils.book_new();
+  const zeitraum = (von && bis) ? `${von} bis ${bis}` : `Jahr ${year}`;
+
+  // Date overlap helper
+  function inRange(item) {
+    if (!von && !bis) return true;
+    if (von && item.fecha_fin < von) return false;
+    if (bis && item.fecha_inicio > bis) return false;
+    return true;
+  }
 
   try {
     // ── Anträge (Solicitudes) ──
     const solRes = await api(`/vacaciones/solicitudes?anio=${year}&limit=200`);
-    const solicitudes = solRes.data || [];
+    const solicitudes = (solRes.data || []).filter(inRange);
     const solRows = [
       ['Urlaub & Abwesenheiten — Anträge'],
-      ['Jahr:', year],
+      ['Zeitraum:', zeitraum],
       ['Erstellt am:', new Date().toLocaleDateString('de-DE')],
       [],
       ['Mitarbeiter', 'Von', 'Bis', 'Tage', 'Typ', 'Status', 'Genehmigt L1', 'Genehmigt L2', 'Notizen'],
@@ -4522,12 +4584,18 @@ async function downloadUrlaubExcel() {
       api(`/vacaciones/saldo/${e.id}?anio=${year}`).then(d => ({ emp: e, ...d })).catch(() => null)
     ));
     const validSaldo = saldoResults.filter(Boolean);
+
+    // Count approved days within range per employee
+    const approvedFiltered = (solRes.data || []).filter(s => s.estado === 'APROBADA' && inRange(s));
+    const rangeByEmp = {};
+    approvedFiltered.forEach(s => { rangeByEmp[s.empleado_id] = (rangeByEmp[s.empleado_id] || 0) + s.dias; });
+
     const saldoRows = [
       ['Urlaubssaldo pro Mitarbeiter'],
-      ['Jahr:', year],
+      ['Zeitraum:', zeitraum],
       ['Erstellt am:', new Date().toLocaleDateString('de-DE')],
       [],
-      ['Pers.Nr.', 'Mitarbeiter', 'Vertragstage', 'Sondertage', 'Gesamt', 'Genutzt', 'Ausstehend', 'Verfügbar'],
+      ['Pers.Nr.', 'Mitarbeiter', 'Vertragstage', 'Sondertage', 'Gesamt', 'Genutzt', 'Ausstehend', 'Verfügbar', 'Tage im Zeitraum'],
     ];
     validSaldo.forEach(s => {
       const empName = `${s.emp.nombre} ${s.emp.apellido || ''}`.trim();
@@ -4535,21 +4603,19 @@ async function downloadUrlaubExcel() {
         s.emp.id_nummer || '', empName,
         s.dias_contrato, s.dias_extra, s.dias_totales,
         s.dias_usados, s.dias_pendientes, s.dias_disponibles,
+        rangeByEmp[s.emp.id] || 0,
       ]);
     });
     const ws2 = XLSX.utils.aoa_to_sheet(saldoRows);
-    ws2['!cols'] = [{ wch: 10 },{ wch: 25 },{ wch: 14 },{ wch: 12 },{ wch: 10 },{ wch: 10 },{ wch: 12 },{ wch: 12 }];
+    ws2['!cols'] = [{ wch: 10 },{ wch: 25 },{ wch: 14 },{ wch: 12 },{ wch: 10 },{ wch: 10 },{ wch: 12 },{ wch: 12 },{ wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Urlaubssaldo');
 
     // ── Krankmeldungen ──
     const kmRes = await api('/vacaciones/krankmeldungen?activas=false');
-    const krankmeldungen = (kmRes.data || []).filter(k => {
-      const yr = new Date(k.fecha_inicio).getFullYear();
-      return yr === parseInt(year);
-    });
+    const krankmeldungen = (kmRes.data || []).filter(inRange);
     const kmRows = [
       ['Krankmeldungen'],
-      ['Jahr:', year],
+      ['Zeitraum:', zeitraum],
       ['Erstellt am:', new Date().toLocaleDateString('de-DE')],
       [],
       ['Mitarbeiter', 'Von', 'Bis', 'Tage', 'Stellvertretung aktiv', 'Notizen'],
@@ -4565,7 +4631,8 @@ async function downloadUrlaubExcel() {
     ws3['!cols'] = [{ wch: 25 },{ wch: 12 },{ wch: 12 },{ wch: 6 },{ wch: 18 },{ wch: 30 }];
     XLSX.utils.book_append_sheet(wb, ws3, 'Krankmeldungen');
 
-    _xlsxSave(wb, `Urlaub_Krankmeldung_${year}.xlsx`);
+    const fnSuffix = (von && bis) ? `${von}_${bis}` : year;
+    _xlsxSave(wb, `Urlaub_Krankmeldung_${fnSuffix}.xlsx`);
   } catch(e) {
     showGlobalAlert('error', 'Export-Fehler: ' + e.message);
   }
