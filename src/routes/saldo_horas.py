@@ -169,8 +169,8 @@ def cierre_mensual(
 
     Devuelve resumen con todos los empleados procesados.
     """
-    from ..permisos import scoped_grupo_id
-    if scoped_grupo_id(_auth) is not None:
+    from ..permisos import scoped_grupo_ids
+    if scoped_grupo_ids(_auth) is not None:
         raise HTTPException(403, "Monatsabschluss ist nur der Personalabteilung (Admin) vorbehalten")
     limite = Decimal(str(kappung)) if kappung is not None else None
     resultado = cierre_mensual_todos(

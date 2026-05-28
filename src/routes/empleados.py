@@ -16,7 +16,7 @@ from ..models.empleado import Empleado, Grupo
 from ..auth import require_permission
 from ..permisos import (
     HOURS_CONTROL_TEAM, EMPLOYEES_EDIT, DEPUTY_ASSIGN, TIMECLOCK_REGISTER,
-    scoped_grupo_id, assert_empleado_accesible,
+    scoped_grupo_ids, assert_empleado_accesible,
 )
 from ..services.audit_service import log_action, diff_changes
 
@@ -145,10 +145,10 @@ def listar_empleados(
     query = db.query(Empleado).options(joinedload(Empleado.grupo))
     if activo is not None:
         query = query.filter(Empleado.activo == activo)
-    # Gruppenadmin: forzar filtro a su grupo, ignorando cualquier grupo_id pedido.
-    scope_gid = scoped_grupo_id(_auth)
-    if scope_gid is not None:
-        query = query.filter(Empleado.grupo_id == scope_gid)
+    # Gruppenadmin: forzar filtro a sus grupos, ignorando cualquier grupo_id pedido.
+    scope_gids = scoped_grupo_ids(_auth)
+    if scope_gids is not None:
+        query = query.filter(Empleado.grupo_id.in_(scope_gids))
     elif grupo_id:
         query = query.filter(Empleado.grupo_id == grupo_id)
     if q:
@@ -192,9 +192,18 @@ def crear_empleado(data: EmpleadoCreate, db: Session = Depends(get_db), _auth=De
     # Resolver nfc_tag (id_nfc es alias)
     nfc_tag = data.id_nfc or data.nfc_tag
 
-    # Gruppenadmin: el nuevo empleado se crea forzosamente en su grupo.
-    scope_gid = scoped_grupo_id(_auth)
-    grupo_id = scope_gid if scope_gid is not None else data.grupo_id
+    # Gruppenadmin: el nuevo empleado debe quedar en uno de sus grupos.
+    scope_gids = scoped_grupo_ids(_auth)
+    if scope_gids is None:
+        grupo_id = data.grupo_id
+    elif data.grupo_id is not None:
+        if data.grupo_id not in scope_gids:
+            raise HTTPException(403, "Mitarbeiter darf nur in einer Ihrer Gruppen angelegt werden")
+        grupo_id = data.grupo_id
+    elif len(scope_gids) == 1:
+        grupo_id = scope_gids[0]
+    else:
+        raise HTTPException(400, "Bitte eine Ihrer Gruppen für den Mitarbeiter auswählen")
 
     emp = Empleado(
         id_nummer=id_nummer,
@@ -242,10 +251,12 @@ def actualizar_empleado(
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
     update_fields = data.model_dump(exclude_unset=True)
-    # Gruppenadmin no puede mover un empleado a otro grupo.
-    scope_gid = scoped_grupo_id(_auth)
-    if scope_gid is not None and update_fields.get("grupo_id") not in (None, scope_gid):
-        raise HTTPException(403, "Mitarbeiter darf nicht in eine andere Gruppe verschoben werden")
+    # Gruppenadmin solo puede mover un empleado entre sus propios grupos.
+    scope_gids = scoped_grupo_ids(_auth)
+    if (scope_gids is not None
+            and "grupo_id" in update_fields
+            and update_fields["grupo_id"] not in scope_gids):
+        raise HTTPException(403, "Mitarbeiter darf nur innerhalb Ihrer Gruppen verschoben werden")
     old_state = {k: str(getattr(emp, k)) for k in update_fields}
 
     for field, value in update_fields.items():

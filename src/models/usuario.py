@@ -5,11 +5,23 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Column, String, Integer, Boolean, DateTime,
-    ForeignKey, Text,
+    ForeignKey, Text, Table,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from ..database import Base
+
+
+# Tabla de relación N:M — un Gruppenadmin puede tener varios grupos asignados.
+usuario_grupos = Table(
+    "usuario_grupos",
+    Base.metadata,
+    Column("usuario_id", UUID(as_uuid=True),
+           ForeignKey("hagemann.usuarios.id", ondelete="CASCADE"), primary_key=True),
+    Column("grupo_id", UUID(as_uuid=True),
+           ForeignKey("hagemann.grupos.id", ondelete="CASCADE"), primary_key=True),
+    schema="hagemann",
+)
 
 
 """
@@ -58,12 +70,6 @@ class Usuario(Base):
                          ForeignKey("hagemann.empleados.id"),
                          nullable=True)
 
-    # FK opcional a la Gruppe — solo relevante para role=Gruppenadmin (5).
-    # NULL = sin restricción de grupo (Admin/Personalabteilung ve todo).
-    grupo_id = Column(UUID(as_uuid=True),
-                      ForeignKey("hagemann.grupos.id"),
-                      nullable=True)
-
     activo = Column(Boolean, nullable=False, default=True)
     last_login = Column(DateTime, nullable=True)
 
@@ -73,4 +79,6 @@ class Usuario(Base):
 
     # Relaciones
     empleado = relationship("Empleado", foreign_keys=[empleado_id])
-    grupo = relationship("Grupo", foreign_keys=[grupo_id])
+    # Grupos asignados (solo relevante para role=Gruppenadmin). Vacío = sin
+    # restricción (Admin/Personalabteilung ve todo).
+    grupos = relationship("Grupo", secondary=usuario_grupos, lazy="selectin")

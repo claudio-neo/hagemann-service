@@ -1390,10 +1390,10 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
         </select>
       </div>
       <div class="form-group" id="userGrupoGroup" style="display:none">
-        <label>Gruppe * <span style="font-weight:normal;color:#6b7280">(Gruppenadmin sieht nur diese Gruppe)</span></label>
-        <select id="userGrupo" class="form-control">
-          <option value="">— Gruppe wählen —</option>
-        </select>
+        <label>Gruppen * <span style="font-weight:normal;color:#6b7280">(Gruppenadmin sieht nur diese Gruppen)</span></label>
+        <div id="userGruposBox" style="border:1px solid var(--border);border-radius:8px;padding:10px;max-height:160px;overflow:auto;display:flex;flex-direction:column;gap:6px">
+          <span style="color:#6b7280;font-size:13px">Lade Gruppen…</span>
+        </div>
       </div>
       <div class="form-group">
         <label>Verknüpfter Mitarbeiter</label>
@@ -4653,11 +4653,28 @@ const ROLE_LABELS = {1:'Admin', 2:'Schichtführer', 3:'Stv. Schichtführer', 4:'
 const ROLE_BADGE  = {1:'badge-red', 2:'badge-blue', 3:'badge-purple', 4:'badge-gray', 5:'badge-orange'};
 let _userEditId = null;
 
-// Muestra/oculta el selector de Gruppe según el rol elegido (5 = Gruppenadmin)
+// Muestra/oculta el selector de Gruppen según el rol elegido (5 = Gruppenadmin)
 function onUserRoleChange() {
   const role = parseInt(document.getElementById('userRole').value);
   const grp = document.getElementById('userGrupoGroup');
   if (grp) grp.style.display = (role === 5) ? '' : 'none';
+}
+
+// Renderiza checkboxes de grupos (multi-selección para Gruppenadmin)
+async function renderUserGruposCheckboxes(selectedIds) {
+  const box = document.getElementById('userGruposBox');
+  if (!box) return;
+  if (allGrupos.length === 0) {
+    try { const res = await api('/grupos/'); allGrupos = res.data || res || []; }
+    catch(e) { allGrupos = []; }
+  }
+  const sel = new Set((selectedIds || []).map(String));
+  if (!allGrupos.length) { box.innerHTML = '<span style="color:#6b7280;font-size:13px">Keine Gruppen vorhanden</span>'; return; }
+  box.innerHTML = allGrupos.map(g => `
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal">
+      <input type="checkbox" class="userGrupoChk" value="${g.id}" ${sel.has(String(g.id)) ? 'checked' : ''}>
+      ${g.nombre}
+    </label>`).join('');
 }
 
 async function loadBenutzerverwaltung() {
@@ -4675,7 +4692,7 @@ async function loadBenutzerverwaltung() {
       return `<tr style="${!u.activo ? 'opacity:.5' : ''}">
         <td><b>${u.nick}</b></td>
         <td>${u.email || '—'}</td>
-        <td><span class="badge ${ROLE_BADGE[u.role] || 'badge-gray'}">${u.role_label}</span>${u.role === 5 && u.grupo_nombre ? ` <span class="badge badge-gray" style="font-size:11px">${u.grupo_nombre}</span>` : ''}</td>
+        <td><span class="badge ${ROLE_BADGE[u.role] || 'badge-gray'}">${u.role_label}</span>${u.role === 5 && u.grupo_nombres ? ` <span class="badge badge-gray" style="font-size:11px">${u.grupo_nombres}</span>` : ''}</td>
         <td>${u.empleado_nombre || '—'}</td>
         <td style="font-size:12px">${lastLogin}</td>
         <td>${u.activo ? '<span class="badge badge-green">Aktiv</span>' : '<span class="badge badge-red">Inaktiv</span>'}</td>
@@ -4701,7 +4718,6 @@ async function openUserModal(userId) {
   document.getElementById('userEmpleado').value = '';
   document.getElementById('userPass').value = '';
   document.getElementById('userActivo').checked = true;
-  document.getElementById('userGrupo').value = '';
   document.getElementById('userPassGroup').querySelector('label').textContent =
     userId ? 'Passwort (leer lassen = unverändert)' : 'Passwort *';
 
@@ -4710,9 +4726,7 @@ async function openUserModal(userId) {
   sel.innerHTML = '<option value="">— kein Mitarbeiter —</option>' +
     employees.map(e => `<option value="${e.id}">#${e.id_nummer} ${e.nombre} ${e.apellido||''}</option>`).join('');
 
-  // Populate group dropdown (für Gruppenadmin)
-  await loadGruposIntoSelect('userGrupo');
-
+  let selectedGrupos = [];
   if (userId) {
     try {
       const u = await api(`/usuarios/${userId}`);
@@ -4720,10 +4734,11 @@ async function openUserModal(userId) {
       document.getElementById('userEmail').value = u.email || '';
       document.getElementById('userRole').value = u.role;
       document.getElementById('userEmpleado').value = u.empleado_id || '';
-      document.getElementById('userGrupo').value = u.grupo_id || '';
       document.getElementById('userActivo').checked = u.activo;
+      selectedGrupos = u.grupo_ids || [];
     } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); return; }
   }
+  await renderUserGruposCheckboxes(selectedGrupos);
   onUserRoleChange();
   document.getElementById('userModal').classList.remove('hidden');
 }
@@ -4734,21 +4749,23 @@ async function saveUser() {
   const email = document.getElementById('userEmail').value.trim() || null;
   const role = parseInt(document.getElementById('userRole').value);
   const empleado_id = document.getElementById('userEmpleado').value || null;
-  const grupo_id = (role === 5) ? (document.getElementById('userGrupo').value || null) : null;
+  const grupo_ids = (role === 5)
+    ? Array.from(document.querySelectorAll('.userGrupoChk:checked')).map(c => c.value)
+    : [];
   const pass = document.getElementById('userPass').value;
   const activo = document.getElementById('userActivo').checked;
 
   if (!nick) { showGlobalAlert('error', 'Benutzername ist Pflichtfeld'); return; }
   if (!userId && !pass) { showGlobalAlert('error', 'Passwort ist Pflichtfeld für neue Benutzer'); return; }
-  if (role === 5 && !grupo_id) { showGlobalAlert('error', 'Gruppenadmin benötigt eine zugewiesene Gruppe'); return; }
+  if (role === 5 && grupo_ids.length === 0) { showGlobalAlert('error', 'Gruppenadmin benötigt mindestens eine zugewiesene Gruppe'); return; }
 
   try {
     if (userId) {
-      const body = {nick, email, role, empleado_id, grupo_id, activo};
+      const body = {nick, email, role, empleado_id, grupo_ids, activo};
       await api(`/usuarios/${userId}`, {method:'PUT', body: JSON.stringify(body)});
       if (pass) await api(`/usuarios/${userId}/reset-password`, {method:'POST', body: JSON.stringify({password: pass})});
     } else {
-      await api('/usuarios/', {method:'POST', body: JSON.stringify({nick, email, password: pass, role, empleado_id, grupo_id, activo})});
+      await api('/usuarios/', {method:'POST', body: JSON.stringify({nick, email, password: pass, role, empleado_id, grupo_ids, activo})});
     }
     closeModal('userModal');
     showGlobalAlert('success', userId ? '✓ Benutzer aktualisiert' : '✓ Benutzer erstellt');
