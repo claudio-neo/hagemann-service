@@ -435,9 +435,10 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
   <div class="container">
     <div class="page-header">
       <div><h1>Urlaub</h1><p>Urlaubsanträge und Salden</p></div>
-      <div style="display:flex; gap:8px; align-items:center">
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
         <select id="urlaubYear" class="form-control" style="width:100px" onchange="loadUrlaub()"></select>
         <button class="btn btn-primary" onclick="openUrlaubModal()">+ Neuer Antrag</button>
+        <button class="btn btn-success btn-sm" onclick="downloadUrlaubExcel()" title="Excel herunterladen">📥 Excel</button>
       </div>
     </div>
 
@@ -2263,9 +2264,17 @@ function downloadReportExcelCC() {
   const data = window._rptCCData;
   if (!data) { showGlobalAlert('error', 'Keine Daten — bitte zuerst Bericht laden'); return; }
   const wb = XLSX.utils.book_new();
+  const von = document.getElementById('rptFrom').value;
+  const bis = document.getElementById('rptTo').value;
 
   // Sheet 1: Summary per CC
-  const summaryRows = [['Kostenstelle', 'Code', 'Stunden (Dezimal)', 'Stunden (HH:MM)', 'Mitarbeiter']];
+  const summaryRows = [
+    ['Bericht: Stunden nach Kostenstelle'],
+    ['Zeitraum:', `${von} bis ${bis}`],
+    ['Erstellt am:', new Date().toLocaleDateString('de-DE')],
+    [],
+    ['Kostenstelle', 'Code', 'Stunden (Dezimal)', 'Stunden (HH:MM)', 'Mitarbeiter'],
+  ];
   (data.ccs || []).forEach(cc => {
     summaryRows.push([cc.nombre, cc.codigo || '', +(cc.total_minutos / 60).toFixed(2), cc.total_formateado || '0:00', cc.empleados_count || 0]);
   });
@@ -2274,7 +2283,12 @@ function downloadReportExcelCC() {
   XLSX.utils.book_append_sheet(wb, ws1, 'Kostenstellen');
 
   // Sheet 2: Detail per CC with employee breakdown
-  const detRows = [['Kostenstelle', 'Code', 'Pers.Nr.', 'Mitarbeiter', 'Stunden (Dezimal)', 'Stunden (HH:MM)', 'Anteil (%)']];
+  const detRows = [
+    ['Bericht: Detail nach Kostenstelle'],
+    ['Zeitraum:', `${von} bis ${bis}`],
+    [],
+    ['Kostenstelle', 'Code', 'Pers.Nr.', 'Mitarbeiter', 'Stunden (Dezimal)', 'Stunden (HH:MM)', 'Anteil (%)'],
+  ];
   (data.details || []).forEach(det => {
     const ccName = det.centro_coste?.nombre || '—';
     const ccCode = det.codigo || '';
@@ -2294,9 +2308,17 @@ function downloadReportExcelEmp() {
   const period = window._rptPeriod;
   if (!details || !details.length) { showGlobalAlert('error', 'Keine Daten — bitte zuerst Bericht laden'); return; }
   const wb = XLSX.utils.book_new();
+  const von = document.getElementById('rptFrom').value;
+  const bis = document.getElementById('rptTo').value;
 
   // Sheet 1: Summary per employee
-  const summaryRows = [['Pers.Nr.', 'Mitarbeiter', 'Stunden (Dezimal)', 'Stunden (HH:MM)', 'Arbeitstage', 'Kostenstellen']];
+  const summaryRows = [
+    ['Bericht: Stunden nach Mitarbeiter'],
+    ['Zeitraum:', `${von} bis ${bis}`],
+    ['Erstellt am:', new Date().toLocaleDateString('de-DE')],
+    [],
+    ['Pers.Nr.', 'Mitarbeiter', 'Stunden (Dezimal)', 'Stunden (HH:MM)', 'Arbeitstage', 'Kostenstellen'],
+  ];
   details.forEach(det => {
     const empName = `${det.emp.nombre} ${det.emp.apellido || ''}`.trim();
     const ccList = (det.por_centro_coste || []).map(cc => cc.nombre).join(', ');
@@ -2307,7 +2329,12 @@ function downloadReportExcelEmp() {
   XLSX.utils.book_append_sheet(wb, ws1, 'Mitarbeiter');
 
   // Sheet 2: CC breakdown per employee
-  const ccRows = [['Pers.Nr.', 'Mitarbeiter', 'Kostenstelle', 'Code', 'Stunden (Dezimal)', 'Stunden (HH:MM)', 'Anteil (%)']];
+  const ccRows = [
+    ['Detail nach Kostenstelle'],
+    ['Zeitraum:', `${von} bis ${bis}`],
+    [],
+    ['Pers.Nr.', 'Mitarbeiter', 'Kostenstelle', 'Code', 'Stunden (Dezimal)', 'Stunden (HH:MM)', 'Anteil (%)'],
+  ];
   details.forEach(det => {
     const empName = `${det.emp.nombre} ${det.emp.apellido || ''}`.trim();
     (det.por_centro_coste || []).forEach(cc => {
@@ -2319,7 +2346,12 @@ function downloadReportExcelEmp() {
   XLSX.utils.book_append_sheet(wb, ws2, 'Nach Kostenstelle');
 
   // Sheet 3: Daily detail for all employees
-  const dayRows = [['Pers.Nr.', 'Mitarbeiter', 'Datum', 'Eingang', 'Ausgang', 'Kostenstelle', 'Minuten', 'Stunden (HH:MM)']];
+  const dayRows = [
+    ['Tagesdetail aller Mitarbeiter'],
+    ['Zeitraum:', `${von} bis ${bis}`],
+    [],
+    ['Pers.Nr.', 'Mitarbeiter', 'Datum', 'Eingang', 'Ausgang', 'Kostenstelle', 'Minuten', 'Stunden (HH:MM)'],
+  ];
   details.forEach(det => {
     const empName = `${det.emp.nombre} ${det.emp.apellido || ''}`.trim();
     (det.detalle_diario || []).forEach(d => {
@@ -2339,14 +2371,24 @@ function downloadReportExcelTurno() {
   const data = window._rptTurnoData;
   if (!data) { showGlobalAlert('error', 'Keine Daten — bitte zuerst Bericht laden'); return; }
   const wb = XLSX.utils.book_new();
+  const von = document.getElementById('rptFrom').value;
+  const bis = document.getElementById('rptTo').value;
   const { modelos, emps, totales } = data;
 
-  // Header row
+  // Header rows with period
+  const rows = [
+    ['Bericht: Stunden nach Schichtmodell'],
+    ['Zeitraum:', `${von} bis ${bis}`],
+    ['Erstellt am:', new Date().toLocaleDateString('de-DE')],
+    [],
+  ];
+
+  // Column header row
   const header = ['Pers.Nr.', 'Mitarbeiter'];
   modelos.forEach(m => header.push(m.codigo + ' (' + m.nombre + ')'));
   header.push('Ohne Plan', 'Gesamt (Dezimal)', 'Gesamt (HH:MM)');
 
-  const rows = [header];
+  rows.push(header);
   emps.forEach(e => {
     const row = [e.id_nummer || '', e.nombre];
     modelos.forEach(m => {
@@ -4438,6 +4480,95 @@ async function beendenKrankmeldung(id) {
     showGlobalAlert('success', `✓ ${res.message} — ${res.dias} Tage`);
     loadKrankmeldungen();
   } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); }
+}
+
+// =====================================================================
+// URLAUB / KRANKMELDUNG — Excel-Export
+// =====================================================================
+async function downloadUrlaubExcel() {
+  if (typeof XLSX === 'undefined') { showGlobalAlert('error', 'SheetJS nicht geladen'); return; }
+  const year = document.getElementById('urlaubYear').value;
+  const tab = urlaubTab;
+  const wb = XLSX.utils.book_new();
+
+  try {
+    // ── Anträge (Solicitudes) ──
+    const solRes = await api(`/vacaciones/solicitudes?anio=${year}&limit=200`);
+    const solicitudes = solRes.data || [];
+    const solRows = [
+      ['Urlaub & Abwesenheiten — Anträge'],
+      ['Jahr:', year],
+      ['Erstellt am:', new Date().toLocaleDateString('de-DE')],
+      [],
+      ['Mitarbeiter', 'Von', 'Bis', 'Tage', 'Typ', 'Status', 'Genehmigt L1', 'Genehmigt L2', 'Notizen'],
+    ];
+    const tipoLabel = { VACACIONES: 'Urlaub', ASUNTOS_PROPIOS: 'Persönlich', BAJA_MEDICA: 'Krankmeldung' };
+    const estadoLabel = { PENDIENTE: 'Ausstehend', PROPUESTA: 'Vorgeschlagen', APROBADA: 'Genehmigt', RECHAZADA: 'Abgelehnt' };
+    solicitudes.forEach(s => {
+      solRows.push([
+        s.empleado_nombre || '', s.fecha_inicio, s.fecha_fin, s.dias,
+        tipoLabel[s.tipo_ausencia] || s.tipo_ausencia,
+        estadoLabel[s.estado] || s.estado,
+        s.aprobado_por_nivel1 || '', s.aprobado_por_nivel2 || '',
+        s.notas || '',
+      ]);
+    });
+    const ws1 = XLSX.utils.aoa_to_sheet(solRows);
+    ws1['!cols'] = [{ wch: 25 },{ wch: 12 },{ wch: 12 },{ wch: 6 },{ wch: 16 },{ wch: 14 },{ wch: 16 },{ wch: 16 },{ wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Anträge');
+
+    // ── Salden ──
+    const saldoResults = await Promise.all(employees.map(e =>
+      api(`/vacaciones/saldo/${e.id}?anio=${year}`).then(d => ({ emp: e, ...d })).catch(() => null)
+    ));
+    const validSaldo = saldoResults.filter(Boolean);
+    const saldoRows = [
+      ['Urlaubssaldo pro Mitarbeiter'],
+      ['Jahr:', year],
+      ['Erstellt am:', new Date().toLocaleDateString('de-DE')],
+      [],
+      ['Pers.Nr.', 'Mitarbeiter', 'Vertragstage', 'Sondertage', 'Gesamt', 'Genutzt', 'Ausstehend', 'Verfügbar'],
+    ];
+    validSaldo.forEach(s => {
+      const empName = `${s.emp.nombre} ${s.emp.apellido || ''}`.trim();
+      saldoRows.push([
+        s.emp.id_nummer || '', empName,
+        s.dias_contrato, s.dias_extra, s.dias_totales,
+        s.dias_usados, s.dias_pendientes, s.dias_disponibles,
+      ]);
+    });
+    const ws2 = XLSX.utils.aoa_to_sheet(saldoRows);
+    ws2['!cols'] = [{ wch: 10 },{ wch: 25 },{ wch: 14 },{ wch: 12 },{ wch: 10 },{ wch: 10 },{ wch: 12 },{ wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Urlaubssaldo');
+
+    // ── Krankmeldungen ──
+    const kmRes = await api('/vacaciones/krankmeldungen?activas=false');
+    const krankmeldungen = (kmRes.data || []).filter(k => {
+      const yr = new Date(k.fecha_inicio).getFullYear();
+      return yr === parseInt(year);
+    });
+    const kmRows = [
+      ['Krankmeldungen'],
+      ['Jahr:', year],
+      ['Erstellt am:', new Date().toLocaleDateString('de-DE')],
+      [],
+      ['Mitarbeiter', 'Von', 'Bis', 'Tage', 'Stellvertretung aktiv', 'Notizen'],
+    ];
+    krankmeldungen.forEach(k => {
+      kmRows.push([
+        k.empleado_nombre || '', k.fecha_inicio, k.fecha_fin, k.dias,
+        k.stellvertreter_aktiv ? 'Ja' : 'Nein',
+        k.notas || '',
+      ]);
+    });
+    const ws3 = XLSX.utils.aoa_to_sheet(kmRows);
+    ws3['!cols'] = [{ wch: 25 },{ wch: 12 },{ wch: 12 },{ wch: 6 },{ wch: 18 },{ wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, ws3, 'Krankmeldungen');
+
+    _xlsxSave(wb, `Urlaub_Krankmeldung_${year}.xlsx`);
+  } catch(e) {
+    showGlobalAlert('error', 'Export-Fehler: ' + e.message);
+  }
 }
 
 // =====================================================================
