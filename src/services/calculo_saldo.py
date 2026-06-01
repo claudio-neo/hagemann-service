@@ -17,6 +17,18 @@ from ..models.vacaciones import (
     SaldoWirkung, saldo_wirkung,
 )
 
+
+def _worked_minutes_day(db: Session, empleado_id, d: date) -> Decimal:
+    """Minutos trabajados (fichajes cerrados) en un día concreto, en horas."""
+    result = db.query(
+        func.coalesce(func.sum(Fichaje.minutos_trabajados), 0)
+    ).filter(
+        Fichaje.empleado_id == empleado_id,
+        Fichaje.fecha_salida.isnot(None),
+        func.date(Fichaje.fecha_entrada) == d,
+    ).scalar()
+    return (Decimal(str(result)) / Decimal("60")).quantize(Decimal("0.01"))
+
 # ⚠️ Kappung DESACTIVADA por requisito de la Personalabteilung (2026-06):
 # "weder Plus- noch Minusstunden pauschal gekappt oder zurückgesetzt".
 # Se mantiene la constante por compatibilidad de imports, pero NO se aplica.
@@ -72,8 +84,11 @@ def _credito_ausencias_mes(
     (auf Sollzeit auffüllen), restringidas al rango efectivo [rango_desde,
     rango_hasta] (mismo que las horas planificadas: respeta alta/baja/mes en curso).
 
-    Las UNTERBRECHUNG (FZA, falta injustificada) no acreditan nada. Cada día
-    laborable suma tagessollzeit·factor_dia, a la mitad si la solicitud es de medio día.
+    Tres comportamientos:
+      - AUFFUELLEN: día completo → acredita tagessollzeit·factor_dia (·0.5 si medio día).
+      - AUFFUELLEN_REST (Arzt-Gang): rellena hasta la Sollzeit del día contando lo
+        ya trabajado ese día → acredita max(0, Soll_dia − horas_trabajadas_dia).
+      - UNTERBRECHUNG (FZA, falta injustificada): no acredita nada.
     """
     if rango_hasta < rango_desde:
         return Decimal("0.00")
@@ -87,7 +102,8 @@ def _credito_ausencias_mes(
 
     credito = Decimal("0")
     for s in solicitudes:
-        if saldo_wirkung(s.tipo_ausencia) != SaldoWirkung.AUFFUELLEN:
+        wirkung = saldo_wirkung(s.tipo_ausencia)
+        if wirkung == SaldoWirkung.UNTERBRECHUNG:
             continue
         factor_medio = Decimal("0.5") if getattr(s, "medio_dia", False) else Decimal("1")
         desde = max(s.fecha_inicio, rango_desde)
@@ -95,7 +111,13 @@ def _credito_ausencias_mes(
         d = desde
         while d <= hasta:
             if _es_laborable(d, festivos):
-                credito += tagessollzeit * _factor_dia(d) * factor_medio
+                soll_dia = tagessollzeit * _factor_dia(d) * factor_medio
+                if wirkung == SaldoWirkung.AUFFUELLEN_REST:
+                    # Top-up: completa hasta la Sollzeit lo que no se trabajó ese día
+                    trabajado = _worked_minutes_day(db, empleado_id, d)
+                    credito += max(Decimal("0"), soll_dia - trabajado)
+                else:  # AUFFUELLEN — día completo
+                    credito += soll_dia
             d += timedelta(days=1)
     return credito.quantize(Decimal("0.01"))
 

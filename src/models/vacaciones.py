@@ -49,15 +49,18 @@ class TipoAusencia(str, enum.Enum):
 
 class SaldoWirkung(str, enum.Enum):
     """Efecto de la ausencia sobre el Saldo de horas."""
-    AUFFUELLEN = "AUFFUELLEN"          # Acredita la Sollzeit del día (saldo neutro)
+    AUFFUELLEN = "AUFFUELLEN"          # Día completo: acredita la Sollzeit (sin trabajar)
+    AUFFUELLEN_REST = "AUFFUELLEN_REST"  # Top-up: rellena hasta Sollzeit contando lo trabajado
     UNTERBRECHUNG = "UNTERBRECHUNG"    # No acredita nada (consume saldo / déficit)
 
 
 # Clasificación de cada tipo. Por defecto AUFFUELLEN; las interrupciones explícitas
-# (FZA y falta injustificada) no acreditan Sollzeit.
+# (FZA y falta injustificada) no acreditan Sollzeit. Arzt-Gang rellena hasta la
+# Tagessollzeit contando lo ya trabajado ese día (no es un día completo).
 SALDO_WIRKUNG = {
     TipoAusencia.FZA: SaldoWirkung.UNTERBRECHUNG,
     TipoAusencia.UNENTSCHULDIGT: SaldoWirkung.UNTERBRECHUNG,
+    TipoAusencia.ARZT_GANG: SaldoWirkung.AUFFUELLEN_REST,
 }
 
 
