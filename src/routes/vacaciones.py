@@ -23,6 +23,7 @@ from ..services.audit_service import log_action
 from ..models.vacaciones import (
     PeriodoVacaciones, SolicitudVacaciones, LimiteVacaciones,
     TipoAusencia, EstadoSolicitud,
+    TIPO_AUSENCIA_LABELS, saldo_wirkung, es_krankmeldung, KRANKHEIT_TIPOS,
 )
 from ..models.fichaje import Fichaje  # noqa — needed for backref init
 
@@ -90,6 +91,7 @@ class SolicitudCreate(BaseModel):
     fecha_inicio: date
     fecha_fin: date
     tipo_ausencia: TipoAusencia = TipoAusencia.VACACIONES
+    medio_dia: bool = False
     notas: Optional[str] = None
 
 
@@ -145,7 +147,13 @@ def _solicitud_dict(s: SolicitudVacaciones) -> dict:
         "fecha_inicio": s.fecha_inicio.isoformat(),
         "fecha_fin": s.fecha_fin.isoformat(),
         "dias": s.dias,
+        "medio_dia": bool(getattr(s, "medio_dia", False)),
         "tipo_ausencia": s.tipo_ausencia,
+        "tipo_label": TIPO_AUSENCIA_LABELS.get(
+            TipoAusencia(s.tipo_ausencia) if s.tipo_ausencia in TipoAusencia._value2member_map_ else None,
+            s.tipo_ausencia,
+        ),
+        "saldo_wirkung": saldo_wirkung(s.tipo_ausencia).value,
         "estado": s.estado,
         "aprobado_por_nivel1": s.aprobado_por_nivel1,
         "fecha_nivel1": s.fecha_nivel1.isoformat() if s.fecha_nivel1 else None,
@@ -335,6 +343,7 @@ def crear_solicitud(data: SolicitudCreate, db: Session = Depends(get_db), _auth=
         fecha_inicio=data.fecha_inicio,
         fecha_fin=data.fecha_fin,
         dias=dias,
+        medio_dia=data.medio_dia,
         tipo_ausencia=data.tipo_ausencia,
         estado=EstadoSolicitud.PENDIENTE,
         notas=data.notas,
@@ -351,6 +360,14 @@ def crear_solicitud(data: SolicitudCreate, db: Session = Depends(get_db), _auth=
 
     # Cargar relación empleado para serializar
     solicitud.empleado = emp
+
+    # Aviso a la Personalabteilung si es una Krankmeldung (best-effort)
+    if es_krankmeldung(data.tipo_ausencia):
+        try:
+            from ..services.notificaciones import notificar_krankmeldung
+            notificar_krankmeldung(f"{emp.nombre} {emp.apellido or ''}".strip(), solicitud)
+        except Exception:
+            pass
 
     return {
         "message": f"Solicitud creada — {dias} días laborables",
@@ -697,6 +714,13 @@ def registrar_krankmeldung(
     db.commit()
     db.refresh(solicitud)
 
+    # Aviso a la Personalabteilung (best-effort)
+    try:
+        from ..services.notificaciones import notificar_krankmeldung
+        notificar_krankmeldung(f"{emp.nombre} {emp.apellido or ''}".strip(), solicitud)
+    except Exception:
+        pass
+
     # Info about delegation activation
     delegation_info = None
     if emp.stellvertreter_id:
@@ -769,7 +793,7 @@ def listar_krankmeldungen(
         db.query(SolicitudVacaciones)
         .options(joinedload(SolicitudVacaciones.empleado))
         .filter(
-            SolicitudVacaciones.tipo_ausencia == TipoAusencia.BAJA_MEDICA,
+            SolicitudVacaciones.tipo_ausencia.in_([t.value for t in KRANKHEIT_TIPOS]),
             SolicitudVacaciones.estado == EstadoSolicitud.APROBADA,
         )
     )
@@ -792,6 +816,26 @@ def listar_krankmeldungen(
         ],
         "total": len(krankmeldungen),
     }
+
+
+@router.get("/krankmeldungen/neue")
+def contar_krankmeldungen_nuevas(
+    dias: int = Query(7, ge=1, le=90, description="Ventana en días hacia atrás"),
+    db: Session = Depends(get_db),
+    _auth=Depends(require_permission(HOURS_CONTROL_TEAM)),
+):
+    """Conteo de Krankmeldungen registradas en los últimos `dias` (badge del panel)."""
+    from datetime import timedelta
+    desde = datetime.utcnow() - timedelta(days=dias)
+    query = db.query(func.count(SolicitudVacaciones.id)).filter(
+        SolicitudVacaciones.tipo_ausencia.in_([t.value for t in KRANKHEIT_TIPOS]),
+        SolicitudVacaciones.estado == EstadoSolicitud.APROBADA,
+        SolicitudVacaciones.created_at >= desde,
+    )
+    scope_ids = scoped_empleado_ids(_auth, db)
+    if scope_ids is not None:
+        query = query.filter(SolicitudVacaciones.empleado_id.in_(scope_ids))
+    return {"neue": int(query.scalar() or 0), "dias": dias}
 
 
 def _has_active_deputy(emp) -> bool:

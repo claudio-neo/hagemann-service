@@ -6,11 +6,20 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, Boolean, DateTime, Numeric,
-    ForeignKey, Text, UniqueConstraint,
+    ForeignKey, Text, UniqueConstraint, text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from ..database import Base
+
+
+def ensure_columns(engine) -> None:
+    """Migración idempotente para columnas añadidas a tablas preexistentes."""
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE hagemann.saldo_horas_mensual "
+            "ADD COLUMN IF NOT EXISTS horas_ausencia NUMERIC(8,2) NOT NULL DEFAULT 0"
+        ))
 
 
 class SaldoHorasMensual(Base):
@@ -46,8 +55,10 @@ class SaldoHorasMensual(Base):
                                 comment="Horas según contrato (monthly_hours)")
     horas_reales = Column(Numeric(8, 2), nullable=False, default=0,
                           comment="Horas efectivamente trabajadas según fichajes")
+    horas_ausencia = Column(Numeric(8, 2), nullable=False, default=0,
+                            comment="Horas acreditadas por ausencias 'auf Sollzeit auffüllen'")
     saldo_mes = Column(Numeric(8, 2), nullable=False, default=0,
-                       comment="horas_reales - horas_planificadas")
+                       comment="(horas_reales + horas_ausencia) - horas_planificadas")
 
     # Carryover y acumulado
     carryover_anterior = Column(Numeric(8, 2), nullable=False, default=0,

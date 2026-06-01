@@ -6,9 +6,10 @@ En modo SANDBOX (DATEV_SANDBOX=true o config.activo sin credenciales) todas
 las llamadas HTTP a DATEV se simulan localmente, devolviendo respuestas
 ficticias. El CSV siempre funciona sin credenciales.
 
-Documentación oficial:
-  https://developer.datev.de/datev/platform/de/dtvf/lohn-und-gehalt
-  https://apps.datev.de/help-center/documents/1080181
+Documentación oficial (verificada 2026-05-29):
+  - OIDC:        https://developer.datev.de/de/guides/authentication
+  - Producto:    https://developer.datev.de/de/product-detail/hr-imports/2.0.0/overview
+  - Bewegungsdaten (ASCII): https://apps.datev.de/help-center/documents/1007833
 """
 import csv
 import io
@@ -22,22 +23,37 @@ from urllib.parse import urlencode
 import httpx
 from sqlalchemy.orm import Session
 
-from ..models.datev import DatevConfig, DatevExportLog
+from ..models.datev import (
+    DatevConfig, DatevExportLog,
+    LOHNART_CONCEPTS, default_lohnart_mapping,
+)
 from ..models.saldo_horas import SaldoHorasMensual
 from ..models.empleado import Empleado, CentroCoste
 from ..models.vacaciones import SolicitudVacaciones, TipoAusencia, EstadoSolicitud
 
 logger = logging.getLogger(__name__)
 
-# ─── URLs DATEV DATEVconnect ─────────────────────────────────────────────────
-DATEV_AUTH_BASE = "https://login.datev.de/openiddict"
-DATEV_AUTH_URL = f"{DATEV_AUTH_BASE}/authorize"
-DATEV_TOKEN_URL = f"{DATEV_AUTH_BASE}/token"
-DATEV_API_BASE = "https://api.datev.de/marketplace"
-DATEV_PAYROLL_ENDPOINT = f"{DATEV_API_BASE}/v1/payroll/lohngehalt"
+# ─── URLs DATEV (OpenID Connect real, verificado 2026-05-29) ─────────────────
+# Producción: https://login.datev.de/openid/   ·   Sandbox: .../openidsandbox/
+# Token endpoint vive en api.datev.de, no en login.datev.de.
+def _oidc_base() -> str:
+    """Base OIDC según modo: openidsandbox en sandbox, openid en producción."""
+    return (
+        "https://login.datev.de/openidsandbox"
+        if _is_sandbox()
+        else "https://login.datev.de/openid"
+    )
 
-# Scopes requeridos para exportación de nómina
-DATEV_SCOPES = "openid profile datev:payroll:read datev:payroll:write"
+
+DATEV_TOKEN_URL = "https://api.datev.de/token"
+# Producto real para empujar Bewegungsdaten: Lohnimportdatenservice (hr:imports).
+# El endpoint concreto se fija en Fase 3 al registrar la app del asesor.
+DATEV_API_BASE = "https://api.datev.de"
+DATEV_HR_IMPORTS_PRODUCT = "hr:imports"
+
+# Scopes: dependen del producto registrado en developer.datev.de.
+# 'hr:imports' como placeholder hasta confirmar con la app del asesor (Fase 3).
+DATEV_SCOPES = "openid profile hr:imports"
 
 # Timeout en segundos para llamadas HTTP
 HTTP_TIMEOUT = 30
@@ -46,6 +62,41 @@ HTTP_TIMEOUT = 30
 def _is_sandbox() -> bool:
     """Devuelve True si la variable de entorno DATEV_SANDBOX está activa."""
     return os.getenv("DATEV_SANDBOX", "true").lower() in ("true", "1", "yes")
+
+
+# ─── Cifrado del client_secret en reposo ─────────────────────────────────────
+# Clave Fernet en la env DATEV_SECRET_KEY. Si falta, se guarda en texto plano
+# (modo dev) con aviso. Los valores cifrados llevan el prefijo "enc:".
+_ENC_PREFIX = "enc:"
+
+
+def _fernet():
+    from cryptography.fernet import Fernet
+    key = os.getenv("DATEV_SECRET_KEY")
+    if not key:
+        return None
+    return Fernet(key.encode() if isinstance(key, str) else key)
+
+
+def encrypt_secret(plain: Optional[str]) -> Optional[str]:
+    """Cifra el client_secret antes de guardarlo. Sin clave → texto plano + aviso."""
+    if not plain or plain.startswith(_ENC_PREFIX):
+        return plain
+    f = _fernet()
+    if f is None:
+        logger.warning("DATEV_SECRET_KEY no configurado — client_secret se guarda en texto plano")
+        return plain
+    return _ENC_PREFIX + f.encrypt(plain.encode()).decode()
+
+
+def decrypt_secret(stored: Optional[str]) -> Optional[str]:
+    """Descifra el client_secret almacenado. Texto plano → se devuelve tal cual."""
+    if not stored or not stored.startswith(_ENC_PREFIX):
+        return stored
+    f = _fernet()
+    if f is None:
+        raise ValueError("client_secret cifrado pero falta DATEV_SECRET_KEY para descifrarlo")
+    return f.decrypt(stored[len(_ENC_PREFIX):].encode()).decode()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -74,11 +125,15 @@ def upsert_config(db: Session, data: dict) -> DatevConfig:
         config = DatevConfig()
         db.add(config)
 
+    # Cifrar el client_secret antes de persistir
+    if data.get("client_secret"):
+        data = {**data, "client_secret": encrypt_secret(data["client_secret"])}
+
     # Campos actualizables
     allowed_fields = [
         "consultant_number", "client_number", "company_name",
         "fiscal_year_start", "client_id", "client_secret",
-        "datev_guid", "payroll_type", "activo",
+        "datev_guid", "payroll_type", "activo", "lohnart_mapping",
     ]
     for field in allowed_fields:
         if field in data:
@@ -120,7 +175,7 @@ def generate_oauth_url(config: DatevConfig, redirect_uri: str, state: str = None
         "state": state,
         "nonce": str(uuid.uuid4()),
     }
-    return f"{DATEV_AUTH_URL}?{urlencode(params)}"
+    return f"{_oidc_base()}/authorize?{urlencode(params)}"
 
 
 def exchange_code(
@@ -167,7 +222,7 @@ def exchange_code(
         "code": code,
         "redirect_uri": redirect_uri,
         "client_id": config.client_id,
-        "client_secret": config.client_secret,
+        "client_secret": decrypt_secret(config.client_secret),
     }
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         resp = client.post(DATEV_TOKEN_URL, data=payload)
@@ -210,7 +265,7 @@ def refresh_access_token(config: DatevConfig, db: Session) -> None:
         "grant_type": "refresh_token",
         "refresh_token": config.refresh_token,
         "client_id": config.client_id,
-        "client_secret": config.client_secret,
+        "client_secret": decrypt_secret(config.client_secret),
     }
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         resp = client.post(DATEV_TOKEN_URL, data=payload)
@@ -433,149 +488,161 @@ def send_to_datev(
             "datev_response_code": "200",
         }
 
-    # ── Llamada real ─────────────────────────────────────────────────────────
-    _ensure_valid_token(config, db)
-
-    headers = {
-        "Authorization": f"Bearer {config.access_token}",
-        "Content-Type": "application/json",
-        "X-DATEV-Client-Id": config.client_id,
-    }
-    if config.datev_guid:
-        headers["X-DATEV-Mandant"] = config.datev_guid
-
-    try:
-        with httpx.Client(timeout=HTTP_TIMEOUT) as client:
-            resp = client.post(
-                DATEV_PAYROLL_ENDPOINT,
-                json=payload,
-                headers=headers,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-    except httpx.HTTPStatusError as e:
-        logger.error(f"[DATEV] Error HTTP {e.response.status_code}: {e.response.text}")
-        raise
-
-    return {
-        "status": "success",
-        "import_id": data.get("importId") or data.get("id"),
-        "message": data.get("message", "Importado correctamente"),
-        "records_accepted": data.get("recordsAccepted", 0),
-        "sandbox": False,
-        "datev_response_code": str(resp.status_code),
-    }
+    # ── Llamada real (Fase 3 — pendiente) ────────────────────────────────────
+    # El envío directo por API se hará vía DATEV Lohnimportdatenservice
+    # (producto hr:imports). El contrato concreto (endpoint, formato del cuerpo,
+    # scopes) se fija al registrar la app del asesor en developer.datev.de.
+    # Hasta entonces, el camino productivo es el fichero Bewegungsdaten
+    # (export_bewegungsdaten_csv) importado con el ASCII-Import Assistent.
+    raise NotImplementedError(
+        "Envío directo a DATEV (Lohnimportdatenservice / hr:imports) pendiente "
+        "de Fase 3: requiere la app DATEV del asesor (client_id/secret reales) y "
+        "confirmar el contrato del producto. Use el export de Bewegungsdaten "
+        "(POST /datev/export/bewegungsdaten) e impórtelo con el ASCII-Import Assistent."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  EXPORTACIÓN CSV (alternativa offline)
+#  EXPORTACIÓN BEWEGUNGSDATEN (ASCII-Import — DATEV Lohn und Gehalt)
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# Formato de movimientos para el ASCII-Import Assistent de DATEV Lohn und Gehalt
+# (Erfassen > Bewegungsdaten > Importieren). Una fila por (empleado, Lohnart).
+# El asistente DATEV permite mapear columnas y fijar separador, así que estas
+# columnas son la referencia que el asesor configura una sola vez.
+#
+# ⚠️ Cada movimiento se importa contra una Lohnart/Lohnnummer definida por el
+#    asesor para este Mandant (config.lohnart_mapping). Sin Lohnart → no se exporta.
 
-# Cabeceras del CSV en formato DATEV Lohn & Gehalt (DTVF compatible)
-CSV_HEADERS = [
-    "PersonalnummerArbeitnehmer",
-    "NachnameMitarbeiter",
-    "VornameMitarbeiter",
-    "Abrechnungszeitraum",
-    "Normalstunden",
-    "Überstunden",
-    "Krankheitstage",
-    "Urlaubstage",
-    "Zeitkonto_Saldo",
+BEWEGUNGSDATEN_HEADERS = [
+    "Personalnummer",
+    "Nachname",
+    "Vorname",
+    "Lohnart",
+    "Wert",
+    "Einheit",
+    "Abrechnungsmonat",
     "Kostenstelle",
-    "BeraternummerDatev",
-    "MandantennummerDatev",
 ]
 
 
-def export_to_csv(
+def get_lohnart_mapping(config: Optional[DatevConfig]) -> dict:
+    """Mapeo Lohnart efectivo: el almacenado, completado con los conceptos por defecto."""
+    base = default_lohnart_mapping()
+    if config and config.lohnart_mapping:
+        for concepto, valores in config.lohnart_mapping.items():
+            if concepto in base and isinstance(valores, dict):
+                base[concepto].update(valores)
+    return base
+
+
+def _concept_values(saldo, sick_days: int, vacation_days: int) -> dict:
+    """Valor numérico de cada concepto exportable para un empleado/mes."""
+    horas_reales = float(saldo.horas_reales or 0)
+    horas_planificadas = float(saldo.horas_planificadas or 0)
+    return {
+        "normalstunden": round(horas_reales, 2),
+        "ueberstunden": max(0.0, round(horas_reales - horas_planificadas, 2)),
+        "krankheit": sick_days,
+        "urlaub": vacation_days,
+        "saldo": round(float(saldo.saldo_final or 0), 2),
+    }
+
+
+def build_bewegungsdaten_rows(
     db: Session,
     year: int,
     month: int,
+    config: Optional[DatevConfig],
+) -> list[dict]:
+    """
+    Construye las filas de Bewegungsdaten del mes.
+
+    Una fila por cada (empleado, concepto) cuyo concepto esté activo, tenga
+    Lohnart asignada y valor distinto de cero.
+    """
+    abrechnungsmonat = f"{month:02d}/{year}"
+    mapping = get_lohnart_mapping(config)
+
+    rows = (
+        db.query(SaldoHorasMensual, Empleado)
+        .join(Empleado, SaldoHorasMensual.empleado_id == Empleado.id)
+        .filter(
+            SaldoHorasMensual.anio == year,
+            SaldoHorasMensual.mes == month,
+            Empleado.activo == True,
+        )
+        .order_by(Empleado.id_nummer)
+        .all()
+    )
+
+    out: list[dict] = []
+    for saldo, emp in rows:
+        sick_days = _count_ausencia(db, emp.id, year, month, TipoAusencia.BAJA_MEDICA)
+        vacation_days = _count_ausencia(db, emp.id, year, month, TipoAusencia.VACACIONES)
+        kostenstelle = _get_kostenstelle(db, emp.id)
+        valores = _concept_values(saldo, sick_days, vacation_days)
+
+        for concepto in LOHNART_CONCEPTS:
+            cfg = mapping.get(concepto, {})
+            lohnart = (cfg.get("lohnart") or "").strip()
+            if not cfg.get("aktiv") or not lohnart:
+                continue
+            wert = valores.get(concepto, 0)
+            if not wert:
+                continue
+            out.append({
+                "Personalnummer": str(emp.id_nummer or ""),
+                "Nachname": emp.apellido or "",
+                "Vorname": emp.nombre or "",
+                "Lohnart": lohnart,
+                "Wert": wert,
+                "Einheit": cfg.get("einheit", ""),
+                "Abrechnungsmonat": abrechnungsmonat,
+                "Kostenstelle": kostenstelle,
+            })
+    return out
+
+
+def export_bewegungsdaten_csv(
+    db: Session,
+    year: int,
+    month: int,
+    delimiter: str = ";",
+    decimal_sep: str = ",",
+    include_header: bool = True,
 ) -> bytes:
     """
-    Genera el CSV de exportación DATEV Lohn & Gehalt como alternativa offline.
+    Genera el fichero CSV de Bewegungsdaten para el ASCII-Import de DATEV
+    Lohn und Gehalt. No requiere credenciales.
 
-    No requiere credenciales OAuth. Útil para importar manualmente en DATEV.
-    El formato es compatible con la importación DTVF (DATEV-Format).
+    Defaults según convención alemana DATEV: separador ';', decimal ',',
+    cabecera incluida, CRLF y UTF-8-BOM (necesario para Ü/ö/ß).
 
     Returns:
-        bytes del CSV codificado en UTF-8-BOM (requerido por DATEV)
+        bytes del CSV codificado en UTF-8-BOM.
     """
     config = get_config(db)
-
-    consultant_number = config.consultant_number if config else "0000000000"
-    client_number = config.client_number if config else "00000"
-
-    # Construir payload para reutilizar la lógica de mapeo
-    if config:
-        payload = build_export_payload(db, year, month, config)
-    else:
-        # Sin config: datos mínimos para el CSV
-        abrechnungszeitraum = f"{year}{month:02d}"
-        rows = (
-            db.query(SaldoHorasMensual, Empleado)
-            .join(Empleado, SaldoHorasMensual.empleado_id == Empleado.id)
-            .filter(
-                SaldoHorasMensual.anio == year,
-                SaldoHorasMensual.mes == month,
-                Empleado.activo == True,
-            )
-            .order_by(Empleado.id_nummer)
-            .all()
-        )
-        arbeitnehmer_list = []
-        for saldo, emp in rows:
-            horas_reales = float(saldo.horas_reales or 0)
-            horas_planificadas = float(saldo.horas_planificadas or 0)
-            sick_days = _count_ausencia(db, emp.id, year, month, TipoAusencia.BAJA_MEDICA)
-            vacation_days = _count_ausencia(db, emp.id, year, month, TipoAusencia.VACACIONES)
-            arbeitnehmer_list.append({
-                "PersonalnummerArbeitnehmer": str(emp.id_nummer or ""),
-                "NachnameMitarbeiter": emp.apellido or "",
-                "VornameMitarbeiter": emp.nombre or "",
-                "Abrechnungszeitraum": abrechnungszeitraum,
-                "Normalstunden": round(horas_reales, 2),
-                "Überstunden": max(0.0, round(horas_reales - horas_planificadas, 2)),
-                "Krankheitstage": sick_days,
-                "Urlaubstage": vacation_days,
-                "Zeitkonto_Saldo": round(float(saldo.saldo_final or 0), 2),
-                "Kostenstelle": _get_kostenstelle(db, emp.id),
-            })
-        payload = {
-            "BeraternummerDatev": consultant_number,
-            "MandantennummerDatev": client_number,
-            "Arbeitnehmer": arbeitnehmer_list,
-        }
+    data_rows = build_bewegungsdaten_rows(db, year, month, config)
 
     output = io.StringIO()
     writer = csv.DictWriter(
         output,
-        fieldnames=CSV_HEADERS,
-        delimiter=";",    # DATEV usa punto y coma
+        fieldnames=BEWEGUNGSDATEN_HEADERS,
+        delimiter=delimiter,
         quotechar='"',
         quoting=csv.QUOTE_MINIMAL,
-        lineterminator="\r\n",  # CRLF requerido por DATEV
+        lineterminator="\r\n",
     )
-    writer.writeheader()
+    if include_header:
+        writer.writeheader()
 
-    for row in payload["Arbeitnehmer"]:
-        writer.writerow({
-            "PersonalnummerArbeitnehmer": row["PersonalnummerArbeitnehmer"],
-            "NachnameMitarbeiter":        row["NachnameMitarbeiter"],
-            "VornameMitarbeiter":         row["VornameMitarbeiter"],
-            "Abrechnungszeitraum":        row["Abrechnungszeitraum"],
-            "Normalstunden":              str(row["Normalstunden"]).replace(".", ","),
-            "Überstunden":                str(row["Überstunden"]).replace(".", ","),
-            "Krankheitstage":             row["Krankheitstage"],
-            "Urlaubstage":                row["Urlaubstage"],
-            "Zeitkonto_Saldo":            str(row["Zeitkonto_Saldo"]).replace(".", ","),
-            "Kostenstelle":               row["Kostenstelle"],
-            "BeraternummerDatev":         payload["BeraternummerDatev"],
-            "MandantennummerDatev":       payload["MandantennummerDatev"],
-        })
+    for row in data_rows:
+        wert = str(row["Wert"])
+        if decimal_sep != ".":
+            wert = wert.replace(".", decimal_sep)
+        writer.writerow({**row, "Wert": wert})
 
-    # UTF-8-BOM requerido por DATEV para caracteres alemanes (Ü, ö, etc.)
     return b"\xef\xbb\xbf" + output.getvalue().encode("utf-8")
 
 

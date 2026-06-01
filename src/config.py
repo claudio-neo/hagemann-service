@@ -25,6 +25,19 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480  # 8 horas
 
+    # ── Notificaciones a la Personalabteilung (Krankmeldungen) ──────────────
+    # Telegram: reutiliza el bot ya existente. Chat de RRHH (si vacío → no envía).
+    telegram_bot_token: str = "8669567506:AAEqqrgMJPC8716yIldDLqW6yaO_OliJzCE"
+    hr_telegram_chat_id: str = ""        # p.ej. "140223355"
+    # Email SMTP (si falta host o destinatario → no envía email)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "hagemann@neofreight.net"
+    smtp_use_tls: bool = True
+    hr_email: str = ""                   # destinatario RRHH
+
     class Config:
         env_file = ".env"
 

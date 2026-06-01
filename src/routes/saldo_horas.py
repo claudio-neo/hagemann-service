@@ -218,6 +218,7 @@ def historial_saldo(
 class AjusteManualBody(BaseModel):
     horas_reales: float
     horas_planificadas: Optional[float] = None   # None → usa monthly_hours del empleado
+    saldo_final_override: Optional[float] = None  # Fija el saldo que pasa al mes siguiente
     notas: Optional[str] = None
 
 
@@ -243,16 +244,20 @@ def ajuste_manual_mes(
     if not emp:
         raise HTTPException(404, "Mitarbeiter nicht gefunden")
 
-    from ..services.calculo_saldo import _get_carryover_anterior, DEFAULT_LIMITE_KAPPUNG
+    from ..services.calculo_saldo import _get_carryover_anterior
 
     horas_planificadas = Decimal(str(body.horas_planificadas)) if body.horas_planificadas is not None else Decimal(str(emp.monthly_hours))
     horas_reales = Decimal(str(body.horas_reales))
     saldo_mes = (horas_reales - horas_planificadas).quantize(Decimal("0.01"))
     carryover = _get_carryover_anterior(db, empleado_id, year, mes)
     saldo_acumulado = (saldo_mes + carryover).quantize(Decimal("0.01"))
-    kappung = DEFAULT_LIMITE_KAPPUNG
-    saldo_final = max(min(saldo_acumulado, kappung), -kappung)
-    kappung_aplicada = saldo_final != saldo_acumulado
+    # ⚠️ Sin Kappung. saldo_final = acumulado, salvo override manual (reset mensual RRHH).
+    if body.saldo_final_override is not None:
+        saldo_final = Decimal(str(body.saldo_final_override)).quantize(Decimal("0.01"))
+    else:
+        saldo_final = saldo_acumulado
+    kappung = None
+    kappung_aplicada = False
 
     existente = db.query(SaldoHorasMensual).filter(
         SaldoHorasMensual.empleado_id == empleado_id,
@@ -268,7 +273,7 @@ def ajuste_manual_mes(
         existente.saldo_acumulado = saldo_acumulado
         existente.saldo_final = saldo_final
         existente.kappung_aplicada = kappung_aplicada
-        existente.horas_cortadas = abs(saldo_acumulado - saldo_final)
+        existente.horas_cortadas = Decimal("0.00")
         existente.cerrado = True
         existente.notas = body.notas
         existente.calculado_en = datetime.utcnow()
@@ -285,7 +290,7 @@ def ajuste_manual_mes(
             limite_kappung=kappung,
             saldo_final=saldo_final,
             kappung_aplicada=kappung_aplicada,
-            horas_cortadas=abs(saldo_acumulado - saldo_final),
+            horas_cortadas=Decimal("0.00"),
             cerrado=True,
             notas=body.notas,
             calculado_en=datetime.utcnow(),

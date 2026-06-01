@@ -56,6 +56,20 @@ def _aplicar_correccion_si_procede(db: Session, tipo_entidad: str, entidad_id: s
     if solicitud.solicitado_descanso_min is not None:
         fichaje.minutos_descanso = solicitud.solicitado_descanso_min
 
+    # Recalcular minutos trabajados desde la ventana corregida.
+    # IMPORTANTE: una corrección manual NO reaplica el recorte de Rahmenzeit
+    # (Zeitgruppe), de modo que permite acreditar tiempo vor/nach Rahmenzeit
+    # (p.ej. entrada real 06:00 aunque la Rahmenzeit empiece a las 06:30).
+    if fichaje.fecha_entrada and fichaje.fecha_salida:
+        try:
+            from ..services.zeitgruppe_service import calcular_minutos_rauch_descontables
+            rauch = calcular_minutos_rauch_descontables(fichaje.id, db)
+        except Exception:
+            rauch = 0
+        bruto = int((fichaje.fecha_salida - fichaje.fecha_entrada).total_seconds() // 60)
+        descanso = fichaje.minutos_descanso or 0
+        fichaje.minutos_trabajados = max(0, bruto - descanso - rauch)
+
     fichaje.correccion = 1  # indica que fue corregido
     fichaje.updated_at = datetime.utcnow()
 

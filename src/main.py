@@ -59,6 +59,14 @@ settings = get_settings()
 init_schema()
 Base.metadata.create_all(bind=engine)
 
+# Migraciones idempotentes para columnas añadidas a tablas preexistentes
+from .models.datev import ensure_columns as _ensure_datev_columns
+_ensure_datev_columns(engine)
+from .models.vacaciones import ensure_columns as _ensure_vacaciones_columns
+_ensure_vacaciones_columns(engine)
+from .models.saldo_horas import ensure_columns as _ensure_saldo_columns
+_ensure_saldo_columns(engine)
+
 # Seed inicial (idempotente)
 def _seed_zeitgruppen(db):
     """Crear las 4 Zeitgruppen de Hagemann si no existen."""

@@ -1,8 +1,47 @@
 # DATEV Integration — Hagemann
 
-**Versión:** 1.0  
-**Última actualización:** 2026-03-11  
-**Estado:** Implementado (modo sandbox activo — credenciales pendientes)
+**Versión:** 2.0  
+**Última actualización:** 2026-05-29  
+**Estado:** Andamiaje implementado (sandbox). ⚠️ Capa de API/formato pendiente de rehacer contra la especificación real (ver §0).
+
+---
+
+## 0. ⚠️ Corrección 2026-05-29 — la integración v1.0 apunta a endpoints/formatos inexistentes
+
+La implementación v1.0 (servicio, rutas, modelos) se construyó contra una API DATEV
+**que no existe tal como está descrita**. Verificado contra fuentes primarias el 2026-05-29:
+
+| v1.0 (incorrecto) | Realidad DATEV verificada |
+|---|---|
+| `login.datev.de/openiddict/authorize` y `/token` | OIDC real bajo `login.datev.de/openid/...`; **token en `https://api.datev.de/token`**; discovery `login.datev.de/openid/.well-known/openid-configuration`; sandbox `login.datev.de/openidsandbox/` |
+| `api.datev.de/marketplace/v1/payroll/lohngehalt` | **No existe.** El producto real es **DATEV Lohnimportdatenservice** → en el portal `hr:imports` / `hr:files` (v2.0.0) |
+| Scopes `datev:payroll:read/write` | Inventados. Los scopes los define el producto registrado en developer.datev.de |
+| Payload JSON `{Arbeitnehmer:[...]}` | DATEV no acepta ese JSON. La nómina entra por **Bewegungsdaten** (ASCII-Import) o por el Lohnimportdatenservice |
+| CSV con cabeceras `PersonalnummerArbeitnehmer;…` | No es DTVF/EXTF ni el Herstellerformat de Bewegungsdaten. DATEV no reconoce esas columnas |
+
+### Realidad: dos caminos para Zeiterfassung → DATEV Lohn und Gehalt
+
+1. **Fichero (ASCII-Import, sin credenciales):** el asesor usa `Extras > ASCII-Import Assistent`
+   (`Erfassen > Bewegungsdaten > Importieren`). Formato: *"Herstellerformat für Import von
+   Bewegungsdaten"* (DATEV Help-Center docs 1007833 / 9219371). El asistente permite definir
+   columnas y separador, así que un CSV bien estructurado de Bewegungsdaten es importable.
+2. **API REST (DATEVconnect online):** **DATEV Lohnimportdatenservice** (`hr:imports`).
+   Requiere que el asesor cree la app en developer.datev.de, OIDC real con PKCE y, según producto,
+   certificación.
+
+### 🚧 Dependencia bloqueante #1 — mapeo de Lohnarten
+
+Cada movimiento (horas normales, Überstunden, Krankheit, Urlaub, saldo) se importa contra una
+**Lohnart / Lohnnummer** definida **por el asesor para este Mandant**. Sin ese mapeo, ningún
+fichero ni llamada API es importable. **Pedir al asesor la lista de Lohnarten antes de fijar el formato.**
+El asesor de Hagemann usa **DATEV Lohn und Gehalt** (no LODAS) — confirmado 2026-05-29.
+
+> Nota: `docs/importvorlage-hagemann.xlsx` **no** es una plantilla DATEV: es el import de empleados
+> al propio sistema Hagemann (Systemnummer, Transponder-ID, Zeitgruppe…). Solo sirve como referencia
+> de los campos origen (Personalnummer, Kostenstelle, Abteilung, Mandat).
+
+Las secciones 2–5 siguientes describen la implementación v1.0 y se conservan como referencia
+histórica, pero **deben rehacerse** según lo anterior.
 
 ---
 
@@ -361,9 +400,11 @@ Admin                    Hagemann API
 | `POST` | `/api/v1/datev/config` | Crear/actualizar configuración |
 | `GET` | `/api/v1/datev/oauth/authorize` | Obtener URL OAuth |
 | `GET` | `/api/v1/datev/oauth/callback` | Callback OAuth (intercambiar código) |
-| `POST` | `/api/v1/datev/export` | Exportar (dry_run o real) |
+| `POST` | `/api/v1/datev/export` | Exportar vía API (sandbox; real pendiente Fase 3) |
 | `GET` | `/api/v1/datev/export/history` | Historial de exportaciones |
-| `POST` | `/api/v1/datev/export/csv` | Descargar CSV offline |
+| `POST` | `/api/v1/datev/export/bewegungsdaten` | **Descargar fichero Bewegungsdaten (ASCII-Import)** |
+| `GET` | `/api/v1/datev/config/lohnart` | Ver mapeo de Lohnarten |
+| `PUT` | `/api/v1/datev/config/lohnart` | Actualizar mapeo de Lohnarten |
 
 Ver documentación interactiva completa en: `http://localhost:8013/docs#/DATEV`
 
@@ -423,6 +464,7 @@ Solicitar al asesor fiscal:
 | Variable | Valor por defecto | Descripción |
 |----------|------------------|-------------|
 | `DATEV_SANDBOX` | `true` | `true` = modo sandbox, no envía datos reales |
+| `DATEV_SECRET_KEY` | _(vacía)_ | Clave Fernet para cifrar `client_secret` en reposo. Vacía = texto plano (solo dev) |
 | `DATEV_REDIRECT_URI` | `http://localhost:8013/api/v1/datev/oauth/callback` | URI de callback OAuth (cambiar en producción) |
 
 ### Configuración en docker-compose.yml

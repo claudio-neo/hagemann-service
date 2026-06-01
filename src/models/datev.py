@@ -5,10 +5,50 @@ Almacena configuración OAuth y log de exportaciones a DATEV Lohn & Gehalt.
 import uuid
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, Boolean, DateTime, Date, String, Text,
+    Column, Integer, Boolean, DateTime, Date, String, Text, text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from ..database import Base
+
+
+# Conceptos exportables a DATEV Lohn und Gehalt como Bewegungsdaten.
+# Cada uno se mapea a una Lohnart/Lohnnummer que define el asesor fiscal.
+LOHNART_CONCEPTS = ("normalstunden", "ueberstunden", "krankheit", "urlaub", "saldo")
+
+# Unidad por defecto de cada concepto (Stunden = horas, Tage = días).
+LOHNART_DEFAULT_EINHEIT = {
+    "normalstunden": "Stunden",
+    "ueberstunden": "Stunden",
+    "krankheit": "Tage",
+    "urlaub": "Tage",
+    "saldo": "Stunden",
+}
+
+
+def default_lohnart_mapping() -> dict:
+    """Mapeo Lohnart vacío — el asesor rellena la Lohnnummer de cada concepto."""
+    return {
+        concepto: {
+            "lohnart": "",                              # Lohnnummer asignada por el asesor
+            "einheit": LOHNART_DEFAULT_EINHEIT[concepto],
+            "aktiv": False,                             # solo se exporta si aktiv=True y lohnart!=""
+        }
+        for concepto in LOHNART_CONCEPTS
+    }
+
+
+def ensure_columns(engine) -> None:
+    """
+    Migración idempotente: añade columnas DATEV nuevas a tablas ya existentes.
+
+    El proyecto crea tablas con Base.metadata.create_all, que NO altera tablas
+    preexistentes. Esta función cubre ese hueco para columnas añadidas después.
+    """
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE hagemann.datev_config "
+            "ADD COLUMN IF NOT EXISTS lohnart_mapping JSONB"
+        ))
 
 
 class DatevConfig(Base):
@@ -78,6 +118,14 @@ class DatevConfig(Base):
     payroll_type = Column(
         String(50), nullable=False, default="Lohn",
         comment="Tipo de nómina: 'Lohn' (por horas) o 'Gehalt' (mensual fijo)",
+    )
+    lohnart_mapping = Column(
+        JSONB, nullable=True,
+        comment=(
+            "Mapeo concepto→Lohnart para Bewegungsdaten. "
+            "Forma: {concepto: {lohnart, einheit, aktiv}}. "
+            "Las Lohnnummern las define el asesor fiscal por Mandant."
+        ),
     )
 
     # ── Control ──────────────────────────────────────────────────────────────

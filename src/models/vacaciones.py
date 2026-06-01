@@ -10,7 +10,7 @@ import enum
 from datetime import datetime, date
 from sqlalchemy import (
     Column, String, Integer, Boolean, DateTime, Date,
-    ForeignKey, Text, UniqueConstraint,
+    ForeignKey, Text, UniqueConstraint, text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -25,11 +25,87 @@ class TipoFestivo(str, enum.Enum):
 
 
 class TipoAusencia(str, enum.Enum):
-    VACACIONES = "VACACIONES"           # Urlaub
-    BAJA_MEDICA = "BAJA_MEDICA"         # Krankmeldung
-    ASUNTOS_PROPIOS = "ASUNTOS_PROPIOS" # Sonstiges
+    # ── Existentes ──────────────────────────────────────────────────────────
+    VACACIONES = "VACACIONES"                       # Urlaub
+    BAJA_MEDICA = "BAJA_MEDICA"                      # Krankheit (mit Schein)
+    ASUNTOS_PROPIOS = "ASUNTOS_PROPIOS"             # Sonstiges
     PERMISO_RETRIBUIDO = "PERMISO_RETRIBUIDO"
-    FZA = "FZA"                         # Freizeitausgleich (compensación horas extra)
+    FZA = "FZA"                                     # Freizeitausgleich
+    # ── Nuevos (requisitos Personalabteilung 2026-06) ──────────────────────
+    ARBEITSUNFALL = "ARBEITSUNFALL"
+    ARZT_GANG = "ARZT_GANG"
+    BERUFSSCHULE = "BERUFSSCHULE"
+    ELTERNZEIT = "ELTERNZEIT"
+    FREISTELLUNG = "FREISTELLUNG"
+    UNENTSCHULDIGT = "UNENTSCHULDIGT"               # Unentschuldigtes Fehlen
+    HOMEOFFICE = "HOMEOFFICE"
+    KRANKHEIT_KIND = "KRANKHEIT_KIND"
+    KRANKHEIT_OHNE_SCHEIN = "KRANKHEIT_OHNE_SCHEIN"
+    SONDERURLAUB = "SONDERURLAUB"                   # Umzug, Tod, Hochzeit…
+    WEITERBILDUNG = "WEITERBILDUNG"
+    UNBEZAHLTER_URLAUB = "UNBEZAHLTER_URLAUB"
+    HH_MODELL = "HH_MODELL"
+
+
+class SaldoWirkung(str, enum.Enum):
+    """Efecto de la ausencia sobre el Saldo de horas."""
+    AUFFUELLEN = "AUFFUELLEN"          # Acredita la Sollzeit del día (saldo neutro)
+    UNTERBRECHUNG = "UNTERBRECHUNG"    # No acredita nada (consume saldo / déficit)
+
+
+# Clasificación de cada tipo. Por defecto AUFFUELLEN; las interrupciones explícitas
+# (FZA y falta injustificada) no acreditan Sollzeit.
+SALDO_WIRKUNG = {
+    TipoAusencia.FZA: SaldoWirkung.UNTERBRECHUNG,
+    TipoAusencia.UNENTSCHULDIGT: SaldoWirkung.UNTERBRECHUNG,
+}
+
+
+def saldo_wirkung(tipo) -> "SaldoWirkung":
+    """Devuelve el efecto sobre el saldo de un tipo de ausencia (default AUFFUELLEN)."""
+    try:
+        tipo = TipoAusencia(tipo)
+    except ValueError:
+        return SaldoWirkung.AUFFUELLEN
+    return SALDO_WIRKUNG.get(tipo, SaldoWirkung.AUFFUELLEN)
+
+
+# Etiquetas alemanas para la UI / informes.
+TIPO_AUSENCIA_LABELS = {
+    TipoAusencia.VACACIONES: "Urlaub",
+    TipoAusencia.BAJA_MEDICA: "Krankheit (mit Schein)",
+    TipoAusencia.ASUNTOS_PROPIOS: "Sonstiges",
+    TipoAusencia.PERMISO_RETRIBUIDO: "Bezahlte Freistellung",
+    TipoAusencia.FZA: "FZA (Freizeitausgleich)",
+    TipoAusencia.ARBEITSUNFALL: "Arbeitsunfall",
+    TipoAusencia.ARZT_GANG: "Arzt-Gang",
+    TipoAusencia.BERUFSSCHULE: "Berufsschule",
+    TipoAusencia.ELTERNZEIT: "Elternzeit",
+    TipoAusencia.FREISTELLUNG: "Freistellung",
+    TipoAusencia.UNENTSCHULDIGT: "Unentschuldigtes Fehlen",
+    TipoAusencia.HOMEOFFICE: "Homeoffice",
+    TipoAusencia.KRANKHEIT_KIND: "Krankheit Kind",
+    TipoAusencia.KRANKHEIT_OHNE_SCHEIN: "Krankheit ohne Schein",
+    TipoAusencia.SONDERURLAUB: "Sonderurlaub",
+    TipoAusencia.WEITERBILDUNG: "Weiterbildung",
+    TipoAusencia.UNBEZAHLTER_URLAUB: "Unbezahlter Urlaub",
+    TipoAusencia.HH_MODELL: "HH-Modell",
+}
+
+
+# Tipos considerados "Krankmeldung" (disparan aviso a la Personalabteilung).
+KRANKHEIT_TIPOS = {
+    TipoAusencia.BAJA_MEDICA,
+    TipoAusencia.KRANKHEIT_OHNE_SCHEIN,
+    TipoAusencia.KRANKHEIT_KIND,
+}
+
+
+def es_krankmeldung(tipo) -> bool:
+    try:
+        return TipoAusencia(tipo) in KRANKHEIT_TIPOS
+    except ValueError:
+        return False
 
 
 class EstadoSolicitud(str, enum.Enum):
@@ -134,6 +210,8 @@ class SolicitudVacaciones(Base):
     fecha_fin = Column(Date, nullable=False)
     dias = Column(Integer, nullable=False,
                   comment="Días laborables solicitados (excluyendo fines de semana y festivos)")
+    medio_dia = Column(Boolean, nullable=False, default=False,
+                       comment="½ Tag: cada día cuenta como media jornada (media Sollzeit)")
 
     # Tipo de ausencia
     tipo_ausencia = Column(String(30), nullable=False,
@@ -166,6 +244,15 @@ class SolicitudVacaciones(Base):
     # Relationships
     empleado = relationship("Empleado", backref="solicitudes_vacaciones")
     periodo = relationship("PeriodoVacaciones", back_populates="solicitudes")
+
+
+def ensure_columns(engine) -> None:
+    """Migración idempotente para columnas añadidas a tablas preexistentes."""
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE hagemann.solicitudes_vacaciones "
+            "ADD COLUMN IF NOT EXISTS medio_dia BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
 
 
 class LimiteVacaciones(Base):

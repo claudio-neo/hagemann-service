@@ -3,17 +3,101 @@ Servicio de cálculo de saldo de horas mensual — Hagemann
 Lógica de negocio separada de las rutas para testabilidad.
 """
 from decimal import Decimal
-from typing import Optional, List, Dict, Any
-from datetime import datetime, date
+from typing import Optional, List, Dict, Any, Set
+from datetime import datetime, date, timedelta
+from calendar import monthrange
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, extract
 
 from ..models.empleado import Empleado
 from ..models.fichaje import Fichaje
 from ..models.saldo_horas import SaldoHorasMensual
+from ..models.vacaciones import (
+    SolicitudVacaciones, EstadoSolicitud, Festivo,
+    SaldoWirkung, saldo_wirkung,
+)
 
-# Stundenkappung por defecto: 100 horas extra acumuladas como máximo
+# ⚠️ Kappung DESACTIVADA por requisito de la Personalabteilung (2026-06):
+# "weder Plus- noch Minusstunden pauschal gekappt oder zurückgesetzt".
+# Se mantiene la constante por compatibilidad de imports, pero NO se aplica.
 DEFAULT_LIMITE_KAPPUNG = Decimal("100.00")
+
+# Días con media jornada obligatoria libre (halbe Sollzeit): 24.12 y 31.12.
+_HALBE_TAGE = {(12, 24), (12, 31)}
+
+
+def _factor_dia(d: date) -> Decimal:
+    """Factor de Sollzeit del día: 0.5 en 24.12 y 31.12 (medio día libre), 1.0 resto."""
+    return Decimal("0.5") if (d.month, d.day) in _HALBE_TAGE else Decimal("1")
+
+
+def _festivos_mes(db: Session, anio: int, mes: int) -> Set[date]:
+    """Conjunto de fechas festivas del mes (nacionales DE + Sachsen)."""
+    dias_mes = monthrange(anio, mes)[1]
+    rows = db.query(Festivo.fecha).filter(
+        Festivo.activo == True,
+        Festivo.bundesland.in_(["DE", "SN"]),
+        Festivo.fecha >= date(anio, mes, 1),
+        Festivo.fecha <= date(anio, mes, dias_mes),
+    ).all()
+    return {r[0] for r in rows}
+
+
+def _es_laborable(d: date, festivos: Set[date]) -> bool:
+    """Mo–Fr y no festivo."""
+    return d.weekday() < 5 and d not in festivos
+
+
+def _sollzeit_ponderada(desde: date, hasta: date, festivos: Set[date]) -> Decimal:
+    """Suma de factores de día laborable en [desde, hasta] (24/31-Dic cuentan 0.5)."""
+    total = Decimal("0")
+    d = desde
+    while d <= hasta:
+        if _es_laborable(d, festivos):
+            total += _factor_dia(d)
+        d += timedelta(days=1)
+    return total
+
+
+def _credito_ausencias_mes(
+    db: Session,
+    empleado_id,
+    rango_desde: date,
+    rango_hasta: date,
+    festivos: Set[date],
+    tagessollzeit: Decimal,
+) -> Decimal:
+    """
+    Horas acreditadas al saldo por ausencias aprobadas del tipo AUFFUELLEN
+    (auf Sollzeit auffüllen), restringidas al rango efectivo [rango_desde,
+    rango_hasta] (mismo que las horas planificadas: respeta alta/baja/mes en curso).
+
+    Las UNTERBRECHUNG (FZA, falta injustificada) no acreditan nada. Cada día
+    laborable suma tagessollzeit·factor_dia, a la mitad si la solicitud es de medio día.
+    """
+    if rango_hasta < rango_desde:
+        return Decimal("0.00")
+
+    solicitudes = db.query(SolicitudVacaciones).filter(
+        SolicitudVacaciones.empleado_id == empleado_id,
+        SolicitudVacaciones.estado == EstadoSolicitud.APROBADA,
+        SolicitudVacaciones.fecha_inicio <= rango_hasta,
+        SolicitudVacaciones.fecha_fin >= rango_desde,
+    ).all()
+
+    credito = Decimal("0")
+    for s in solicitudes:
+        if saldo_wirkung(s.tipo_ausencia) != SaldoWirkung.AUFFUELLEN:
+            continue
+        factor_medio = Decimal("0.5") if getattr(s, "medio_dia", False) else Decimal("1")
+        desde = max(s.fecha_inicio, rango_desde)
+        hasta = min(s.fecha_fin, rango_hasta)
+        d = desde
+        while d <= hasta:
+            if _es_laborable(d, festivos):
+                credito += tagessollzeit * _factor_dia(d) * factor_medio
+            d += timedelta(days=1)
+    return credito.quantize(Decimal("0.01"))
 
 
 def _get_horas_reales_mes(db: Session, empleado_id, anio: int, mes: int) -> Decimal:
@@ -105,25 +189,27 @@ def calcular_saldo_mes(
         fuera_de_rango = True
 
     # Calcular valores
-    kappung = limite_kappung if limite_kappung is not None else DEFAULT_LIMITE_KAPPUNG
-
     if fuera_de_rango:
         horas_planificadas = Decimal("0.00")
         horas_reales = Decimal("0.00")
+        horas_ausencia = Decimal("0.00")
         saldo_mes = Decimal("0.00")
-        # Meses futuros: no arrastrar carryover (aún no han ocurrido)
-        # Meses fuera por baja/antes de inicio: tampoco
+        # Meses futuros / fuera de alta-baja: no arrastrar carryover
         carryover_anterior = Decimal("0.00")
         saldo_acumulado = Decimal("0.00")
     else:
-        from calendar import monthrange
         dias_mes = monthrange(anio, mes)[1]
+        festivos = _festivos_mes(db, anio, mes)
 
-        # Horas planificadas: prorrateadas si el mes está parcial
-        #  - mes en curso → días desde inicio hasta hoy
-        #  - mes que contiene beginn_berechnung → desde ese día hasta fin
-        #  - mes que contiene fecha_baja → desde día 1 hasta esa fecha
-        #  - mes completo → todas las horas del contrato
+        # Tagessollzeit = horas mensuales / días laborables ponderados del mes completo
+        # (24.12 y 31.12 cuentan 0.5). Así la Sollzeit del mes completo = monthly_hours.
+        soll_mes = _sollzeit_ponderada(mes_inicio, date(anio, mes, dias_mes), festivos)
+        tagessollzeit = (
+            (Decimal(str(emp.monthly_hours)) / soll_mes).quantize(Decimal("0.0001"))
+            if soll_mes > 0 else Decimal("0")
+        )
+
+        # Rango efectivo (alta / baja / mes en curso)
         primer_dia_efectivo = mes_inicio
         if inicio_calculo and inicio_calculo.year == anio and inicio_calculo.month == mes:
             primer_dia_efectivo = inicio_calculo
@@ -131,33 +217,28 @@ def calcular_saldo_mes(
         if emp.fecha_baja and emp.fecha_baja.year == anio and emp.fecha_baja.month == mes:
             ultimo_dia_efectivo = emp.fecha_baja
         if mes_inicio.year == hoy.year and mes_inicio.month == hoy.month:
-            # mes en curso: no contar más allá de hoy
             if hoy < ultimo_dia_efectivo:
                 ultimo_dia_efectivo = hoy
 
-        dias_efectivos = max(0, (ultimo_dia_efectivo - primer_dia_efectivo).days + 1)
-        ratio = Decimal(dias_efectivos) / Decimal(dias_mes)
-        horas_planificadas = (Decimal(str(emp.monthly_hours)) * ratio).quantize(Decimal("0.01"))
+        # Horas planificadas = Sollzeit ponderada de los días laborables del rango
+        soll_rango = _sollzeit_ponderada(primer_dia_efectivo, ultimo_dia_efectivo, festivos)
+        horas_planificadas = (tagessollzeit * soll_rango).quantize(Decimal("0.01"))
 
+        # Reales = fichajes (trabajo efectivo). Ausencia = crédito 'auf Sollzeit auffüllen'.
         horas_reales = _get_horas_reales_mes(db, empleado_id, anio, mes)
-        saldo_mes = (horas_reales - horas_planificadas).quantize(Decimal("0.01"))
+        horas_ausencia = _credito_ausencias_mes(
+            db, empleado_id, primer_dia_efectivo, ultimo_dia_efectivo,
+            festivos, tagessollzeit
+        )
+        saldo_mes = (horas_reales + horas_ausencia - horas_planificadas).quantize(Decimal("0.01"))
         carryover_anterior = _get_carryover_anterior(db, empleado_id, anio, mes)
         saldo_acumulado = (saldo_mes + carryover_anterior).quantize(Decimal("0.01"))
 
-    # Stundenkappung: limitar saldo acumulado positivo
+    # ⚠️ Sin Stundenkappung (requisito Personalabteilung): saldo_final = saldo_acumulado.
+    kappung = None
     kappung_aplicada = False
     horas_cortadas = Decimal("0.00")
     saldo_final = saldo_acumulado
-
-    if saldo_acumulado > kappung:
-        horas_cortadas = (saldo_acumulado - kappung).quantize(Decimal("0.01"))
-        saldo_final = kappung
-        kappung_aplicada = True
-    elif saldo_acumulado < -kappung:
-        # También capamos hacia abajo (deuda máxima)
-        horas_cortadas = (-kappung - saldo_acumulado).quantize(Decimal("0.01"))
-        saldo_final = -kappung
-        kappung_aplicada = True
 
     now = datetime.utcnow()
 
@@ -174,6 +255,7 @@ def calcular_saldo_mes(
             mes=mes,
             horas_planificadas=horas_planificadas,
             horas_reales=horas_reales,
+            horas_ausencia=horas_ausencia,
             saldo_mes=saldo_mes,
             carryover_anterior=carryover_anterior,
             saldo_acumulado=saldo_acumulado,
@@ -189,6 +271,7 @@ def calcular_saldo_mes(
     if existente:
         existente.horas_planificadas = horas_planificadas
         existente.horas_reales = horas_reales
+        existente.horas_ausencia = horas_ausencia
         existente.saldo_mes = saldo_mes
         existente.carryover_anterior = carryover_anterior
         existente.saldo_acumulado = saldo_acumulado
@@ -207,6 +290,7 @@ def calcular_saldo_mes(
             mes=mes,
             horas_planificadas=horas_planificadas,
             horas_reales=horas_reales,
+            horas_ausencia=horas_ausencia,
             saldo_mes=saldo_mes,
             carryover_anterior=carryover_anterior,
             saldo_acumulado=saldo_acumulado,
@@ -299,6 +383,7 @@ def _saldo_to_dict(s: SaldoHorasMensual, emp: Optional[Empleado] = None) -> Dict
         "mes_nombre": _mes_nombre(s.mes),
         "horas_planificadas": float(s.horas_planificadas),
         "horas_reales": float(s.horas_reales),
+        "horas_ausencia": float(s.horas_ausencia or 0),
         "saldo_mes": float(s.saldo_mes),
         "saldo_mes_label": _format_horas(float(s.saldo_mes)),
         "carryover_anterior": float(s.carryover_anterior),

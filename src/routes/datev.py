@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..services import datev_service
+from ..models.datev import LOHNART_CONCEPTS, default_lohnart_mapping
 from ..auth import require_permission
 from ..permisos import EXPORT_RUN
 
@@ -85,6 +86,7 @@ class DatevConfigOut(BaseModel):
     datev_guid: Optional[str]
     payroll_type: str
     activo: bool
+    lohnart_mapping: Optional[dict]
     token_expires_at: Optional[datetime]
     token_scope: Optional[str]
     has_access_token: bool
@@ -113,10 +115,31 @@ class ExportRequest(BaseModel):
     )
 
 
-class CsvRequest(BaseModel):
-    """Body para exportación CSV alternativa."""
+class BewegungsdatenRequest(BaseModel):
+    """Body para exportación del fichero Bewegungsdaten (ASCII-Import)."""
     year: int = Field(..., ge=2020, le=2099, example=2026)
     month: int = Field(..., ge=1, le=12, example=3)
+    delimiter: str = Field(";", max_length=1, description="Separador de columnas")
+    decimal_sep: str = Field(",", max_length=1, description="Separador decimal")
+    include_header: bool = Field(True, description="Incluir fila de cabeceras")
+
+
+class LohnartConcept(BaseModel):
+    """Mapeo de un concepto a su Lohnart/Lohnnummer DATEV."""
+    lohnart: str = Field("", max_length=20, description="Lohnnummer asignada por el asesor")
+    einheit: str = Field("", max_length=20, description="Unidad: 'Stunden' o 'Tage'")
+    aktiv: bool = Field(False, description="Si True y lohnart!='' → se exporta este concepto")
+
+
+class LohnartMappingIn(BaseModel):
+    """Body para actualizar el mapeo de Lohnarten (claves: conceptos exportables)."""
+    mapping: dict[str, LohnartConcept] = Field(
+        ...,
+        description=(
+            "Mapeo concepto→Lohnart. Conceptos válidos: "
+            "normalstunden, ueberstunden, krankheit, urlaub, saldo."
+        ),
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -150,6 +173,7 @@ def get_config(db: Session = Depends(get_db)):
         datev_guid=config.datev_guid,
         payroll_type=config.payroll_type,
         activo=config.activo,
+        lohnart_mapping=datev_service.get_lohnart_mapping(config),
         token_expires_at=config.token_expires_at,
         token_scope=config.token_scope,
         has_access_token=bool(config.access_token),
@@ -181,6 +205,7 @@ def upsert_config(body: DatevConfigIn, db: Session = Depends(get_db)):
         datev_guid=config.datev_guid,
         payroll_type=config.payroll_type,
         activo=config.activo,
+        lohnart_mapping=datev_service.get_lohnart_mapping(config),
         token_expires_at=config.token_expires_at,
         token_scope=config.token_scope,
         has_access_token=bool(config.access_token),
@@ -393,24 +418,35 @@ def export_history(
 
 
 @router.post(
-    "/export/csv",
-    summary="Descargar CSV en formato DATEV Lohn & Gehalt",
+    "/export/bewegungsdaten",
+    summary="Descargar fichero Bewegungsdaten (ASCII-Import DATEV Lohn und Gehalt)",
     description="""
-Genera y descarga un archivo CSV compatible con DATEV Lohn & Gehalt.
+Genera y descarga el fichero CSV de **Bewegungsdaten** del mes para importarlo
+en DATEV Lohn und Gehalt con el **ASCII-Import Assistent**
+(`Erfassen > Bewegungsdaten > Importieren`).
 
-**Alternativa offline**: No requiere credenciales OAuth. Puede importarse
-manualmente en DATEV desde el módulo de importación DTVF.
+**Sin credenciales**: no requiere OAuth.
 
-Formato: CSV con separador ";" y codificación UTF-8-BOM (requerido por DATEV).
+Una fila por (empleado, Lohnart) para cada concepto activo en el mapeo de Lohnarten
+(`PUT /datev/config/lohnart`). Formato por defecto: separador ';', decimal ',',
+CRLF y UTF-8-BOM. Las columnas y el separador se ajustan en el asistente DATEV.
+
+⚠️ Requiere haber configurado las Lohnarten del asesor; si ninguna está activa,
+el fichero saldrá vacío (solo cabecera).
 """,
 )
-def export_csv(body: CsvRequest, db: Session = Depends(get_db)):
+def export_bewegungsdaten(body: BewegungsdatenRequest, db: Session = Depends(get_db)):
     try:
-        csv_bytes = datev_service.export_to_csv(db, body.year, body.month)
+        csv_bytes = datev_service.export_bewegungsdaten_csv(
+            db, body.year, body.month,
+            delimiter=body.delimiter,
+            decimal_sep=body.decimal_sep,
+            include_header=body.include_header,
+        )
     except Exception as e:
-        raise HTTPException(500, f"Fehler beim Erstellen der CSV: {str(e)}")
+        raise HTTPException(500, f"Fehler beim Erstellen der Bewegungsdaten: {str(e)}")
 
-    filename = f"datev_lohn_{body.year}-{body.month:02d}.csv"
+    filename = f"datev_bewegungsdaten_{body.year}-{body.month:02d}.csv"
     headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',
     }
@@ -419,6 +455,58 @@ def export_csv(body: CsvRequest, db: Session = Depends(get_db)):
         media_type="text/csv; charset=utf-8",
         headers=headers,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  MAPEO DE LOHNARTEN
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get(
+    "/config/lohnart",
+    summary="Ver mapeo de Lohnarten",
+    description="Devuelve el mapeo concepto→Lohnart actual (completado con los conceptos por defecto).",
+)
+def get_lohnart_mapping(db: Session = Depends(get_db)):
+    config = datev_service.get_config(db)
+    return {
+        "conceptos": list(LOHNART_CONCEPTS),
+        "mapping": datev_service.get_lohnart_mapping(config),
+    }
+
+
+@router.put(
+    "/config/lohnart",
+    summary="Actualizar mapeo de Lohnarten",
+    description=(
+        "Actualiza el mapeo concepto→Lohnart. Las Lohnnummern las facilita el "
+        "asesor fiscal para este Mandant. Solo se exportan conceptos con aktiv=True "
+        "y lohnart no vacía."
+    ),
+)
+def put_lohnart_mapping(body: LohnartMappingIn, db: Session = Depends(get_db)):
+    config = datev_service.get_config(db)
+    if config is None:
+        raise HTTPException(
+            404,
+            "No hay configuración DATEV. Configure primero via POST /datev/config",
+        )
+
+    invalid = [c for c in body.mapping if c not in LOHNART_CONCEPTS]
+    if invalid:
+        raise HTTPException(
+            422,
+            f"Conceptos no válidos: {invalid}. Válidos: {list(LOHNART_CONCEPTS)}",
+        )
+
+    mapping = default_lohnart_mapping()
+    for concepto, valores in body.mapping.items():
+        mapping[concepto] = valores.model_dump()
+
+    config = datev_service.upsert_config(db, {"lohnart_mapping": mapping})
+    return {
+        "status": "ok",
+        "mapping": datev_service.get_lohnart_mapping(config),
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

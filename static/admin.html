@@ -298,6 +298,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 <div id="einstellungen-tabbar" class="hidden">
   <button class="etab-btn hidden" onclick="showPage('einstellungen')" id="etab-einstellungen">⚙ Stammdaten</button>
   <button class="etab-btn hidden" onclick="showPage('export')" id="etab-export">📥 Export</button>
+  <button class="etab-btn hidden" onclick="showPage('datev')" id="etab-datev">🧾 DATEV</button>
   <button class="etab-btn hidden" onclick="showPage('importieren')" id="etab-importieren">📤 Import</button>
   <button class="etab-btn hidden" onclick="showPage('protokoll')" id="etab-protokoll">📜 Protokoll</button>
   <button class="etab-btn hidden" onclick="showPage('mitarbeiter')" id="etab-mitarbeiter">👥 Mitarbeiter</button>
@@ -451,7 +452,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     <div class="tab-bar" style="margin-bottom:20px">
       <button class="tab-btn active" onclick="switchUrlaubTab('antraege')" id="utab-antraege">Anträge</button>
       <button class="tab-btn" onclick="switchUrlaubTab('saldo')" id="utab-saldo">Salden</button>
-      <button class="tab-btn" onclick="switchUrlaubTab('krankmeldung')" id="utab-krankmeldung">🏥 Krankmeldung</button>
+      <button class="tab-btn" onclick="switchUrlaubTab('krankmeldung')" id="utab-krankmeldung">🏥 Krankmeldung<span id="pill-krankmeldung" class="pill hidden">0</span></button>
     </div>
 
     <!-- ANTRÄGE -->
@@ -875,26 +876,16 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
       <div class="card-title" style="margin-bottom:16px">📅 Zeitraum auswählen</div>
       <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap">
         <div class="form-group" style="margin-bottom:0">
-          <label>Monat</label>
-          <select id="exportMonth" class="form-control" style="width:140px">
-            <option value="1">Januar</option>
-            <option value="2">Februar</option>
-            <option value="3">März</option>
-            <option value="4">April</option>
-            <option value="5">Mai</option>
-            <option value="6">Juni</option>
-            <option value="7">Juli</option>
-            <option value="8">August</option>
-            <option value="9">September</option>
-            <option value="10">Oktober</option>
-            <option value="11">November</option>
-            <option value="12">Dezember</option>
-          </select>
+          <label>Von</label>
+          <input type="date" id="exportVon" class="form-control" style="width:170px">
         </div>
+        <div style="display:flex;align-items:center;padding-bottom:8px;font-weight:700;color:var(--text-secondary)">→</div>
         <div class="form-group" style="margin-bottom:0">
-          <label>Jahr</label>
-          <select id="exportYear" class="form-control" style="width:100px"></select>
+          <label>Bis</label>
+          <input type="date" id="exportBis" class="form-control" style="width:170px">
         </div>
+      </div>
+      <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-top:16px">
         <button class="btn btn-outline" onclick="loadExportPreview()">👁 Vorschau laden</button>
         <button class="btn btn-success" onclick="downloadExcel()" id="btnDownloadExcel" disabled>📥 Excel herunterladen</button>
       </div>
@@ -1001,12 +992,34 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     <div class="form-group">
       <label>Abwesenheitstyp *</label>
       <select id="uaTipo" class="form-control">
-        <option value="VACACIONES">🌴 Urlaub</option>
-        <option value="FZA">⏱ Freizeitausgleich (FZA)</option>
-        <option value="BAJA_MEDICA">🏥 Krankmeldung</option>
-        <option value="ASUNTOS_PROPIOS">📋 Sonstiges</option>
-        <option value="PERMISO_RETRIBUIDO">✅ Bezahlte Freistellung</option>
+        <optgroup label="Auf Sollzeit auffüllen">
+          <option value="VACACIONES">🌴 Urlaub</option>
+          <option value="BAJA_MEDICA">🏥 Krankheit (mit Schein)</option>
+          <option value="KRANKHEIT_OHNE_SCHEIN">🤒 Krankheit ohne Schein</option>
+          <option value="KRANKHEIT_KIND">🧒 Krankheit Kind</option>
+          <option value="ARBEITSUNFALL">⚠️ Arbeitsunfall</option>
+          <option value="ARZT_GANG">🩺 Arzt-Gang</option>
+          <option value="BERUFSSCHULE">🏫 Berufsschule</option>
+          <option value="WEITERBILDUNG">📚 Weiterbildung</option>
+          <option value="ELTERNZEIT">👶 Elternzeit</option>
+          <option value="FREISTELLUNG">✅ Freistellung</option>
+          <option value="HOMEOFFICE">🏠 Homeoffice</option>
+          <option value="SONDERURLAUB">🎗 Sonderurlaub</option>
+          <option value="UNBEZAHLTER_URLAUB">💸 Unbezahlter Urlaub</option>
+          <option value="HH_MODELL">🏷 HH-Modell</option>
+          <option value="PERMISO_RETRIBUIDO">✅ Bezahlte Freistellung</option>
+          <option value="ASUNTOS_PROPIOS">📋 Sonstiges</option>
+        </optgroup>
+        <optgroup label="Unterbrechung (keine Gutschrift)">
+          <option value="FZA">⏱ Freizeitausgleich (FZA)</option>
+          <option value="UNENTSCHULDIGT">⛔ Unentschuldigtes Fehlen</option>
+        </optgroup>
       </select>
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="uaMedioDia" style="width:auto"> ½ Tag (halbe Sollzeit)
+      </label>
     </div>
     <div class="form-row cols-2">
       <div class="form-group">
@@ -1334,6 +1347,72 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
   </div>
 </div>
 
+<!-- ===== DATEV ===== -->
+<div id="page-datev" class="page">
+  <div class="container">
+    <div class="page-header">
+      <div><h1>DATEV Lohn und Gehalt</h1><p>Bewegungsdaten für den ASCII-Import in DATEV Lohn und Gehalt</p></div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title" style="margin-bottom:12px">Status</div>
+      <div id="datevStatus">Lade…</div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title" style="margin-bottom:6px">🔢 Lohnarten-Zuordnung</div>
+      <p style="color:var(--text-secondary);font-size:13px;margin:0 0 14px">
+        Die Lohnnummern werden vom Steuerberater pro Mandant vergeben. Nur aktive Zeilen mit
+        gesetzter Lohnart werden exportiert.
+      </p>
+      <table class="table">
+        <thead>
+          <tr><th>Konzept</th><th>Lohnart (Lohnnummer)</th><th>Einheit</th><th>Aktiv</th></tr>
+        </thead>
+        <tbody id="datevLohnartBody"></tbody>
+      </table>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" onclick="saveDatevLohnart()" id="btnSaveLohnart">💾 Lohnarten speichern</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title" style="margin-bottom:16px">📥 Bewegungsdaten exportieren</div>
+      <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Jahr</label>
+          <input type="number" id="datevYear" class="form-control" style="width:110px" min="2020" max="2099">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Monat</label>
+          <select id="datevMonth" class="form-control" style="width:140px">
+            <option value="1">01 — Januar</option><option value="2">02 — Februar</option>
+            <option value="3">03 — März</option><option value="4">04 — April</option>
+            <option value="5">05 — Mai</option><option value="6">06 — Juni</option>
+            <option value="7">07 — Juli</option><option value="8">08 — August</option>
+            <option value="9">09 — September</option><option value="10">10 — Oktober</option>
+            <option value="11">11 — November</option><option value="12">12 — Dezember</option>
+          </select>
+        </div>
+        <button class="btn btn-success" onclick="downloadDatevBewegungsdaten()" id="btnDatevDownload">📥 Datei herunterladen</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header" style="margin-bottom:12px">
+        <span class="card-title">📜 Export-Verlauf</span>
+        <button class="btn btn-outline btn-sm" onclick="loadDatevHistory()">↻ Aktualisieren</button>
+      </div>
+      <table class="table">
+        <thead>
+          <tr><th>Zeitraum</th><th>Datum</th><th>Benutzer</th><th>Status</th><th>Datensätze</th></tr>
+        </thead>
+        <tbody id="datevHistoryBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- ===== BENUTZERVERWALTUNG ===== -->
 <div id="page-benutzerverwaltung" class="page">
   <div class="container">
@@ -1591,7 +1670,7 @@ function populateYearSelect(selectId, defaultYear) {
 // =====================================================================
 // NAVIGATION
 // =====================================================================
-const EINSTELL_PAGES = new Set(['einstellungen','export','importieren','protokoll','mitarbeiter','benutzerverwaltung']);
+const EINSTELL_PAGES = new Set(['einstellungen','export','datev','importieren','protokoll','mitarbeiter','benutzerverwaltung']);
 
 function showPage(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -1622,6 +1701,7 @@ function showPage(page) {
   if (page === 'korrekturen') loadKorrekturen();
   if (page === 'genehmigungen') loadGenehmigungen();
   if (page === 'export') initExport();
+  if (page === 'datev') initDatev();
   if (page === 'einstellungen') initStammdaten();
   if (page === 'importieren') { /* static */ }
   if (page === 'protokoll') loadProtokoll();
@@ -1636,8 +1716,6 @@ async function init() {
   populateYearSelect('feiertageYear');
   populateYearSelect('urlaubYear');
   populateYearSelect('skYear');
-  populateYearSelect('exportYear');
-
   try {
     const [empRes, ccRes, meRes] = await Promise.all([
       api('/empleados/?activo=true'),
@@ -1683,7 +1761,7 @@ async function init() {
       show('etab-importieren');
       show('etab-mitarbeiter');
     }
-    if (has('export:run'))    show('etab-export');
+    if (has('export:run'))    { show('etab-export'); show('etab-datev'); }
     if (has('users:admin')) {
       show('etab-protokoll');
       show('etab-benutzerverwaltung');
@@ -2565,6 +2643,16 @@ function onUrlaubYearChange() {
   loadUrlaub();
 }
 
+async function updateKrankmeldungBadge() {
+  try {
+    const r = await api('/vacaciones/krankmeldungen/neue?dias=7');
+    const pill = document.getElementById('pill-krankmeldung');
+    if (!pill) return;
+    if (r.neue > 0) { pill.textContent = r.neue; pill.classList.remove('hidden'); pill.title = `${r.neue} neue Krankmeldungen (7 Tage)`; }
+    else pill.classList.add('hidden');
+  } catch(e) { /* badge best-effort */ }
+}
+
 async function loadUrlaub() {
   const year = document.getElementById('urlaubYear').value;
   const tbody = document.getElementById('urlaubTbody');
@@ -2578,6 +2666,8 @@ async function loadUrlaub() {
   // Hide Krankmeldung tab and Saldo-all for Benutzer (they see only own data)
   if (isBasicUser()) {
     document.getElementById('utab-krankmeldung').classList.add('hidden');
+  } else {
+    updateKrankmeldungBadge();
   }
 
   try {
@@ -2654,7 +2744,7 @@ function renderUrlaubTable() {
       <td><b>${u.empleado_nombre}</b></td>
       <td>${u.fecha_inicio}</td>
       <td>${u.fecha_fin}</td>
-      <td><b>${u.dias}</b></td>
+      <td><b>${u.dias}</b>${u.medio_dia ? ' <span class="badge badge-gray">½ Tag</span>' : ''}<br><span style="font-size:11px;color:var(--muted)">${u.tipo_label || u.tipo_ausencia}${u.saldo_wirkung === 'UNTERBRECHUNG' ? ' ⏸' : ''}</span></td>
       <td>${statusBadge(u.estado)}</td>
       <td style="font-size:12px;color:var(--muted)">${approvers.join('<br>') || '—'}</td>
       <td style="white-space:nowrap">${actions}</td>
@@ -2835,6 +2925,7 @@ async function saveUrlaub() {
   const fecha_fin = document.getElementById('uaBis').value;
   const motivo = document.getElementById('uaMotivo').value.trim();
   const tipo_ausencia = document.getElementById('uaTipo').value || 'VACACIONES';
+  const medio_dia = document.getElementById('uaMedioDia')?.checked || false;
 
   if (!empleado_id || !fecha_inicio || !fecha_fin) {
     showModalAlert('urlaubModalAlert', 'error', 'Mitarbeiter und Datumsangaben sind Pflichtfelder');
@@ -2849,7 +2940,7 @@ async function saveUrlaub() {
     const anio = parseInt(fecha_inicio.substring(0, 4));
     await api('/vacaciones/solicitudes', {
       method: 'POST',
-      body: JSON.stringify({ empleado_id, anio, fecha_inicio, fecha_fin, notas: motivo, tipo_ausencia })
+      body: JSON.stringify({ empleado_id, anio, fecha_inicio, fecha_fin, notas: motivo, tipo_ausencia, medio_dia })
     });
     closeModal('urlaubModal');
     const tipoLabels = {VACACIONES:'Urlaubsantrag',FZA:'FZA-Antrag',BAJA_MEDICA:'Krankmeldung',ASUNTOS_PROPIOS:'Antrag',PERMISO_RETRIBUIDO:'Antrag'};
@@ -3755,14 +3846,18 @@ async function quickReject(type, id, level) {
 let exportPreviewData = null;
 
 function initExport() {
-  populateYearSelect('exportYear');
   const now = new Date();
-  document.getElementById('exportMonth').value = now.getMonth() + 1;
+  const y = now.getFullYear(), m = now.getMonth();
+  const firstDay = new Date(y, m, 1);
+  const lastDay = new Date(y, m + 1, 0);
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  document.getElementById('exportVon').value = fmt(firstDay);
+  document.getElementById('exportBis').value = fmt(lastDay);
 }
 
 async function loadExportPreview() {
-  const month = document.getElementById('exportMonth').value;
-  const year = document.getElementById('exportYear').value;
+  const von = document.getElementById('exportVon').value;
+  const bis = document.getElementById('exportBis').value;
   const previewDiv = document.getElementById('exportPreview');
   const previewTable = document.getElementById('exportPreviewTable');
   const previewTitle = document.getElementById('exportPreviewTitle');
@@ -3771,6 +3866,15 @@ async function loadExportPreview() {
   const statusContent = document.getElementById('exportStatusContent');
   const btnDownload = document.getElementById('btnDownloadExcel');
 
+  if (!von || !bis) {
+    showGlobalAlert('error', 'Bitte Von- und Bis-Datum auswählen');
+    return;
+  }
+  if (bis < von) {
+    showGlobalAlert('error', 'Das Bis-Datum darf nicht vor dem Von-Datum liegen');
+    return;
+  }
+
   previewTable.innerHTML = '<div class="loading">Lade Vorschau</div>';
   previewDiv.classList.remove('hidden');
   statusDiv.classList.remove('hidden');
@@ -3778,32 +3882,36 @@ async function loadExportPreview() {
   exportPreviewData = null;
 
   try {
-    const data = await api(`/exportacion/excel/preview?month=${month}&year=${year}`);
+    const data = await api(`/exportacion/excel/rango/preview?fecha_von=${von}&fecha_bis=${bis}`);
     exportPreviewData = data;
 
-    const monthName = new Date(year, month-1, 1).toLocaleDateString('de-DE', {month:'long', year:'numeric'});
-    previewTitle.textContent = `Vorschau — ${monthName}`;
+    const fmtDe = s => new Date(s + 'T00:00:00').toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
+    const zeitraumLabel = `${fmtDe(von)} — ${fmtDe(bis)}`;
+    previewTitle.textContent = `Vorschau — ${zeitraumLabel}`;
 
-    const rows = data.empleados || data.rows || (Array.isArray(data) ? data : []);
-    const totalWithBalance = rows.filter(r => r.saldo_calculado !== undefined || r.horas_reales !== undefined || r.total_horas !== undefined).length;
+    const rows = data.empleados || [];
+    const totalWithData = rows.filter(r => r.iststunden > 0).length;
     previewBadge.textContent = `${rows.length} Mitarbeiter`;
 
     statusContent.innerHTML = `
       <div class="grid-3" style="gap:12px">
         <div class="stat-card accent-green">
-          <div class="stat-label">Mitarbeiter mit Daten</div>
-          <div class="stat-value">${totalWithBalance}</div>
+          <div class="stat-label">Mitarbeiter mit Stunden</div>
+          <div class="stat-value">${totalWithData}</div>
           <div class="stat-sub">von ${rows.length} gesamt</div>
         </div>
         <div class="stat-card accent-blue">
           <div class="stat-label">Zeitraum</div>
-          <div style="font-size:18px;font-weight:700">${monthName}</div>
+          <div style="font-size:14px;font-weight:700">${zeitraumLabel}</div>
+          <div class="stat-sub">${data.total_fichajes} Buchungen · ${data.festivos} Feiertage</div>
         </div>
-        <div class="stat-card ${totalWithBalance > 0 ? 'accent-green' : 'accent-amber'}">
-          <div class="stat-label">Exportbereit</div>
-          <div class="stat-value">${totalWithBalance > 0 ? '✓' : '—'}</div>
+        <div class="stat-card accent-blue">
+          <div class="stat-label">Iststunden gesamt</div>
+          <div class="stat-value">${data.totales ? data.totales.iststunden : '—'}</div>
+          <div class="stat-sub">Plan: ${data.totales ? data.totales.planstunden : '—'}</div>
         </div>
-      </div>`;
+      </div>
+      <div class="stat-sub" style="margin-top:10px">📄 Das Excel enthält 2 Blätter: <b>Zusammenfassung</b> + <b>Details</b> (Einzelbuchungen).</div>`;
 
     if (rows.length === 0) {
       previewTable.innerHTML = '<div class="empty">Keine Daten für diesen Zeitraum</div>';
@@ -3824,23 +3932,28 @@ async function loadExportPreview() {
 }
 
 async function downloadExcel() {
-  const month = document.getElementById('exportMonth').value;
-  const year = document.getElementById('exportYear').value;
+  const von = document.getElementById('exportVon').value;
+  const bis = document.getElementById('exportBis').value;
   const btn = document.getElementById('btnDownloadExcel');
+  if (!von || !bis || bis < von) {
+    showGlobalAlert('error', 'Ungültiger Zeitraum');
+    return;
+  }
   btn.disabled = true;
   btn.textContent = '⏳ Wird generiert…';
   try {
-    const response = await fetch(API + `/exportacion/excel`, {
+    const token = getToken();
+    const response = await fetch(API + `/exportacion/excel/rango`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ month: parseInt(month), year: parseInt(year) })
+      headers: { 'Content-Type': 'application/json', ...(token ? {'Authorization': 'Bearer ' + token} : {}) },
+      body: JSON.stringify({ fecha_von: von, fecha_bis: bis })
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.detail || err.message || `HTTP ${response.status}`);
     }
     const blob = await response.blob();
-    const filename = `hagemann_${year}_${String(month).padStart(2,'0')}.xlsx`;
+    const filename = `hagemann_${von}_bis_${bis}.xlsx`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
@@ -3851,6 +3964,156 @@ async function downloadExcel() {
   } finally {
     btn.disabled = !exportPreviewData;
     btn.textContent = '📥 Excel herunterladen';
+  }
+}
+
+// =====================================================================
+// DATEV
+// =====================================================================
+const DATEV_CONCEPT_LABELS = {
+  normalstunden: 'Normalstunden',
+  ueberstunden:  'Überstunden',
+  krankheit:     'Krankheitstage',
+  urlaub:        'Urlaubstage',
+  saldo:         'Zeitkonto-Saldo',
+};
+
+async function initDatev() {
+  const now = new Date();
+  const yEl = document.getElementById('datevYear');
+  const mEl = document.getElementById('datevMonth');
+  // Por defecto: mes anterior (periodo de nómina ya cerrado)
+  let y = now.getFullYear(), m = now.getMonth(); // getMonth() 0-11 → mes anterior 1-based
+  if (m === 0) { m = 12; y -= 1; }
+  if (yEl && !yEl.value) yEl.value = y;
+  if (mEl) mEl.value = String(m);
+  await loadDatevStatus();
+  await loadDatevLohnart();
+  await loadDatevHistory();
+}
+
+async function loadDatevStatus() {
+  const el = document.getElementById('datevStatus');
+  try {
+    const s = await api('/datev/status');
+    if (!s.configured) {
+      el.innerHTML = `<span class="badge badge-amber">Nicht konfiguriert</span>
+        <p style="color:var(--text-secondary);font-size:13px;margin-top:8px">${s.message || ''}</p>`;
+      return;
+    }
+    const sandboxBadge = s.sandbox
+      ? '<span class="badge badge-amber">Sandbox</span>'
+      : '<span class="badge badge-green">Produktiv</span>';
+    el.innerHTML = `
+      ${sandboxBadge}
+      <table class="table" style="margin-top:12px">
+        <tr><td>Unternehmen</td><td>${s.company_name || '—'}</td></tr>
+        <tr><td>Beraternummer</td><td>${s.consultant_number || '—'}</td></tr>
+        <tr><td>Mandantennummer</td><td>${s.client_number || '—'}</td></tr>
+        <tr><td>Status</td><td>${s.status || '—'}</td></tr>
+      </table>`;
+  } catch(e) {
+    el.innerHTML = `<span class="badge badge-red">Fehler</span> ${e.message}`;
+  }
+}
+
+async function loadDatevLohnart() {
+  const body = document.getElementById('datevLohnartBody');
+  try {
+    const data = await api('/datev/config/lohnart');
+    const mapping = data.mapping || {};
+    body.innerHTML = (data.conceptos || Object.keys(mapping)).map(c => {
+      const cfg = mapping[c] || {};
+      const label = DATEV_CONCEPT_LABELS[c] || c;
+      const opt = (v) => `<option value="${v}" ${cfg.einheit===v?'selected':''}>${v}</option>`;
+      return `<tr data-concept="${c}">
+        <td>${label}</td>
+        <td><input type="text" class="form-control dv-lohnart" style="width:140px" value="${cfg.lohnart||''}" placeholder="z.B. 1000"></td>
+        <td><select class="form-control dv-einheit" style="width:120px">${opt('Stunden')}${opt('Tage')}</select></td>
+        <td style="text-align:center"><input type="checkbox" class="dv-aktiv" ${cfg.aktiv?'checked':''}></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    body.innerHTML = `<tr><td colspan="4">Fehler: ${e.message}</td></tr>`;
+  }
+}
+
+async function saveDatevLohnart() {
+  const btn = document.getElementById('btnSaveLohnart');
+  btn.disabled = true;
+  const mapping = {};
+  document.querySelectorAll('#datevLohnartBody tr[data-concept]').forEach(tr => {
+    mapping[tr.dataset.concept] = {
+      lohnart: tr.querySelector('.dv-lohnart').value.trim(),
+      einheit: tr.querySelector('.dv-einheit').value,
+      aktiv:   tr.querySelector('.dv-aktiv').checked,
+    };
+  });
+  try {
+    await api('/datev/config/lohnart', { method: 'PUT', body: JSON.stringify({ mapping }) });
+    showGlobalAlert('success', '✓ Lohnarten gespeichert');
+    await loadDatevLohnart();
+  } catch(e) {
+    showGlobalAlert('error', 'Fehler: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function downloadDatevBewegungsdaten() {
+  const btn = document.getElementById('btnDatevDownload');
+  const year = parseInt(document.getElementById('datevYear').value, 10);
+  const month = parseInt(document.getElementById('datevMonth').value, 10);
+  if (!year || !month) { showGlobalAlert('error', 'Jahr und Monat wählen'); return; }
+  btn.disabled = true;
+  btn.textContent = '⏳ Wird generiert…';
+  try {
+    const token = getToken();
+    const response = await fetch(API + '/datev/export/bewegungsdaten', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? {'Authorization': 'Bearer ' + token} : {}) },
+      body: JSON.stringify({ year, month })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || `HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    const filename = `datev_bewegungsdaten_${year}-${String(month).padStart(2,'0')}.csv`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    showGlobalAlert('success', `✓ "${filename}" heruntergeladen`);
+  } catch(e) {
+    showGlobalAlert('error', 'Export-Fehler: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📥 Datei herunterladen';
+  }
+}
+
+async function loadDatevHistory() {
+  const body = document.getElementById('datevHistoryBody');
+  try {
+    const data = await api('/datev/export/history?limit=20');
+    const rows = data.exportaciones || [];
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="5">Noch keine Exporte</td></tr>'; return; }
+    body.innerHTML = rows.map(r => {
+      const badge = r.status === 'success'
+        ? '<span class="badge badge-green">success</span>'
+        : `<span class="badge badge-red">${r.status}</span>`;
+      const fecha = (r.exported_at || '').replace('T', ' ').slice(0, 16);
+      return `<tr>
+        <td>${String(r.month).padStart(2,'0')}/${r.year}</td>
+        <td>${fecha}</td>
+        <td>${r.exported_by || '—'}</td>
+        <td>${badge}</td>
+        <td>${r.records_sent}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    body.innerHTML = `<tr><td colspan="5">Fehler: ${e.message}</td></tr>`;
   }
 }
 
