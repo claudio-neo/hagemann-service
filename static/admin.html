@@ -560,6 +560,19 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
           <select id="skYear" class="form-control" style="width:100px" onchange="loadStundenkonto()"></select>
         </div>
       </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+      <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Excel-Export von</label>
+          <input type="date" id="skRangeVon" class="form-control" style="width:170px">
+        </div>
+        <div style="display:flex;align-items:center;padding-bottom:8px;font-weight:700;color:var(--text-secondary)">→</div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>bis</label>
+          <input type="date" id="skRangeBis" class="form-control" style="width:170px">
+        </div>
+        <button class="btn btn-success" onclick="downloadStundenkontoRange()" id="btnSkRange">📥 Alle Mitarbeiter als Excel</button>
+      </div>
     </div>
 
     <div id="skContent"><div class="empty">Mitarbeiter und Jahr auswählen</div></div>
@@ -2955,11 +2968,55 @@ async function saveUrlaub() {
 // STUNDENKONTO
 // =====================================================================
 function initStundenkonto() {
+  // Default Excel-Range: aktueller Monat bis heute
+  const heute = new Date();
+  const von = document.getElementById('skRangeVon');
+  const bis = document.getElementById('skRangeBis');
+  if (von && !von.value) von.value = `${heute.getFullYear()}-${String(heute.getMonth()+1).padStart(2,'0')}-01`;
+  if (bis && !bis.value) bis.value = heute.toISOString().slice(0,10);
   if (isBasicUser() && currentUser.employee_id) {
     const sel = document.getElementById('skEmpSelect');
     sel.value = currentUser.employee_id;
     sel.parentElement.style.display = 'none'; // hide employee selector
+    // Bereichs-Export ist nur für Admins/Gruppenadmins relevant
+    const btn = document.getElementById('btnSkRange');
+    if (btn) btn.closest('.card').querySelector('hr')?.nextElementSibling?.style.setProperty('display','none');
     loadStundenkonto();
+  }
+}
+
+async function downloadStundenkontoRange() {
+  const von = document.getElementById('skRangeVon').value;
+  const bis = document.getElementById('skRangeBis').value;
+  if (!von || !bis) { showGlobalAlert('error', 'Bitte Von- und Bis-Datum wählen'); return; }
+  if (bis < von) { showGlobalAlert('error', 'Bis-Datum muss nach Von-Datum liegen'); return; }
+  const btn = document.getElementById('btnSkRange');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '⏳ Wird generiert…';
+  try {
+    const token = getToken();
+    const response = await fetch(API + '/exportacion/excel/rango', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? {'Authorization': 'Bearer ' + token} : {}) },
+      body: JSON.stringify({ fecha_von: von, fecha_bis: bis })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || `HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    const filename = `hagemann_stundenkonto_${von}_bis_${bis}.xlsx`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    showGlobalAlert('success', `✓ "${filename}" heruntergeladen`);
+  } catch(e) {
+    showGlobalAlert('error', 'Export-Fehler: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
   }
 }
 
@@ -2985,7 +3042,6 @@ async function loadStundenkonto() {
     const rows = meses.map(m => {
       const saldoClass = m.saldo_final > 0 ? 'sk-positive' : m.saldo_final < 0 ? 'sk-negative' : '';
       const accClass   = m.saldo_acumulado > 0 ? 'sk-positive' : m.saldo_acumulado < 0 ? 'sk-negative' : '';
-      const kappIcon   = m.kappung_aplicado ? `<span class="sk-kappung" title="Kappung angewendet">⚠</span>` : '';
       const closedIcon = m.cerrado ? `<span title="Manuell geschlossen" style="color:var(--muted);font-size:11px">🔒</span>` : '';
       const adjustBtn  = canAdjust
         ? `<button class="btn btn-sm btn-outline" title="Monat manuell anpassen"
@@ -2998,7 +3054,6 @@ async function loadStundenkonto() {
         <td class="${saldoClass}">${fmtHoursSigned(m.saldo_mes)}</td>
         <td style="color:var(--muted)">${fmtHoursSigned(m.carryover_anterior)}</td>
         <td class="${accClass}">${fmtHoursSigned(m.saldo_acumulado)}</td>
-        <td class="${saldoClass}">${fmtHoursSigned(m.saldo_final)} ${kappIcon}</td>
         ${canAdjust ? `<td>${adjustBtn}</td>` : ''}
       </tr>`;
     }).join('');
@@ -3023,14 +3078,13 @@ async function loadStundenkonto() {
         <div class="stat-card ${r.saldo_total >= 0 ? 'accent-green' : 'accent-amber'}">
           <div class="stat-label">Saldo ${year}</div>
           <div class="stat-value ${totalSaldoClass}">${fmtHoursSigned(r.saldo_total)}</div>
-          <div class="stat-sub">Kappungsgrenze: ±${kappung}h</div>
+          <div class="stat-sub">Plus-/Minusstunden ohne Kappung</div>
         </div>
       </div>
 
       <div class="card">
         <div class="card-header">
           <span class="card-title">Monatliche Stundenübersicht ${year}</span>
-          <span class="badge badge-gray">⚠ = Kappung angewendet</span>
         </div>
         <div class="table-wrap">
           <table>
@@ -3042,7 +3096,6 @@ async function loadStundenkonto() {
                 <th>Saldo</th>
                 <th>Übertrag</th>
                 <th>Kumuliert</th>
-                <th>Saldo nach Kappung</th>
                 ${canAdjust ? '<th></th>' : ''}
               </tr>
             </thead>
@@ -3054,8 +3107,7 @@ async function loadStundenkonto() {
                 <td>${fmtHours(r.total_real)}</td>
                 <td class="${totalSaldoClass}">${fmtHoursSigned(r.saldo_total)}</td>
                 <td>—</td>
-                <td>—</td>
-                <td>${fmtHoursSigned(r.saldo_acumulado_diciembre || r.saldo_total)}</td>
+                <td class="${totalSaldoClass}">${fmtHoursSigned(r.saldo_total)}</td>
                 ${canAdjust ? '<td></td>' : ''}
               </tr>
             </tfoot>
