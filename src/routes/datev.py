@@ -87,6 +87,7 @@ class DatevConfigOut(BaseModel):
     payroll_type: str
     activo: bool
     lohnart_mapping: Optional[dict]
+    phantomlohn: Optional[dict]
     token_expires_at: Optional[datetime]
     token_scope: Optional[str]
     has_access_token: bool
@@ -174,6 +175,7 @@ def get_config(db: Session = Depends(get_db)):
         payroll_type=config.payroll_type,
         activo=config.activo,
         lohnart_mapping=datev_service.get_lohnart_mapping(config),
+        phantomlohn=datev_service.get_phantomlohn(config),
         token_expires_at=config.token_expires_at,
         token_scope=config.token_scope,
         has_access_token=bool(config.access_token),
@@ -206,6 +208,7 @@ def upsert_config(body: DatevConfigIn, db: Session = Depends(get_db)):
         payroll_type=config.payroll_type,
         activo=config.activo,
         lohnart_mapping=datev_service.get_lohnart_mapping(config),
+        phantomlohn=datev_service.get_phantomlohn(config),
         token_expires_at=config.token_expires_at,
         token_scope=config.token_scope,
         has_access_token=bool(config.access_token),
@@ -507,6 +510,48 @@ def put_lohnart_mapping(body: LohnartMappingIn, db: Session = Depends(get_db)):
         "status": "ok",
         "mapping": datev_service.get_lohnart_mapping(config),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  PHANTOMLOHN (BMB Schicht)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PhantomlohnIn(BaseModel):
+    """Config Phantomlohn: doble Lohnart para empleados en turnos (Zeitgruppe SCHICHT)."""
+    aktiv: bool = Field(True, description="Activar Phantomlohn para empleados Schicht")
+    krankheit_phantom: str = Field("", max_length=20, description="Lohnart Krankheit promedio (+)")
+    krankheit_ist: str = Field("", max_length=20, description="Lohnart Krankheit IST Tagessatz (−)")
+    urlaub_phantom: str = Field("", max_length=20, description="Lohnart Urlaub promedio (+)")
+    urlaub_ist: str = Field("", max_length=20, description="Lohnart Urlaub IST Tagessatz (−)")
+    einheit: str = Field("Tage", max_length=20)
+
+
+@router.get(
+    "/config/phantomlohn",
+    summary="Ver config Phantomlohn (BMB Schicht)",
+    description=(
+        "Phantomlohn: empleados en Zeitgruppe de tipo SCHICHT generan, para "
+        "Krankheit y Urlaub, una doble Lohnart (promedio '+' e IST Tagessatz '−')."
+    ),
+)
+def get_phantomlohn(db: Session = Depends(get_db)):
+    config = datev_service.get_config(db)
+    return {"phantomlohn": datev_service.get_phantomlohn(config)}
+
+
+@router.put(
+    "/config/phantomlohn",
+    summary="Actualizar config Phantomlohn",
+)
+def put_phantomlohn(body: PhantomlohnIn, db: Session = Depends(get_db)):
+    config = datev_service.get_config(db)
+    if config is None:
+        raise HTTPException(
+            404,
+            "No hay configuración DATEV. Configure primero via POST /datev/config",
+        )
+    config = datev_service.upsert_config(db, {"phantomlohn": body.model_dump()})
+    return {"status": "ok", "phantomlohn": datev_service.get_phantomlohn(config)}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -25,10 +25,10 @@ from sqlalchemy.orm import Session
 
 from ..models.datev import (
     DatevConfig, DatevExportLog,
-    LOHNART_CONCEPTS, default_lohnart_mapping,
+    LOHNART_CONCEPTS, default_lohnart_mapping, default_phantomlohn,
 )
 from ..models.saldo_horas import SaldoHorasMensual
-from ..models.empleado import Empleado, CentroCoste
+from ..models.empleado import Empleado, CentroCoste, Zeitgruppe
 from ..models.vacaciones import SolicitudVacaciones, TipoAusencia, EstadoSolicitud
 
 logger = logging.getLogger(__name__)
@@ -134,6 +134,7 @@ def upsert_config(db: Session, data: dict) -> DatevConfig:
         "consultant_number", "client_number", "company_name",
         "fiscal_year_start", "client_id", "client_secret",
         "datev_guid", "payroll_type", "activo", "lohnart_mapping",
+        "phantomlohn",
     ]
     for field in allowed_fields:
         if field in data:
@@ -536,6 +537,20 @@ def get_lohnart_mapping(config: Optional[DatevConfig]) -> dict:
     return base
 
 
+def get_phantomlohn(config: Optional[DatevConfig]) -> dict:
+    """Config Phantomlohn efectiva: la almacenada, completada con los defaults."""
+    base = default_phantomlohn()
+    if config and config.phantomlohn and isinstance(config.phantomlohn, dict):
+        base.update(config.phantomlohn)
+    return base
+
+
+def _schicht_zeitgruppe_ids(db: Session) -> set:
+    """IDs de Zeitgruppen de tipo SCHICHT (turnos BMB Früh/Spät/Nacht → Phantomlohn)."""
+    rows = db.query(Zeitgruppe.id).filter(Zeitgruppe.tipo == "SCHICHT").all()
+    return {r[0] for r in rows}
+
+
 def _concept_values(saldo, sick_days: int, vacation_days: int) -> dict:
     """Valor numérico de cada concepto exportable para un empleado/mes."""
     horas_reales = float(saldo.horas_reales or 0)
@@ -563,6 +578,8 @@ def build_bewegungsdaten_rows(
     """
     abrechnungsmonat = f"{month:02d}/{year}"
     mapping = get_lohnart_mapping(config)
+    phantom = get_phantomlohn(config)
+    schicht_ids = _schicht_zeitgruppe_ids(db) if phantom.get("aktiv") else set()
 
     rows = (
         db.query(SaldoHorasMensual, Empleado)
@@ -576,31 +593,44 @@ def build_bewegungsdaten_rows(
         .all()
     )
 
+    # Conceptos que el Phantomlohn sustituye por una doble Lohnart para Schicht-MA
+    PHANTOM_CONCEPTS = {"krankheit", "urlaub"}
+
     out: list[dict] = []
     for saldo, emp in rows:
         sick_days = _count_ausencia(db, emp.id, year, month, TipoAusencia.BAJA_MEDICA)
         vacation_days = _count_ausencia(db, emp.id, year, month, TipoAusencia.VACACIONES)
         kostenstelle = _get_kostenstelle(db, emp.id)
         valores = _concept_values(saldo, sick_days, vacation_days)
+        es_phantom = emp.zeitgruppe_id in schicht_ids
 
-        for concepto in LOHNART_CONCEPTS:
-            cfg = mapping.get(concepto, {})
-            lohnart = (cfg.get("lohnart") or "").strip()
-            if not cfg.get("aktiv") or not lohnart:
-                continue
-            wert = valores.get(concepto, 0)
-            if not wert:
-                continue
+        def _emit(lohnart, wert, einheit):
+            lohnart = (lohnart or "").strip()
+            if not lohnart or not wert:
+                return
             out.append({
                 "Personalnummer": str(emp.id_nummer or ""),
                 "Nachname": emp.apellido or "",
                 "Vorname": emp.nombre or "",
                 "Lohnart": lohnart,
                 "Wert": wert,
-                "Einheit": cfg.get("einheit", ""),
+                "Einheit": einheit,
                 "Abrechnungsmonat": abrechnungsmonat,
                 "Kostenstelle": kostenstelle,
             })
+
+        for concepto in LOHNART_CONCEPTS:
+            wert = valores.get(concepto, 0)
+            # Phantomlohn (BMB Schicht): Krankheit/Urlaub → doble Lohnart (Phantom '+' e IST '−')
+            if es_phantom and concepto in PHANTOM_CONCEPTS:
+                _emit(phantom.get(f"{concepto}_phantom"), wert, phantom.get("einheit", "Tage"))
+                _emit(phantom.get(f"{concepto}_ist"), wert, phantom.get("einheit", "Tage"))
+                continue
+            # Mapeo global normal
+            cfg = mapping.get(concepto, {})
+            if not cfg.get("aktiv"):
+                continue
+            _emit(cfg.get("lohnart"), wert, cfg.get("einheit", ""))
     return out
 
 

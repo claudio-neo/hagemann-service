@@ -1390,6 +1390,36 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     </div>
 
     <div class="card" style="margin-bottom:20px">
+      <div class="card-title" style="margin-bottom:6px">🌙 Phantomlohn (Schicht / BMB)</div>
+      <p style="color:var(--text-secondary);font-size:13px;margin:0 0 14px">
+        Mitarbeiter in einer Schicht-Zeitgruppe (Früh/Spät/Nacht) erhalten bei Krankheit und Urlaub
+        eine doppelte Lohnart: den Durchschnitt (Phantom, „+") und den IST-Tagessatz („−"). Gilt
+        automatisch für alle Schicht-Mitarbeiter.
+      </p>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:14px">
+        <input type="checkbox" id="phAktiv" style="width:auto"> Phantomlohn aktiv
+      </label>
+      <table class="table">
+        <thead><tr><th>Abwesenheit</th><th>Lohnart Durchschnitt (+)</th><th>Lohnart IST-Tagessatz (−)</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Krankheit</td>
+            <td><input type="text" id="phKrankPhantom" class="form-control" style="width:130px" placeholder="1661"></td>
+            <td><input type="text" id="phKrankIst" class="form-control" style="width:130px" placeholder="1660"></td>
+          </tr>
+          <tr>
+            <td>Urlaub</td>
+            <td><input type="text" id="phUrlaubPhantom" class="form-control" style="width:130px" placeholder="1631"></td>
+            <td><input type="text" id="phUrlaubIst" class="form-control" style="width:130px" placeholder="1630"></td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" onclick="saveDatevPhantom()" id="btnSavePhantom">💾 Phantomlohn speichern</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px">
       <div class="card-title" style="margin-bottom:16px">📥 Bewegungsdaten exportieren</div>
       <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap">
         <div class="form-group" style="margin-bottom:0">
@@ -4041,6 +4071,7 @@ async function initDatev() {
   if (mEl) mEl.value = String(m);
   await loadDatevStatus();
   await loadDatevLohnart();
+  await loadDatevPhantom();
   await loadDatevHistory();
 }
 
@@ -4105,6 +4136,40 @@ async function saveDatevLohnart() {
     await api('/datev/config/lohnart', { method: 'PUT', body: JSON.stringify({ mapping }) });
     showGlobalAlert('success', '✓ Lohnarten gespeichert');
     await loadDatevLohnart();
+  } catch(e) {
+    showGlobalAlert('error', 'Fehler: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadDatevPhantom() {
+  try {
+    const data = await api('/datev/config/phantomlohn');
+    const p = data.phantomlohn || {};
+    document.getElementById('phAktiv').checked = !!p.aktiv;
+    document.getElementById('phKrankPhantom').value = p.krankheit_phantom || '';
+    document.getElementById('phKrankIst').value = p.krankheit_ist || '';
+    document.getElementById('phUrlaubPhantom').value = p.urlaub_phantom || '';
+    document.getElementById('phUrlaubIst').value = p.urlaub_ist || '';
+  } catch(e) { /* best-effort */ }
+}
+
+async function saveDatevPhantom() {
+  const btn = document.getElementById('btnSavePhantom');
+  btn.disabled = true;
+  const payload = {
+    aktiv: document.getElementById('phAktiv').checked,
+    krankheit_phantom: document.getElementById('phKrankPhantom').value.trim(),
+    krankheit_ist: document.getElementById('phKrankIst').value.trim(),
+    urlaub_phantom: document.getElementById('phUrlaubPhantom').value.trim(),
+    urlaub_ist: document.getElementById('phUrlaubIst').value.trim(),
+    einheit: 'Tage',
+  };
+  try {
+    await api('/datev/config/phantomlohn', { method: 'PUT', body: JSON.stringify(payload) });
+    showGlobalAlert('success', '✓ Phantomlohn gespeichert');
+    await loadDatevPhantom();
   } catch(e) {
     showGlobalAlert('error', 'Fehler: ' + e.message);
   } finally {

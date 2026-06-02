@@ -37,6 +37,22 @@ def default_lohnart_mapping() -> dict:
     }
 
 
+def default_phantomlohn() -> dict:
+    """
+    Phantomlohn para empleados en turnos (BMB Schicht): cada Krankheit/Urlaub
+    genera DOS Lohnarten — una con el promedio (Phantom, '+') y otra que descuenta
+    el día real ('−', IST Tagessatz). Valores por defecto facilitados por RRHH.
+    """
+    return {
+        "aktiv": True,
+        "krankheit_phantom": "1661",   # promedio (Tage im Plus)
+        "krankheit_ist": "1660",       # IST Tagessatz (se descuenta)
+        "urlaub_phantom": "1631",
+        "urlaub_ist": "1630",
+        "einheit": "Tage",
+    }
+
+
 def ensure_columns(engine) -> None:
     """
     Migración idempotente: añade columnas DATEV nuevas a tablas ya existentes.
@@ -48,6 +64,10 @@ def ensure_columns(engine) -> None:
         conn.execute(text(
             "ALTER TABLE hagemann.datev_config "
             "ADD COLUMN IF NOT EXISTS lohnart_mapping JSONB"
+        ))
+        conn.execute(text(
+            "ALTER TABLE hagemann.datev_config "
+            "ADD COLUMN IF NOT EXISTS phantomlohn JSONB"
         ))
 
 
@@ -125,6 +145,13 @@ class DatevConfig(Base):
             "Mapeo concepto→Lohnart para Bewegungsdaten. "
             "Forma: {concepto: {lohnart, einheit, aktiv}}. "
             "Las Lohnnummern las define el asesor fiscal por Mandant."
+        ),
+    )
+    phantomlohn = Column(
+        JSONB, nullable=True,
+        comment=(
+            "Phantomlohn para empleados en Schicht (BMB): Krankheit/Urlaub generan "
+            "doble Lohnart (promedio '+' e IST '−'). Forma: default_phantomlohn()."
         ),
     )
 
