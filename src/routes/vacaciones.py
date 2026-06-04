@@ -841,3 +841,85 @@ def contar_krankmeldungen_nuevas(
 def _has_active_deputy(emp) -> bool:
     """Returns True if the employee has a stellvertreter assigned."""
     return bool(emp and emp.stellvertreter_id)
+
+
+@router.get("/kalender")
+def kalender_abwesenheiten(
+    year: int = Query(..., ge=2020, le=2099),
+    month: int = Query(..., ge=1, le=12),
+    db: Session = Depends(get_db),
+    _auth=Depends(require_permission(LEAVE_VIEW_TEAM)),
+):
+    """
+    Übersicht aller Mitarbeiter mit ihren Abwesenheiten (Urlaub/Krank/…) im Monat
+    — als Raster (Mitarbeiter × Tage), ähnlich der Schichtplanung.
+    Eine einzige Antwort für das gesamte Grid; nach Gruppe gefiltert (Gruppenadmin).
+    """
+    from calendar import monthrange
+    from ..models.vacaciones import Festivo
+
+    dim = monthrange(year, month)[1]
+    mes_inicio, mes_fin = date(year, month, 1), date(year, month, dim)
+
+    q = db.query(Empleado).filter(Empleado.activo == True)
+    scope = scoped_empleado_ids(_auth, db)
+    if scope is not None:
+        q = q.filter(Empleado.id.in_(scope))
+    empleados = q.order_by(Empleado.id_nummer).all()
+    emp_ids = [e.id for e in empleados]
+
+    feiertage = {
+        f[0].day for f in db.query(Festivo.fecha).filter(
+            Festivo.activo == True,
+            Festivo.bundesland.in_(["DE", "SN"]),
+            Festivo.fecha >= mes_inicio,
+            Festivo.fecha <= mes_fin,
+        ).all()
+    }
+
+    sols = []
+    if emp_ids:
+        sols = db.query(SolicitudVacaciones).filter(
+            SolicitudVacaciones.empleado_id.in_(emp_ids),
+            SolicitudVacaciones.estado.in_([
+                EstadoSolicitud.APROBADA, EstadoSolicitud.PROPUESTA, EstadoSolicitud.PENDIENTE,
+            ]),
+            SolicitudVacaciones.fecha_inicio <= mes_fin,
+            SolicitudVacaciones.fecha_fin >= mes_inicio,
+        ).all()
+
+    prio = {"APROBADA": 2, "PROPUESTA": 1, "PENDIENTE": 1}
+    tage = {eid: {} for eid in emp_ids}
+    for s in sols:
+        label = (
+            TIPO_AUSENCIA_LABELS.get(TipoAusencia(s.tipo_ausencia), s.tipo_ausencia)
+            if s.tipo_ausencia in TipoAusencia._value2member_map_ else s.tipo_ausencia
+        )
+        info = {
+            "tipo": s.tipo_ausencia,
+            "label": label,
+            "estado": s.estado,
+            "medio_dia": bool(getattr(s, "medio_dia", False)),
+        }
+        cur = max(s.fecha_inicio, mes_inicio)
+        end = min(s.fecha_fin, mes_fin)
+        while cur <= end:
+            prev = tage[s.empleado_id].get(cur.day)
+            if prev is None or prio.get(s.estado, 0) >= prio.get(prev["estado"], 0):
+                tage[s.empleado_id][cur.day] = info
+            cur += timedelta(days=1)
+
+    return {
+        "year": year,
+        "month": month,
+        "tage_im_monat": dim,
+        "feiertage": sorted(feiertage),
+        "empleados": [
+            {
+                "id_nummer": e.id_nummer,
+                "name": f"{e.apellido or ''} {e.nombre}".strip() or e.nombre,
+                "tage": tage[e.id],
+            }
+            for e in empleados
+        ],
+    }

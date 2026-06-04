@@ -453,6 +453,25 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
       <button class="tab-btn active" onclick="switchUrlaubTab('antraege')" id="utab-antraege">Anträge</button>
       <button class="tab-btn" onclick="switchUrlaubTab('saldo')" id="utab-saldo">Salden</button>
       <button class="tab-btn" onclick="switchUrlaubTab('krankmeldung')" id="utab-krankmeldung">🏥 Krankmeldung<span id="pill-krankmeldung" class="pill hidden">0</span></button>
+      <button class="tab-btn" onclick="switchUrlaubTab('kalender')" id="utab-kalender">📅 Übersicht</button>
+    </div>
+
+    <!-- KALENDER / ÜBERSICHT -->
+    <div id="urlaubKalender" class="hidden">
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="kalShiftMonth(-1)">‹</button>
+          <span id="kalLabel" style="font-weight:700; min-width:150px; text-align:center"></span>
+          <button class="btn btn-outline btn-sm" onclick="kalShiftMonth(1)">›</button>
+          <span style="flex:1"></span>
+          <div id="kalLegend" style="display:flex; gap:12px; flex-wrap:wrap; font-size:12px"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table class="shift-grid" id="kalGrid"><tbody><tr><td>Lade…</td></tr></tbody></table>
+        </div>
+      </div>
     </div>
 
     <!-- ANTRÄGE -->
@@ -2672,11 +2691,118 @@ function switchUrlaubTab(tab) {
   document.getElementById('utab-antraege').classList.toggle('active', tab === 'antraege');
   document.getElementById('utab-saldo').classList.toggle('active', tab === 'saldo');
   document.getElementById('utab-krankmeldung').classList.toggle('active', tab === 'krankmeldung');
+  document.getElementById('utab-kalender').classList.toggle('active', tab === 'kalender');
   document.getElementById('urlaubAntraege').classList.toggle('hidden', tab !== 'antraege');
   document.getElementById('urlaubSaldo').classList.toggle('hidden', tab !== 'saldo');
   document.getElementById('urlaubKrankmeldung').classList.toggle('hidden', tab !== 'krankmeldung');
+  document.getElementById('urlaubKalender').classList.toggle('hidden', tab !== 'kalender');
   if (tab === 'saldo') loadSaldoGrid();
   if (tab === 'krankmeldung') initKrankmeldung();
+  if (tab === 'kalender') loadKalender();
+}
+
+// ===== Abwesenheits-Übersicht (Kalender-Raster) =====
+let kalYear = null, kalMonth = null;
+const ABSENCE_STYLE = {
+  VACACIONES:            { bg:'#22c55e', code:'U',  txt:'#fff' },
+  BAJA_MEDICA:           { bg:'#ef4444', code:'K',  txt:'#fff' },
+  KRANKHEIT_OHNE_SCHEIN: { bg:'#f97316', code:'K-', txt:'#fff' },
+  KRANKHEIT_KIND:        { bg:'#fb7185', code:'KK', txt:'#fff' },
+  FZA:                   { bg:'#3b82f6', code:'FZ', txt:'#fff' },
+  UNENTSCHULDIGT:        { bg:'#111827', code:'UE', txt:'#fff' },
+  ARBEITSUNFALL:         { bg:'#dc2626', code:'AU', txt:'#fff' },
+  ARZT_GANG:             { bg:'#06b6d4', code:'AG', txt:'#fff' },
+  BERUFSSCHULE:          { bg:'#8b5cf6', code:'BS', txt:'#fff' },
+  WEITERBILDUNG:         { bg:'#8b5cf6', code:'WB', txt:'#fff' },
+  ELTERNZEIT:            { bg:'#ec4899', code:'EZ', txt:'#fff' },
+  FREISTELLUNG:          { bg:'#14b8a6', code:'FS', txt:'#fff' },
+  HOMEOFFICE:            { bg:'#0ea5e9', code:'HO', txt:'#fff' },
+  SONDERURLAUB:          { bg:'#a855f7', code:'SU', txt:'#fff' },
+  UNBEZAHLTER_URLAUB:    { bg:'#64748b', code:'UU', txt:'#fff' },
+  HH_MODELL:             { bg:'#0d9488', code:'HH', txt:'#fff' },
+  PERMISO_RETRIBUIDO:    { bg:'#10b981', code:'BF', txt:'#fff' },
+  ASUNTOS_PROPIOS:       { bg:'#94a3b8', code:'S',  txt:'#fff' },
+};
+function _absStyle(tipo) { return ABSENCE_STYLE[tipo] || { bg:'#94a3b8', code:'•', txt:'#fff' }; }
+
+function loadKalender() {
+  if (kalYear === null) {
+    const now = new Date();
+    kalYear = now.getFullYear();
+    kalMonth = now.getMonth() + 1;
+  }
+  renderKalender();
+}
+
+function kalShiftMonth(delta) {
+  kalMonth += delta;
+  if (kalMonth < 1) { kalMonth = 12; kalYear--; }
+  if (kalMonth > 12) { kalMonth = 1; kalYear++; }
+  renderKalender();
+}
+
+async function renderKalender() {
+  const grid = document.getElementById('kalGrid');
+  const monate = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  document.getElementById('kalLabel').textContent = `${monate[kalMonth-1]} ${kalYear}`;
+  grid.innerHTML = '<tbody><tr><td style="padding:10px">Lade…</td></tr></tbody>';
+  try {
+    const data = await api(`/vacaciones/kalender?year=${kalYear}&month=${kalMonth}`);
+    const dim = data.tage_im_monat;
+    const feier = new Set(data.feiertage || []);
+    const wochentage = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+
+    // Kopfzeile
+    let head = '<tr><th class="col-name">Mitarbeiter</th>';
+    const usedTypes = new Set();
+    for (let d = 1; d <= dim; d++) {
+      const wd = new Date(kalYear, kalMonth-1, d).getDay();
+      const we = (wd === 0 || wd === 6);
+      const fei = feier.has(d);
+      const bg = fei ? 'background:#fee2e2' : (we ? 'background:#f1f5f9' : '');
+      head += `<th style="${bg}min-width:26px" title="${wochentage[wd]} ${d}.">${d}<br><span style="font-weight:400;color:#94a3b8">${wochentage[wd]}</span></th>`;
+    }
+    head += '</tr>';
+
+    let body = '';
+    if (!data.empleados.length) {
+      body = `<tr><td class="col-name">—</td><td colspan="${dim}" style="padding:10px;color:var(--muted)">Keine Mitarbeiter</td></tr>`;
+    }
+    for (const e of data.empleados) {
+      body += `<tr><td class="col-name">${e.name}</td>`;
+      for (let d = 1; d <= dim; d++) {
+        const wd = new Date(kalYear, kalMonth-1, d).getDay();
+        const we = (wd === 0 || wd === 6);
+        const fei = feier.has(d);
+        const a = e.tage[String(d)] || e.tage[d];
+        if (a) {
+          usedTypes.add(a.tipo);
+          const st = _absStyle(a.tipo);
+          const pending = a.estado !== 'APROBADA';
+          const half = a.medio_dia ? ' ½' : '';
+          const cellStyle = pending
+            ? `background:${st.bg}33;color:${st.bg};border:1px dashed ${st.bg}`
+            : `background:${st.bg};color:${st.txt}`;
+          body += `<td style="${cellStyle};font-weight:700;font-size:10px" title="${e.name}: ${a.label}${half}${pending ? ' (offen)' : ''}">${st.code}${half}</td>`;
+        } else {
+          const bg = fei ? 'background:#fee2e2' : (we ? 'background:#f8fafc' : '');
+          body += `<td style="${bg}"></td>`;
+        }
+      }
+      body += '</tr>';
+    }
+    grid.innerHTML = `<thead>${head}</thead><tbody>${body}</tbody>`;
+
+    // Legende (nur verwendete Typen)
+    const leg = document.getElementById('kalLegend');
+    leg.innerHTML = [...usedTypes].map(t => {
+      const st = _absStyle(t);
+      const lbl = (data.empleados.flatMap(e => Object.values(e.tage)).find(x => x.tipo === t) || {}).label || t;
+      return `<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${st.bg}"></span>${lbl}</span>`;
+    }).join('') || '<span style="color:var(--muted)">Keine Abwesenheiten in diesem Monat</span>';
+  } catch(e) {
+    grid.innerHTML = `<tbody><tr><td style="padding:10px;color:var(--red)">Fehler: ${e.message}</td></tr></tbody>`;
+  }
 }
 
 function onUrlaubYearChange() {
@@ -2709,6 +2835,7 @@ async function loadUrlaub() {
   // Hide Krankmeldung tab and Saldo-all for Benutzer (they see only own data)
   if (isBasicUser()) {
     document.getElementById('utab-krankmeldung').classList.add('hidden');
+    document.getElementById('utab-kalender').classList.add('hidden');
   } else {
     updateKrankmeldungBadge();
   }
