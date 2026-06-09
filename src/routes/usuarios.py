@@ -10,11 +10,19 @@ from uuid import UUID
 from datetime import datetime
 
 from ..database import get_db
-from ..models.usuario import Usuario, ROLE_LABELS, ROLE_GRUPPENADMIN
+from ..models.usuario import (
+    Usuario, ROLE_LABELS,
+    ROLE_ADMIN, ROLE_SCHICHTFUEHRER, ROLE_STV_SCHICHTFUEHRER,
+    ROLE_BENUTZER, ROLE_GRUPPENADMIN,
+)
 from ..models.empleado import Empleado, Grupo
 from ..auth import require_permission, hash_password, get_current_user
-from ..permisos import USERS_ADMIN
+from ..permisos import USERS_ADMIN, scoped_grupo_ids
 from ..services.audit_service import log_action, diff_changes
+
+# Roles que un Gruppenadmin puede ver/gestionar. NUNCA Admin (1) ni otro
+# Gruppenadmin (5) → impide escalada de privilegios.
+GRUPPENADMIN_MANAGEABLE_ROLES = {ROLE_SCHICHTFUEHRER, ROLE_STV_SCHICHTFUEHRER, ROLE_BENUTZER}
 
 router = APIRouter(
     prefix="/usuarios",
@@ -67,6 +75,42 @@ def _resolve_grupos(db: Session, role: int, grupo_ids):
     return grupos
 
 
+def _assert_can_manage(current_user: Usuario, target: Usuario) -> None:
+    """
+    Autoriza que current_user gestione la cuenta `target`.
+      - Admin (Personalabteilung): puede gestionar a todos.
+      - Gruppenadmin: solo usuarios de SUS grupos y con rol gestionable
+        (Schichtführer/Stv./Benutzer). Nunca Admin ni otro Gruppenadmin.
+    """
+    if current_user.role == ROLE_ADMIN:
+        return
+    if current_user.role == ROLE_GRUPPENADMIN:
+        if target.role not in GRUPPENADMIN_MANAGEABLE_ROLES:
+            raise HTTPException(403, "Kein Zugriff auf Benutzer mit dieser Rolle")
+        gids = set(scoped_grupo_ids(current_user) or [])
+        emp = target.empleado
+        if not emp or emp.grupo_id not in gids:
+            raise HTTPException(403, "Benutzer gehört nicht zu Ihren Gruppen")
+        return
+    raise HTTPException(403, "Keine Berechtigung zur Benutzerverwaltung")
+
+
+def _assert_role_assignable(current_user: Usuario, role: int) -> None:
+    """Un Gruppenadmin no puede crear/asignar el rol Admin ni Gruppenadmin."""
+    if current_user.role == ROLE_GRUPPENADMIN and role not in GRUPPENADMIN_MANAGEABLE_ROLES:
+        raise HTTPException(403, "Sie dürfen diese Rolle nicht vergeben")
+
+
+def _assert_empleado_in_scope(current_user: Usuario, db: Session, empleado_id) -> None:
+    """Gruppenadmin: el empleado vinculado debe pertenecer a uno de sus grupos."""
+    if current_user.role != ROLE_GRUPPENADMIN:
+        return
+    gids = set(scoped_grupo_ids(current_user) or [])
+    emp = db.query(Empleado).filter(Empleado.id == empleado_id).first() if empleado_id else None
+    if not emp or emp.grupo_id not in gids:
+        raise HTTPException(403, "Mitarbeiter muss zu einer Ihrer Gruppen gehören")
+
+
 def _to_dict(u: Usuario) -> dict:
     return {
         "id": str(u.id),
@@ -91,21 +135,32 @@ def _to_dict(u: Usuario) -> dict:
 # ── Endpoints ─────────────────────────────────────────────
 
 @router.get("/")
-def listar_usuarios(db: Session = Depends(get_db)):
+def listar_usuarios(db: Session = Depends(get_db),
+                    current_user: Usuario = Depends(get_current_user)):
     usuarios = (
         db.query(Usuario)
         .options(joinedload(Usuario.empleado))
         .order_by(Usuario.role, Usuario.nick)
         .all()
     )
+    # Gruppenadmin solo ve usuarios gestionables de sus grupos (nunca Admins).
+    if current_user.role == ROLE_GRUPPENADMIN:
+        gids = set(scoped_grupo_ids(current_user) or [])
+        usuarios = [
+            u for u in usuarios
+            if u.role in GRUPPENADMIN_MANAGEABLE_ROLES
+            and u.empleado and u.empleado.grupo_id in gids
+        ]
     return {"data": [_to_dict(u) for u in usuarios], "total": len(usuarios)}
 
 
 @router.get("/{usuario_id}")
-def obtener_usuario(usuario_id: UUID, db: Session = Depends(get_db)):
+def obtener_usuario(usuario_id: UUID, db: Session = Depends(get_db),
+                    current_user: Usuario = Depends(get_current_user)):
     u = db.query(Usuario).options(joinedload(Usuario.empleado)).filter(Usuario.id == usuario_id).first()
     if not u:
         raise HTTPException(404, "Benutzer nicht gefunden")
+    _assert_can_manage(current_user, u)
     return _to_dict(u)
 
 
@@ -118,6 +173,11 @@ def crear_usuario(data: UsuarioCreate, db: Session = Depends(get_db),
         raise HTTPException(409, f"E-Mail '{data.email}' bereits vergeben")
     if data.role not in ROLE_LABELS:
         raise HTTPException(400, f"Ungültige Rolle: {data.role}")
+    # Anti-escalada: un Gruppenadmin no puede crear Admins/Gruppenadmins ni
+    # vincular empleados fuera de sus grupos.
+    _assert_role_assignable(current_user, data.role)
+    if current_user.role == ROLE_GRUPPENADMIN:
+        _assert_empleado_in_scope(current_user, db, data.empleado_id)
     if data.empleado_id:
         if not db.query(Empleado).filter(Empleado.id == data.empleado_id).first():
             raise HTTPException(404, "Mitarbeiter nicht gefunden")
@@ -150,6 +210,14 @@ def actualizar_usuario(usuario_id: UUID, data: UsuarioUpdate, db: Session = Depe
     u = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not u:
         raise HTTPException(404, "Benutzer nicht gefunden")
+    # Solo puede editar a quien tiene permitido gestionar (target actual).
+    _assert_can_manage(current_user, u)
+    # No puede cambiar el rol a uno no permitido (escalada) ...
+    if data.role is not None:
+        _assert_role_assignable(current_user, data.role)
+    # ... ni mover el vínculo a un empleado fuera de sus grupos.
+    if data.empleado_id is not None:
+        _assert_empleado_in_scope(current_user, db, data.empleado_id)
 
     old_state = {"nick": u.nick, "email": u.email, "role": u.role,
                  "empleado_id": str(u.empleado_id) if u.empleado_id else None,
@@ -211,6 +279,7 @@ def reset_password(usuario_id: UUID, data: PasswordReset, db: Session = Depends(
     u = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not u:
         raise HTTPException(404, "Benutzer nicht gefunden")
+    _assert_can_manage(current_user, u)
     if len(data.password) < 6:
         raise HTTPException(400, "Passwort muss mindestens 6 Zeichen haben")
     u.password_hash = hash_password(data.password)
@@ -230,6 +299,9 @@ def desactivar_usuario(usuario_id: UUID, db: Session = Depends(get_db),
     u = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not u:
         raise HTTPException(404, "Benutzer nicht gefunden")
+    _assert_can_manage(current_user, u)
+    if u.id == current_user.id:
+        raise HTTPException(400, "Sie können sich nicht selbst deaktivieren")
     u.activo = False
     u.updated_at = datetime.utcnow()
     log_action(db, "DEACTIVATE", "usuario",

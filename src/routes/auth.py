@@ -38,6 +38,10 @@ class TokenResponse(BaseModel):
 class RefreshRequest(BaseModel):
     token: str
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -112,6 +116,29 @@ def get_me(
 ):
     """Datos del usuario autenticado + permisos efectivos."""
     return _user_dict(current_user, db)
+
+
+@router.post("/change-password")
+def change_password(
+    data: ChangePasswordRequest,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cualquier usuario autenticado cambia SU PROPIA contraseña.
+    Requiere la contraseña actual."""
+    if not verify_password(data.old_password, current_user.password_hash):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Aktuelles Passwort ist falsch"
+        )
+    if len(data.new_password) < 6:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Neues Passwort muss mindestens 6 Zeichen haben",
+        )
+    current_user.password_hash = hash_password(data.new_password)
+    current_user.updated_at = datetime.utcnow()
+    db.commit()
+    return {"message": "Passwort erfolgreich geändert"}
 
 
 # ─── Seed ────────────────────────────────────────────────────────────────────

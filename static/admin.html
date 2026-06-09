@@ -291,6 +291,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
   <button class="nav-btn hidden" onclick="showPage('einstellungen')" id="nav-einstellungen">⚙ Einstellungen</button>
   <div class="nav-spacer"></div>
   <span id="nav-user" style="color:#94a3b8;font-size:12px;padding:0 8px;white-space:nowrap"></span>
+  <button class="nav-btn" onclick="openChangePassword()" title="Passwort ändern">🔑 Passwort</button>
   <button class="nav-btn" onclick="doLogout()" style="color:#f87171" title="Abmelden">⏻ Abmelden</button>
   <a class="nav-back" href="index.html">← Zurück zur App</a>
 </nav>
@@ -1504,6 +1505,34 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 </div>
 
 <!-- Modal: Benutzer erstellen / bearbeiten -->
+<div class="modal-overlay hidden" id="changePassModal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h2>Passwort ändern</h2>
+      <button class="modal-close" onclick="closeModal('changePassModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="changePassAlert"></div>
+      <div class="form-group">
+        <label>Aktuelles Passwort *</label>
+        <input type="password" id="cpOld" class="form-control" autocomplete="current-password">
+      </div>
+      <div class="form-group">
+        <label>Neues Passwort * <span style="font-weight:normal;color:#6b7280">(mind. 6 Zeichen)</span></label>
+        <input type="password" id="cpNew" class="form-control" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label>Neues Passwort wiederholen *</label>
+        <input type="password" id="cpNew2" class="form-control" autocomplete="new-password">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('changePassModal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="submitChangePassword()">Ändern</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="userModal">
   <div class="modal" style="max-width:500px">
     <div class="modal-header">
@@ -5250,9 +5279,45 @@ async function openUserModal(userId) {
       selectedGrupos = u.grupo_ids || [];
     } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); return; }
   }
+  // Anti-escalada en UI: un Gruppenadmin no puede asignar Admin (1) ni Gruppenadmin (5)
+  const isGA = currentUser.role === 5;
+  ['1','5'].forEach(v => {
+    const o = document.querySelector(`#userRole option[value="${v}"]`);
+    if (o) { o.hidden = isGA; o.disabled = isGA; }
+  });
+  if (isGA && ['1','5'].includes(document.getElementById('userRole').value)) {
+    document.getElementById('userRole').value = '4';
+  }
+
   await renderUserGruposCheckboxes(selectedGrupos);
   onUserRoleChange();
   document.getElementById('userModal').classList.remove('hidden');
+}
+
+function openChangePassword() {
+  document.getElementById('cpOld').value = '';
+  document.getElementById('cpNew').value = '';
+  document.getElementById('cpNew2').value = '';
+  document.getElementById('changePassAlert').innerHTML = '';
+  document.getElementById('changePassModal').classList.remove('hidden');
+}
+
+async function submitChangePassword() {
+  const oldp = document.getElementById('cpOld').value;
+  const np = document.getElementById('cpNew').value;
+  const np2 = document.getElementById('cpNew2').value;
+  const al = document.getElementById('changePassAlert');
+  al.innerHTML = '';
+  if (!oldp || !np) { al.innerHTML = '<div class="alert alert-error">Bitte alle Felder ausfüllen</div>'; return; }
+  if (np.length < 6) { al.innerHTML = '<div class="alert alert-error">Neues Passwort muss mindestens 6 Zeichen haben</div>'; return; }
+  if (np !== np2) { al.innerHTML = '<div class="alert alert-error">Die neuen Passwörter stimmen nicht überein</div>'; return; }
+  try {
+    await api('/auth/change-password', { method: 'POST', body: JSON.stringify({ old_password: oldp, new_password: np }) });
+    closeModal('changePassModal');
+    showGlobalAlert('success', '✓ Passwort erfolgreich geändert');
+  } catch(e) {
+    al.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
 }
 
 async function saveUser() {
