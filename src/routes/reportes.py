@@ -112,6 +112,41 @@ def horas_por_empleado(
     by_cc = list(by_cc_map.values())
     total_minutes = sum(r["minutos"] for r in by_cc)
 
+    # Raucherpausen del período, agrupadas por día (informativo; ya descontadas del neto)
+    from ..models.pausa import Pausa
+    pausas = (
+        db.query(Pausa.inicio, Pausa.minutos)
+        .filter(
+            Pausa.empleado_id == empleado_id,
+            Pausa.inicio >= desde_dt,
+            Pausa.inicio <= hasta_dt,
+            Pausa.tipo == "RAUCH",
+        )
+        .all()
+    )
+    rauch_by_day = {}
+    total_rauch_min = 0
+    total_rauch_cnt = 0
+    for p in pausas:
+        day_key = str(p.inicio.date())
+        m = int(p.minutos or 0)
+        d = rauch_by_day.setdefault(day_key, {"minutos": 0, "count": 0})
+        d["minutos"] += m
+        d["count"] += 1
+        total_rauch_min += m
+        total_rauch_cnt += 1
+
+    # Días con Raucherpause pero sin segmentos de trabajo → crear entrada
+    for day_key in rauch_by_day:
+        if day_key not in daily_grouped:
+            daily_grouped[day_key] = {"fecha": day_key, "total_minutos": 0, "segmentos": []}
+
+    detalle = sorted(daily_grouped.values(), key=lambda x: x["fecha"])
+    for d in detalle:
+        r = rauch_by_day.get(d["fecha"], {"minutos": 0, "count": 0})
+        d["raucherpause_minutos"] = r["minutos"]
+        d["raucherpause_count"] = r["count"]
+
     return {
         "empleado": {
             "id": str(emp.id),
@@ -121,6 +156,8 @@ def horas_por_empleado(
         "periodo": {"desde": desde.isoformat(), "hasta": hasta.isoformat()},
         "total_minutos": total_minutes,
         "total_formateado": f"{total_minutes // 60}:{total_minutes % 60:02d}",
+        "total_raucherpause_minutos": total_rauch_min,
+        "total_raucherpause_count": total_rauch_cnt,
         "por_centro_coste": [
             {
                 "centro_coste_id": r["id"],
@@ -132,7 +169,7 @@ def horas_por_empleado(
             }
             for r in by_cc
         ],
-        "detalle_diario": list(daily_grouped.values()),
+        "detalle_diario": detalle,
     }
 
 

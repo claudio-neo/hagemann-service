@@ -2155,6 +2155,7 @@ async function loadReport() {
             <span class="card-title">#${det.emp.id_nummer} ${det.emp.nombre} ${det.emp.apellido||''}</span>
             <span style="font-size:24px;font-weight:700;color:var(--blue)">${det.total_formateado}</span>
           </div>
+          ${det.total_raucherpause_count ? `<div style="font-size:12px;color:#b45309;background:#fef3c7;border-radius:6px;padding:6px 10px;margin-bottom:10px">🚬 ${det.total_raucherpause_count} Raucherpausen · ${_fmtMin(det.total_raucherpause_minutos)} <span style="color:#92704a">(bereits abgezogen)</span></div>` : ''}
           <div class="bar-chart">${ccBars || '<div class="empty">Keine Kostenstellen</div>'}</div>
           <div style="display:flex;gap:8px;margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
             <button class="btn btn-outline btn-sm" onclick="toggleEmpDetails(${idx})" id="btnDet${idx}">📋 Details anzeigen</button>
@@ -2287,8 +2288,11 @@ function _renderDetailHTML(det) {
         <td style="padding:6px 10px">${s.centro_coste}</td>
         <td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums">${_fmtMin(s.minutos)}</td>
       </tr>`).join('');
+    const rauchBadge = d.raucherpause_count
+      ? ` <span style="font-weight:600;font-size:11px;color:#b45309;background:#fef3c7;border-radius:10px;padding:1px 8px;margin-left:6px">🚬 ${d.raucherpause_count}× · ${_fmtMin(d.raucherpause_minutos)}</span>`
+      : '';
     return `<tr style="background:#f1f5f9;font-weight:700">
-        <td colspan="3" style="padding:8px 10px">${_fmtDateDE(d.fecha)}</td>
+        <td colspan="3" style="padding:8px 10px">${_fmtDateDE(d.fecha)}${rauchBadge}</td>
         <td style="padding:8px 10px;text-align:right">${_fmtMin(d.total_minutos)}</td>
       </tr>${segRows}`;
   }).join('');
@@ -2375,6 +2379,7 @@ function openEmpPdf(idx) {
     <div class="stat"><div class="label">Gesamtstunden</div><div class="val">${det.total_formateado}</div></div>
     <div class="stat"><div class="label">Kostenstellen</div><div class="val">${(det.por_centro_coste||[]).length}</div></div>
     <div class="stat"><div class="label">Arbeitstage</div><div class="val">${(det.detalle_diario||[]).length}</div></div>
+    <div class="stat"><div class="label">Raucherpausen</div><div class="val">${det.total_raucherpause_count||0}<span style="font-size:11px;font-weight:400;color:#64748b"> · ${_fmtMin(det.total_raucherpause_minutos||0)}</span></div></div>
   </div>
 
   <h2>Stunden nach Kostenstelle</h2>

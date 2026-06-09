@@ -494,6 +494,35 @@ def listar_fichajes(
         .all()
     )
 
+    # Raucherpausen de los fichajes listados, agrupadas por fichaje_id
+    rauch_map = {}
+    if fichajes:
+        f_ids = [f.id for f in fichajes]
+        pausas = (
+            db.query(Pausa)
+            .filter(Pausa.fichaje_id.in_(f_ids), Pausa.tipo == "RAUCH")
+            .order_by(Pausa.inicio)
+            .all()
+        )
+        for p in pausas:
+            rauch_map.setdefault(str(p.fichaje_id), []).append(p)
+
+    def _rauch_out(fid):
+        ps = rauch_map.get(fid, [])
+        return {
+            "raucherpause_count": len(ps),
+            "minutos_raucherpause": sum(int(p.minutos or 0) for p in ps),
+            "raucherpausen": [
+                {
+                    "inicio": _utc(p.inicio),
+                    "fin": _utc(p.fin),
+                    "minutos": p.minutos,
+                    "offen": p.fin is None,
+                }
+                for p in ps
+            ],
+        }
+
     return {
         "data": [
             {
@@ -514,6 +543,7 @@ def listar_fichajes(
                     }
                     for s in f.segmentos
                 ],
+                **_rauch_out(str(f.id)),
                 "fuente": f.fuente if f.fuente else None,
                 "cierre_forzado": f.cierre_forzado,
             }
