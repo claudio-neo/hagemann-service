@@ -200,6 +200,45 @@ def crear_periodo(data: PeriodoCreate, db: Session = Depends(get_db), _auth=Depe
     return {"message": "Periodo creado", **_periodo_dict(periodo)}
 
 
+@router.put("/periodos")
+def upsert_periodo(data: PeriodoCreate, db: Session = Depends(get_db), _auth=Depends(require_permission(USERS_ADMIN))):
+    """
+    Crea o actualiza (upsert) el Urlaubsperiode/saldo de un empleado para un año.
+    Pensado para el botón 'Urlaubssaldo anlegen/bearbeiten' del UI.
+    """
+    assert_empleado_accesible(_auth, db, data.empleado_id)
+    emp = db.query(Empleado).filter(Empleado.id == data.empleado_id).first()
+    if not emp:
+        raise HTTPException(404, "Mitarbeiter nicht gefunden")
+
+    periodo = _get_periodo(db, data.empleado_id, data.anio)
+    accion = "UPDATE"
+    if periodo:
+        periodo.dias_contrato = data.dias_contrato
+        periodo.dias_extra = data.dias_extra
+        if data.notas is not None:
+            periodo.notas = data.notas
+    else:
+        accion = "CREATE"
+        periodo = PeriodoVacaciones(
+            empleado_id=data.empleado_id,
+            anio=data.anio,
+            dias_contrato=data.dias_contrato,
+            dias_extra=data.dias_extra,
+            notas=data.notas,
+        )
+        db.add(periodo)
+    db.flush()
+    log_action(db, accion, "periodo_vacaciones",
+               entidad_id=str(periodo.id),
+               entidad_label=f"{emp.nombre} {emp.apellido or ''} – {data.anio}".strip(),
+               descripcion=f"Urlaubssaldo {data.anio}: {data.dias_contrato}+{data.dias_extra} Tage",
+               usuario_nick=_auth.nick)
+    db.commit()
+    db.refresh(periodo)
+    return {"message": "Urlaubssaldo gespeichert", **_periodo_dict(periodo)}
+
+
 @router.get("/periodos/{empleado_id}")
 def listar_periodos_empleado(
     empleado_id: UUID, db: Session = Depends(get_db),

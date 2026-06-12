@@ -514,7 +514,10 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     <!-- SALDEN -->
     <div id="urlaubSaldo" class="hidden">
       <div class="card" style="margin-bottom:16px">
-        <div class="card-title" style="margin-bottom:12px">Urlaubssaldo pro Mitarbeiter</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div class="card-title" style="margin-bottom:0">Urlaubssaldo pro Mitarbeiter</div>
+          <button class="btn btn-primary btn-sm" onclick="openSaldoModal()" title="Urlaubssaldo anlegen oder bearbeiten">+ Urlaubssaldo anlegen/bearbeiten</button>
+        </div>
         <div id="saldoGrid" class="saldo-grid"><div class="loading">Lade Daten</div></div>
       </div>
     </div>
@@ -1505,6 +1508,47 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 </div>
 
 <!-- Modal: Benutzer erstellen / bearbeiten -->
+<div class="modal-overlay hidden" id="saldoModal">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <h2>Urlaubssaldo anlegen / bearbeiten</h2>
+      <button class="modal-close" onclick="closeModal('saldoModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="saldoModalAlert"></div>
+      <div class="form-group">
+        <label>Mitarbeiter *</label>
+        <select id="saldoEmp" class="form-control" onchange="loadSaldoForEdit()">
+          <option value="">— bitte wählen —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Jahr *</label>
+        <input type="number" id="saldoJahr" class="form-control" min="2020" max="2099" style="width:120px" onchange="loadSaldoForEdit()">
+      </div>
+      <div style="display:flex;gap:12px">
+        <div class="form-group" style="flex:1">
+          <label>Vertragstage *</label>
+          <input type="number" id="saldoContrato" class="form-control" min="0" max="365" value="30">
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>Extra-Tage</label>
+          <input type="number" id="saldoExtra" class="form-control" min="0" max="365" value="0">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Notizen</label>
+        <input type="text" id="saldoNotas" class="form-control" placeholder="optional">
+      </div>
+      <div id="saldoCurrentInfo" style="font-size:12px;color:var(--muted)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('saldoModal')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="submitSaldo()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="changePassModal">
   <div class="modal" style="max-width:440px">
     <div class="modal-header">
@@ -3072,6 +3116,54 @@ async function loadSaldoGrid() {
   } catch(e) {
     grid.innerHTML = `<div class="alert alert-error">Fehler: ${e.message}</div>`;
   }
+}
+
+function openSaldoModal() {
+  const sel = document.getElementById('saldoEmp');
+  const empList = (isBasicUser() && currentUser.employee_id)
+    ? employees.filter(e => e.id === currentUser.employee_id) : employees;
+  sel.innerHTML = '<option value="">— bitte wählen —</option>' +
+    empList.map(e => `<option value="${e.id}">#${e.id_nummer} ${e.nombre} ${e.apellido||''}</option>`).join('');
+  sel.value = '';
+  document.getElementById('saldoJahr').value = document.getElementById('urlaubYear').value || new Date().getFullYear();
+  document.getElementById('saldoContrato').value = 30;
+  document.getElementById('saldoExtra').value = 0;
+  document.getElementById('saldoNotas').value = '';
+  document.getElementById('saldoModalAlert').innerHTML = '';
+  document.getElementById('saldoCurrentInfo').textContent = '';
+  openModal('saldoModal');
+}
+
+async function loadSaldoForEdit() {
+  const empId = document.getElementById('saldoEmp').value;
+  const jahr = document.getElementById('saldoJahr').value;
+  const info = document.getElementById('saldoCurrentInfo');
+  if (!empId || !jahr) { info.textContent = ''; return; }
+  try {
+    const s = await api(`/vacaciones/saldo/${empId}?anio=${jahr}`);
+    document.getElementById('saldoContrato').value = s.dias_contrato;
+    document.getElementById('saldoExtra').value = s.dias_extra;
+    info.textContent = `Vorhanden: ${s.dias_totales} gesamt · ${s.dias_usados} genutzt · ${s.dias_disponibles} verfügbar`;
+  } catch(e) {
+    info.textContent = 'Noch kein Saldo für dieses Jahr — wird neu angelegt.';
+  }
+}
+
+async function submitSaldo() {
+  const empId = document.getElementById('saldoEmp').value;
+  const anio = parseInt(document.getElementById('saldoJahr').value);
+  const dias_contrato = parseInt(document.getElementById('saldoContrato').value);
+  const dias_extra = parseInt(document.getElementById('saldoExtra').value) || 0;
+  const notas = document.getElementById('saldoNotas').value.trim() || null;
+  const al = document.getElementById('saldoModalAlert'); al.innerHTML = '';
+  if (!empId) { al.innerHTML = '<div class="alert alert-error">Bitte Mitarbeiter wählen</div>'; return; }
+  if (!anio || isNaN(dias_contrato)) { al.innerHTML = '<div class="alert alert-error">Jahr und Vertragstage erforderlich</div>'; return; }
+  try {
+    await api('/vacaciones/periodos', { method: 'PUT', body: JSON.stringify({ empleado_id: empId, anio, dias_contrato, dias_extra, notas }) });
+    closeModal('saldoModal');
+    showGlobalAlert('success', '✓ Urlaubssaldo gespeichert');
+    loadSaldoGrid();
+  } catch(e) { al.innerHTML = `<div class="alert alert-error">${e.message}</div>`; }
 }
 
 function openUrlaubModal() {
