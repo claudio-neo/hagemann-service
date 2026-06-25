@@ -222,7 +222,7 @@ td { padding:8px 10px; border-bottom:1px solid #f1f5f9; }
 /* ══════════════════════════════════════════════════════════════
    AUTH
 ══════════════════════════════════════════════════════════════ */
-const basePath = window.location.pathname.replace(/\/static.*$/, '').replace(/\/+$/, '');
+const basePath = window.location.pathname.replace(/\/[^\/]*\.html$/, '').replace(/\/static\/?$/, '').replace(/\/+$/, '');
 const API = window.location.origin + basePath + '/api/v1';
 
 function getToken() { return localStorage.getItem('hg_token'); }

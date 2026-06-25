@@ -944,7 +944,8 @@ async function doLogin() {
    CONFIG & GLOBALS
 ══════════════════════════════════════════════════════════════ */
 const basePath = window.location.pathname
-  .replace(/\/static.*$/, '')
+  .replace(/\/[^\/]*\.html$/, '')
+  .replace(/\/static\/?$/, '')
   .replace(/\/+$/, '');
 const API = window.location.origin + basePath + '/api/v1';
 
