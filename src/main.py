@@ -45,7 +45,7 @@ from .routes.turnos import router as turnos_router, seed_modelos_turno
 from .routes.aprobaciones import router as aprobaciones_router
 from .routes.correcciones import router as correcciones_router
 from .routes.exportacion import router as exportacion_router
-from .routes.datev import router as datev_router
+from .routes.datev import router as datev_router, public_router as datev_public_router
 from .routes.gruppen import router as gruppen_router
 from .routes.zeitgruppen import router as zeitgruppen_router
 from .routes.audit import router as audit_router
@@ -169,6 +169,7 @@ app.include_router(aprobaciones_router, prefix="/api/v1")
 app.include_router(correcciones_router, prefix="/api/v1")
 app.include_router(exportacion_router, prefix="/api/v1")
 app.include_router(datev_router, prefix="/api/v1")
+app.include_router(datev_public_router, prefix="/api/v1")
 app.include_router(gruppen_router, prefix="/api/v1")
 app.include_router(zeitgruppen_router, prefix="/api/v1")
 app.include_router(audit_router, prefix="/api/v1")

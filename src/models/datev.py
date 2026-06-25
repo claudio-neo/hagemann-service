@@ -69,6 +69,15 @@ def ensure_columns(engine) -> None:
             "ALTER TABLE hagemann.datev_config "
             "ADD COLUMN IF NOT EXISTS phantomlohn JSONB"
         ))
+        # PKCE: estado y code_verifier del handshake OAuth en curso
+        conn.execute(text(
+            "ALTER TABLE hagemann.datev_config "
+            "ADD COLUMN IF NOT EXISTS oauth_state VARCHAR(100)"
+        ))
+        conn.execute(text(
+            "ALTER TABLE hagemann.datev_config "
+            "ADD COLUMN IF NOT EXISTS oauth_code_verifier VARCHAR(200)"
+        ))
 
 
 class DatevConfig(Base):
@@ -120,6 +129,15 @@ class DatevConfig(Base):
     refresh_token = Column(
         Text, nullable=True,
         comment="Refresh token OAuth (largo plazo, para renovar access_token)",
+    )
+    # PKCE (RFC 7636) — DATEV exige code_challenge/code_verifier en el flujo OAuth
+    oauth_state = Column(
+        String(100), nullable=True,
+        comment="State del handshake OAuth en curso (CSRF)",
+    )
+    oauth_code_verifier = Column(
+        String(200), nullable=True,
+        comment="code_verifier PKCE del handshake OAuth en curso",
     )
     token_expires_at = Column(
         DateTime, nullable=True,

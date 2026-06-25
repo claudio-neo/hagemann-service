@@ -29,6 +29,10 @@ router = APIRouter(
     dependencies=[Depends(require_permission(EXPORT_RUN))],
 )
 
+# Router PÚBLICO (sin auth): el callback OAuth lo invoca el navegador vía redirect
+# de DATEV, sin nuestro token. La protección CSRF es el state + PKCE.
+public_router = APIRouter(prefix="/datev", tags=["DATEV"])
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  SCHEMAS
@@ -254,7 +258,17 @@ def oauth_authorize(
         base_url = str(request.base_url).rstrip("/")
         redirect_uri = f"{base_url}/api/v1/datev/oauth/callback"
 
-    auth_url = datev_service.generate_oauth_url(config, redirect_uri)
+    # PKCE: generar state + code_verifier y guardarlos para el callback
+    import uuid as _uuid
+    state = str(_uuid.uuid4())
+    verifier, challenge = datev_service.make_pkce()
+    config.oauth_state = state
+    config.oauth_code_verifier = verifier
+    db.commit()
+
+    auth_url = datev_service.generate_oauth_url(
+        config, redirect_uri, state=state, code_challenge=challenge
+    )
     return {
         "authorization_url": auth_url,
         "redirect_uri": redirect_uri,
@@ -265,34 +279,53 @@ def oauth_authorize(
     }
 
 
-@router.get(
+@public_router.get(
     "/oauth/callback",
-    summary="Callback OAuth DATEV — intercambiar código por tokens",
+    summary="Callback OAuth DATEV — intercambiar código por tokens (público)",
     description=(
         "DATEV redirige aquí tras la autorización con ?code=XXX&state=YYY. "
-        "Intercambia el código por tokens de acceso y los almacena."
+        "Endpoint público (lo llama el navegador). Intercambia el código por tokens."
     ),
 )
 def oauth_callback(
-    code: str = Query(..., description="Código de autorización OAuth"),
+    code: Optional[str] = Query(None, description="Código de autorización OAuth"),
     state: Optional[str] = Query(None, description="Estado CSRF"),
+    error: Optional[str] = Query(None, description="Error devuelto por DATEV"),
+    error_description: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
+    # DATEV puede redirigir con error en vez de code
+    if error:
+        raise HTTPException(400, f"DATEV-Fehler: {error} — {error_description or ''}".strip())
+    if not code:
+        raise HTTPException(400, "Kein Autorisierungscode (code) erhalten")
+
     config = datev_service.get_config(db)
     if config is None:
         raise HTTPException(404, "DATEV-Konfiguration nicht gefunden")
 
-    # Reconstruir redirect_uri — debe ser igual al usado en authorize
-    # En producción: usar el mismo base_url
+    # Validar state (CSRF) y recuperar el code_verifier PKCE guardado en authorize
+    if not config.oauth_state or state != config.oauth_state:
+        raise HTTPException(400, "Ungültiger oder abgelaufener state — bitte Autorisierung neu starten")
+    code_verifier = config.oauth_code_verifier
+
+    # redirect_uri debe ser idéntico al usado en authorize
     redirect_uri = os.getenv(
         "DATEV_REDIRECT_URI",
         "http://localhost:8013/api/v1/datev/oauth/callback",
     )
 
     try:
-        token_data = datev_service.exchange_code(config, code, redirect_uri, db)
+        token_data = datev_service.exchange_code(
+            config, code, redirect_uri, db, code_verifier=code_verifier
+        )
     except Exception as e:
         raise HTTPException(500, f"Fehler beim OAuth-Code-Austausch: {str(e)}")
+
+    # Limpiar el handshake (un solo uso)
+    config.oauth_state = None
+    config.oauth_code_verifier = None
+    db.commit()
 
     return {
         "status": "ok",

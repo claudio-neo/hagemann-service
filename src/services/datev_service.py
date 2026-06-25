@@ -15,6 +15,9 @@ import csv
 import io
 import os
 import uuid
+import base64
+import hashlib
+import secrets
 import logging
 from datetime import datetime, date, timedelta
 from typing import Optional
@@ -157,7 +160,17 @@ def upsert_config(db: Session, data: dict) -> DatevConfig:
 #  OAUTH 2.0
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_oauth_url(config: DatevConfig, redirect_uri: str, state: str = None) -> str:
+def make_pkce() -> tuple[str, str]:
+    """Genera (code_verifier, code_challenge) PKCE S256 (RFC 7636)."""
+    verifier = secrets.token_urlsafe(64)[:128]
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+    return verifier, challenge
+
+
+def generate_oauth_url(config: DatevConfig, redirect_uri: str, state: str = None,
+                       code_challenge: str = None) -> str:
     """
     Genera la URL de autorización OAuth 2.0 de DATEV.
 
@@ -183,6 +196,9 @@ def generate_oauth_url(config: DatevConfig, redirect_uri: str, state: str = None
         "state": state,
         "nonce": str(uuid.uuid4()),
     }
+    if code_challenge:
+        params["code_challenge"] = code_challenge
+        params["code_challenge_method"] = "S256"
     return f"{_oidc_base()}/authorize?{urlencode(params)}"
 
 
@@ -191,6 +207,7 @@ def exchange_code(
     code: str,
     redirect_uri: str,
     db: Session,
+    code_verifier: str = None,
 ) -> dict:
     """
     Intercambia el código de autorización OAuth por tokens de acceso.
@@ -232,6 +249,8 @@ def exchange_code(
         "client_id": config.client_id,
         "client_secret": decrypt_secret(config.client_secret),
     }
+    if code_verifier:
+        payload["code_verifier"] = code_verifier
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
         resp = client.post(DATEV_TOKEN_URL, data=payload)
         resp.raise_for_status()
