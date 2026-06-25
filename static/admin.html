@@ -1615,6 +1615,13 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
           <option value="">— kein Mitarbeiter —</option>
         </select>
       </div>
+      <div class="form-group">
+        <label>Terminal-Modus <span style="font-weight:normal;color:#6b7280">(nur für Tablet-Terminals)</span></label>
+        <select id="userTerminalMode" class="form-control">
+          <option value="voll">Voll — alle Funktionen</option>
+          <option value="eingeschraenkt">Eingeschränkt — nur KST-Wechsel, Urlaubsantrag, Stundenkonto</option>
+        </select>
+      </div>
       <div class="form-group" id="userPassGroup">
         <label>Passwort *</label>
         <input type="password" id="userPass" class="form-control" placeholder="Mindestens 6 Zeichen" autocomplete="new-password">
@@ -5325,7 +5332,7 @@ async function loadBenutzerverwaltung() {
       return `<tr style="${!u.activo ? 'opacity:.5' : ''}">
         <td><b>${u.nick}</b></td>
         <td>${u.email || '—'}</td>
-        <td><span class="badge ${ROLE_BADGE[u.role] || 'badge-gray'}">${u.role_label}</span>${u.role === 5 && u.grupo_nombres ? ` <span class="badge badge-gray" style="font-size:11px">${u.grupo_nombres}</span>` : ''}</td>
+        <td><span class="badge ${ROLE_BADGE[u.role] || 'badge-gray'}">${u.role_label}</span>${u.role === 5 && u.grupo_nombres ? ` <span class="badge badge-gray" style="font-size:11px">${u.grupo_nombres}</span>` : ''}${u.terminal_mode === 'eingeschraenkt' ? ` <span class="badge badge-orange" style="font-size:11px">🔒 Terminal eingeschr.</span>` : ''}</td>
         <td>${u.empleado_nombre || '—'}</td>
         <td style="font-size:12px">${lastLogin}</td>
         <td>${u.activo ? '<span class="badge badge-green">Aktiv</span>' : '<span class="badge badge-red">Inaktiv</span>'}</td>
@@ -5349,6 +5356,7 @@ async function openUserModal(userId) {
   document.getElementById('userEmail').value = '';
   document.getElementById('userRole').value = '4';
   document.getElementById('userEmpleado').value = '';
+  document.getElementById('userTerminalMode').value = 'voll';
   document.getElementById('userPass').value = '';
   document.getElementById('userActivo').checked = true;
   document.getElementById('userPassGroup').querySelector('label').textContent =
@@ -5367,6 +5375,7 @@ async function openUserModal(userId) {
       document.getElementById('userEmail').value = u.email || '';
       document.getElementById('userRole').value = u.role;
       document.getElementById('userEmpleado').value = u.empleado_id || '';
+      document.getElementById('userTerminalMode').value = u.terminal_mode || 'voll';
       document.getElementById('userActivo').checked = u.activo;
       selectedGrupos = u.grupo_ids || [];
     } catch(e) { showGlobalAlert('error', 'Fehler: ' + e.message); return; }
@@ -5421,6 +5430,7 @@ async function saveUser() {
   const grupo_ids = (role === 5)
     ? Array.from(document.querySelectorAll('.userGrupoChk:checked')).map(c => c.value)
     : [];
+  const terminal_mode = document.getElementById('userTerminalMode').value;
   const pass = document.getElementById('userPass').value;
   const activo = document.getElementById('userActivo').checked;
 
@@ -5430,11 +5440,11 @@ async function saveUser() {
 
   try {
     if (userId) {
-      const body = {nick, email, role, empleado_id, grupo_ids, activo};
+      const body = {nick, email, role, empleado_id, grupo_ids, terminal_mode, activo};
       await api(`/usuarios/${userId}`, {method:'PUT', body: JSON.stringify(body)});
       if (pass) await api(`/usuarios/${userId}/reset-password`, {method:'POST', body: JSON.stringify({password: pass})});
     } else {
-      await api('/usuarios/', {method:'POST', body: JSON.stringify({nick, email, password: pass, role, empleado_id, grupo_ids, activo})});
+      await api('/usuarios/', {method:'POST', body: JSON.stringify({nick, email, password: pass, role, empleado_id, grupo_ids, terminal_mode, activo})});
     }
     closeModal('userModal');
     showGlobalAlert('success', userId ? '✓ Benutzer aktualisiert' : '✓ Benutzer erstellt');

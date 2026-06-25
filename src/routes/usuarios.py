@@ -40,6 +40,7 @@ class UsuarioCreate(BaseModel):
     role: int = 4
     empleado_id: Optional[UUID] = None
     grupo_ids: Optional[List[UUID]] = None   # solo Gruppenadmin (varios grupos)
+    terminal_mode: Optional[str] = None      # voll | eingeschraenkt (tablets)
     activo: bool = True
 
 
@@ -49,7 +50,20 @@ class UsuarioUpdate(BaseModel):
     role: Optional[int] = None
     empleado_id: Optional[UUID] = None
     grupo_ids: Optional[List[UUID]] = None
+    terminal_mode: Optional[str] = None
     activo: Optional[bool] = None
+
+
+_TERMINAL_MODES = {"voll", "eingeschraenkt"}
+
+
+def _norm_terminal_mode(value) -> str:
+    """Valida el modo de terminal; por defecto 'voll'."""
+    if value is None:
+        return "voll"
+    if value not in _TERMINAL_MODES:
+        raise HTTPException(400, f"Ungültiger terminal_mode: {value}")
+    return value
 
 
 class PasswordReset(BaseModel):
@@ -126,6 +140,7 @@ def _to_dict(u: Usuario) -> dict:
         "grupo_ids": [str(g.id) for g in (u.grupos or [])],
         "grupos": [{"id": str(g.id), "nombre": g.nombre} for g in (u.grupos or [])],
         "grupo_nombres": ", ".join(g.nombre for g in (u.grupos or [])) or None,
+        "terminal_mode": u.terminal_mode or "voll",
         "activo": u.activo,
         "last_login": u.last_login.isoformat() + "Z" if u.last_login else None,
         "created_at": u.created_at.isoformat() + "Z" if u.created_at else None,
@@ -189,6 +204,7 @@ def crear_usuario(data: UsuarioCreate, db: Session = Depends(get_db),
         password_hash=hash_password(data.password),
         role=data.role,
         empleado_id=data.empleado_id,
+        terminal_mode=_norm_terminal_mode(data.terminal_mode),
         activo=data.activo,
     )
     u.grupos = grupos
@@ -254,6 +270,9 @@ def actualizar_usuario(usuario_id: UUID, data: UsuarioUpdate, db: Session = Depe
             raise HTTPException(400, "Gruppenadmin benötigt mindestens eine zugewiesene Gruppe")
     else:
         u.grupos = []
+
+    if data.terminal_mode is not None:
+        u.terminal_mode = _norm_terminal_mode(data.terminal_mode)
 
     if data.activo is not None:
         u.activo = data.activo
