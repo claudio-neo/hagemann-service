@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "shared"))
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -213,3 +213,14 @@ def root():
     if index.exists():
         return FileResponse(str(index), media_type="text/html")
     return {"service": settings.service_name, "docs": "/docs"}
+
+
+# Páginas servidas también en rutas limpias (sin /static/), p.ej. /admin.html.
+# Los enlaces entre páginas son relativos (admin.html → index.html, etc.), así
+# que deben resolver en la raíz de la app (detrás del proxy: /zeiterfassung/...).
+@app.get("/{page}.html", include_in_schema=False)
+def serve_page(page: str):
+    f = _static_dir / f"{page}.html"
+    if f.exists():
+        return FileResponse(str(f), media_type="text/html")
+    raise HTTPException(status_code=404, detail="Not Found")
