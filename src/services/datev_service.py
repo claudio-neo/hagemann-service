@@ -251,18 +251,20 @@ def exchange_code(
         }
 
     # ── Llamada real ─────────────────────────────────────────────────────────
+    # DATEV exige autenticación de cliente vía HTTP Basic (verificado empíricamente:
+    # client_secret en el body → 401 invalid_client). client_id/secret NO van en el body.
     payload = {
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": redirect_uri,
-        "client_id": config.client_id,
-        "client_secret": decrypt_secret(config.client_secret),
     }
     if code_verifier:
         payload["code_verifier"] = code_verifier
+    auth = (config.client_id, decrypt_secret(config.client_secret))
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
-        resp = client.post(_token_url(), data=payload)
-        resp.raise_for_status()
+        resp = client.post(_token_url(), data=payload, auth=auth)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"DATEV token-endpoint {resp.status_code}: {resp.text[:400]}")
         token_data = resp.json()
 
     expires_at = datetime.utcnow() + timedelta(seconds=token_data.get("expires_in", 3600))
@@ -300,12 +302,12 @@ def refresh_access_token(config: DatevConfig, db: Session) -> None:
     payload = {
         "grant_type": "refresh_token",
         "refresh_token": config.refresh_token,
-        "client_id": config.client_id,
-        "client_secret": decrypt_secret(config.client_secret),
     }
+    auth = (config.client_id, decrypt_secret(config.client_secret))
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
-        resp = client.post(_token_url(), data=payload)
-        resp.raise_for_status()
+        resp = client.post(_token_url(), data=payload, auth=auth)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"DATEV token-endpoint {resp.status_code}: {resp.text[:400]}")
         token_data = resp.json()
 
     expires_at = datetime.utcnow() + timedelta(seconds=token_data.get("expires_in", 3600))
