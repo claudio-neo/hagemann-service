@@ -783,7 +783,7 @@ header {
   <div class="screen hidden" id="screen-change">
     <div class="centered-screen">
       <div style="max-width:860px;width:100%;">
-        <button class="screen-back-btn" onclick="goToScreen('screen-present')">← Zurück</button>
+        <button class="screen-back-btn" onclick="backFromChange()">← Zurück</button>
       </div>
       <div class="screen-header">
         <div class="screen-title" id="changeTitle">Abteilung wechseln</div>
@@ -820,10 +820,13 @@ header {
       </div>
       <div id="mbSummary" style="max-width:520px;width:100%;margin-bottom:20px"></div>
       <div class="options-grid">
+        <button class="big-btn btn-amber" id="mbBtnKst" style="display:none" onclick="kstWechselRestricted()">
+          <span class="btn-icon">🔄</span> Abteilung wechseln
+        </button>
         <button class="big-btn btn-green" onclick="goToScreen('screen-urlaub-neu')">
           <span class="btn-icon">🌴</span> Urlaubsantrag stellen
         </button>
-        <button class="big-btn btn-blue" onclick="goToScreen('screen-meine-antraege')">
+        <button class="big-btn btn-blue" id="mbBtnAntraege" onclick="goToScreen('screen-meine-antraege')">
           <span class="btn-icon">📋</span> Meine Anträge
         </button>
         <button class="big-btn btn-amber" onclick="goToScreen('screen-stundenkonto')">
@@ -922,6 +925,19 @@ function getToken() { return localStorage.getItem('hg_token'); }
 function setToken(t) { localStorage.setItem('hg_token', t); }
 function clearToken() { localStorage.removeItem('hg_token'); }
 
+// Terminal-Modus des Tablet-Benutzers: 'eingeschraenkt' → nur KST-Wechsel,
+// Urlaubsantrag, Stundenkonto (kein Ein-/Ausloggen, keine Raucherpause).
+let RESTRICTED = false;
+async function loadTerminalMode() {
+  try {
+    const me = await apiFetch('/auth/me');
+    RESTRICTED = !!(me && me.terminal_mode === 'eingeschraenkt');
+  } catch (e) { RESTRICTED = false; }
+}
+function boot() {
+  loadTerminalMode().finally(() => loadData().then(startAutoRefresh));
+}
+
 async function doLogin() {
   const nick = document.getElementById('loginUser').value.trim();
   const pass = document.getElementById('loginPass').value;
@@ -936,7 +952,7 @@ async function doLogin() {
     const data = await r.json();
     setToken(data.access_token);
     document.getElementById('loginOverlay').style.display = 'none';
-    loadData().then(startAutoRefresh);
+    boot();
   } catch(e) { document.getElementById('loginError').style.display = 'block'; }
 }
 
@@ -1262,6 +1278,10 @@ async function selectEmployee(id) {
 
   selectedFichaje = getOpenFichajeForEmp(selectedEmp.id);
 
+  // Tablet restringido: nunca fichar; ir directo a Mein Bereich
+  // (solo KST-Wechsel / Urlaubsantrag / Stundenkonto).
+  if (RESTRICTED) { goToScreen('screen-meinbereich'); return; }
+
   if (selectedFichaje) {
     showPresentScreen();
     return;
@@ -1377,6 +1397,20 @@ async function doRaucherpause() {
 /* ══════════════════════════════════════════════════════════════
    SCREEN 3b — ABTEILUNG WECHSELN
 ══════════════════════════════════════════════════════════════ */
+// Navegación "atrás" desde KST-Wechsel: en restringido vuelve a Mein Bereich
+// (no a screen-present, que mostraría Ausgang/Raucherpause).
+function backFromChange() {
+  if (RESTRICTED) { goToScreen('screen-meinbereich'); return; }
+  goToScreen('screen-present');
+}
+
+// KST-Wechsel en tablet restringido: solo con jornada activa.
+function kstWechselRestricted() {
+  if (selectedFichaje) { showChangeScreen(); return; }
+  showConfirm('info', 'ℹ️', 'Nicht eingeloggt',
+    'KST-Wechsel ist nur während einer aktiven Schicht möglich.');
+}
+
 function showChangeScreen() {
   const deptName = selectedFichaje?.centro_coste_actual?.nombre || '';
   document.getElementById('changeTitle').textContent = 'Abteilung wechseln';
@@ -1550,6 +1584,7 @@ function startAutoRefresh() {
    MEIN BEREICH
 ══════════════════════════════════════════════════════════════ */
 function goBackFromMeinBereich() {
+  if (RESTRICTED) { _showScreen('screen-employees'); return; }
   if (selectedFichaje) {
     showPresentScreen();
   } else if (selectedEmp) {
@@ -1563,6 +1598,12 @@ function goToMeinBereich() {
   if (!selectedEmp) return;
   document.getElementById('mbTitle').textContent = fullName(selectedEmp);
   document.getElementById('mbSubtitle').textContent = '#' + selectedEmp.id_nummer;
+
+  // Modo restringido: mostrar KST-Wechsel, ocultar "Meine Anträge".
+  const kstBtn = document.getElementById('mbBtnKst');
+  const antBtn = document.getElementById('mbBtnAntraege');
+  if (kstBtn) kstBtn.style.display = RESTRICTED ? '' : 'none';
+  if (antBtn) antBtn.style.display = RESTRICTED ? 'none' : '';
 
   // Load summary (vacation + hours)
   const sum = document.getElementById('mbSummary');
@@ -1882,7 +1923,7 @@ window.addEventListener('beforeunload', () => _ilog.flush());
 ══════════════════════════════════════════════════════════════ */
 if (getToken()) {
   document.getElementById('loginOverlay').style.display = 'none';
-  loadData().then(startAutoRefresh);
+  boot();
 }
 </script>
 </body>

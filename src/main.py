@@ -66,6 +66,8 @@ from .models.vacaciones import ensure_columns as _ensure_vacaciones_columns
 _ensure_vacaciones_columns(engine)
 from .models.saldo_horas import ensure_columns as _ensure_saldo_columns
 _ensure_saldo_columns(engine)
+from .models.usuario import ensure_columns as _ensure_usuario_columns
+_ensure_usuario_columns(engine)
 
 # Seed inicial (idempotente)
 def _seed_zeitgruppen(db):

@@ -5,11 +5,20 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Column, String, Integer, Boolean, DateTime,
-    ForeignKey, Text, Table,
+    ForeignKey, Text, Table, text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from ..database import Base
+
+
+def ensure_columns(engine) -> None:
+    """Migración idempotente: añade columnas nuevas a hagemann.usuarios."""
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE hagemann.usuarios "
+            "ADD COLUMN IF NOT EXISTS terminal_mode VARCHAR(20) DEFAULT 'voll'"
+        ))
 
 
 # Tabla de relación N:M — un Gruppenadmin puede tener varios grupos asignados.
@@ -72,6 +81,12 @@ class Usuario(Base):
 
     activo = Column(Boolean, nullable=False, default=True)
     last_login = Column(DateTime, nullable=True)
+
+    # Modo del terminal para usuarios-tablet:
+    #   'voll'          → todas las funciones (Einloggen/Ausloggen/Raucherpause/…)
+    #   'eingeschraenkt'→ solo KST-Wechsel + Urlaubsantrag + Stundenkonto (sin fichar)
+    terminal_mode = Column(String(20), nullable=True, default="voll",
+                           comment="voll | eingeschraenkt (terminales tablet)")
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False,

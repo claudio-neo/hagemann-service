@@ -62,6 +62,7 @@ def _user_dict(u: Usuario, db) -> dict:
         "last_login": u.last_login.isoformat() + "Z" if u.last_login else None,
         "permissions": sorted(effective),
         "substituting": substituting,
+        "terminal_mode": getattr(u, "terminal_mode", None) or "voll",
     }
 
 
