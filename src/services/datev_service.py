@@ -48,9 +48,18 @@ def _oidc_base() -> str:
     )
 
 
-DATEV_TOKEN_URL = "https://api.datev.de/token"
+# Token y API base dependen del entorno (verificado en .well-known/openid-configuration):
+#   Sandbox:    token=https://sandbox-api.datev.de/token  · api=https://sandbox-api.datev.de
+#   Producción: token=https://api.datev.de/token          · api=https://api.datev.de
+def _token_url() -> str:
+    return "https://sandbox-api.datev.de/token" if _is_sandbox() else "https://api.datev.de/token"
+
+
+def _api_base() -> str:
+    return "https://sandbox-api.datev.de" if _is_sandbox() else "https://api.datev.de"
+
+
 # Producto suscrito en la app del asesor: hr:exchange (Lohnaustauschdatenservice).
-DATEV_API_BASE = "https://api.datev.de"
 DATEV_HR_PRODUCT = "hr:exchange"
 
 # Scopes OAuth: en DATEV coinciden con el id del producto suscrito (hr:exchange).
@@ -252,7 +261,7 @@ def exchange_code(
     if code_verifier:
         payload["code_verifier"] = code_verifier
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
-        resp = client.post(DATEV_TOKEN_URL, data=payload)
+        resp = client.post(_token_url(), data=payload)
         resp.raise_for_status()
         token_data = resp.json()
 
@@ -295,7 +304,7 @@ def refresh_access_token(config: DatevConfig, db: Session) -> None:
         "client_secret": decrypt_secret(config.client_secret),
     }
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
-        resp = client.post(DATEV_TOKEN_URL, data=payload)
+        resp = client.post(_token_url(), data=payload)
         resp.raise_for_status()
         token_data = resp.json()
 
