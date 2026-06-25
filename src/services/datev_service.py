@@ -62,8 +62,17 @@ def _api_base() -> str:
 # Producto suscrito en la app del asesor: hr:exchange (Lohnaustauschdatenservice).
 DATEV_HR_PRODUCT = "hr:exchange"
 
-# Scopes OAuth: en DATEV coinciden con el id del producto suscrito (hr:exchange).
-DATEV_SCOPES = "openid profile hr:exchange"
+# Scopes OAuth para hr:exchange (verificado en hr_exchange-1.0.21.yaml):
+# el acceso a los datos requiere 'datev:hr:payrolldataexchange', NO 'hr:exchange'.
+DATEV_SCOPES = "openid profile datev:hr:payrolldataexchange"
+
+# API hr:exchange (host distinto al de OAuth):
+#   Sandbox:    https://hr-exchange.api.datev.de/platform-sandbox/v1
+#   Producción: https://hr-exchange.api.datev.de/platform/v1
+# Cada llamada requiere, además del Bearer: X-Datev-Client-Id + X-Datev-Client-Secret.
+def _hr_api_base() -> str:
+    seg = "platform-sandbox" if _is_sandbox() else "platform"
+    return f"https://hr-exchange.api.datev.de/{seg}/v1"
 
 # Timeout en segundos para llamadas HTTP
 HTTP_TIMEOUT = 30
