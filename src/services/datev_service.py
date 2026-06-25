@@ -46,22 +46,29 @@ def _oidc_base() -> str:
 
 
 DATEV_TOKEN_URL = "https://api.datev.de/token"
-# Producto real para empujar Bewegungsdaten: Lohnimportdatenservice (hr:imports).
-# El endpoint concreto se fija en Fase 3 al registrar la app del asesor.
+# Producto suscrito en la app del asesor: hr:exchange (Lohnaustauschdatenservice).
 DATEV_API_BASE = "https://api.datev.de"
-DATEV_HR_IMPORTS_PRODUCT = "hr:imports"
+DATEV_HR_PRODUCT = "hr:exchange"
 
-# Scopes: dependen del producto registrado en developer.datev.de.
-# 'hr:imports' como placeholder hasta confirmar con la app del asesor (Fase 3).
-DATEV_SCOPES = "openid profile hr:imports"
+# Scopes OAuth: en DATEV coinciden con el id del producto suscrito (hr:exchange).
+DATEV_SCOPES = "openid profile hr:exchange"
 
 # Timeout en segundos para llamadas HTTP
 HTTP_TIMEOUT = 30
 
 
 def _is_sandbox() -> bool:
-    """Devuelve True si la variable de entorno DATEV_SANDBOX está activa."""
+    """True → usar los endpoints de SANDBOX de DATEV (openidsandbox).
+    False → endpoints de PRODUCCIÓN. Solo selecciona URLs, no simula."""
     return os.getenv("DATEV_SANDBOX", "true").lower() in ("true", "1", "yes")
+
+
+def _simulate() -> bool:
+    """True → respuestas DATEV simuladas localmente, sin ninguna llamada HTTP.
+    Por defecto true para no llamar a DATEV por accidente. Poner
+    DATEV_SIMULATE=false para usar el OAuth/HTTP reales (sandbox o producción
+    según DATEV_SANDBOX)."""
+    return os.getenv("DATEV_SIMULATE", "true").lower() in ("true", "1", "yes")
 
 
 # ─── Cifrado del client_secret en reposo ─────────────────────────────────────
@@ -199,8 +206,8 @@ def exchange_code(
     Returns:
         dict con access_token, refresh_token, expires_in, scope
     """
-    if _is_sandbox():
-        logger.info("[DATEV SANDBOX] exchange_code simulado")
+    if _simulate():
+        logger.info("[DATEV SIMULATE] exchange_code simulado")
         fake_expiry = datetime.utcnow() + timedelta(hours=1)
         _save_tokens(
             config, db,
@@ -248,8 +255,8 @@ def refresh_access_token(config: DatevConfig, db: Session) -> None:
     En modo sandbox regenera tokens ficticios.
     Actualiza config en base de datos.
     """
-    if _is_sandbox():
-        logger.info("[DATEV SANDBOX] refresh_token simulado")
+    if _simulate():
+        logger.info("[DATEV SIMULATE] refresh_token simulado")
         _save_tokens(
             config, db,
             access_token=f"sandbox_access_{uuid.uuid4().hex}",
@@ -305,8 +312,8 @@ def _ensure_valid_token(config: DatevConfig, db: Session) -> None:
     Verifica que el access_token existe y no ha expirado.
     Si está a punto de expirar (< 5 min), lo renueva automáticamente.
     """
-    if _is_sandbox():
-        return  # En sandbox no necesitamos tokens reales
+    if _simulate():
+        return  # En modo simulado no necesitamos tokens reales
 
     if not config.access_token:
         raise ValueError(
@@ -475,7 +482,7 @@ def send_to_datev(
     Returns:
         dict con status, import_id, message, sandbox (bool)
     """
-    sandbox_mode = _is_sandbox() or not config.client_id or not config.access_token
+    sandbox_mode = _simulate() or not config.client_id or not config.access_token
 
     if sandbox_mode:
         import_id = f"SANDBOX-{uuid.uuid4().hex[:12].upper()}"

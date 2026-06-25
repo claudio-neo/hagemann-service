@@ -247,9 +247,12 @@ def oauth_authorize(
             "client_id no configurado. Añada las credenciales OAuth via POST /datev/config",
         )
 
-    # Construir redirect_uri dinámicamente desde la request
-    base_url = str(request.base_url).rstrip("/")
-    redirect_uri = f"{base_url}/api/v1/datev/oauth/callback"
+    # redirect_uri: usar el fijo del entorno (debe coincidir EXACTAMENTE con el
+    # registrado en la app DATEV). Fallback al base_url de la request.
+    redirect_uri = os.getenv("DATEV_REDIRECT_URI")
+    if not redirect_uri:
+        base_url = str(request.base_url).rstrip("/")
+        redirect_uri = f"{base_url}/api/v1/datev/oauth/callback"
 
     auth_url = datev_service.generate_oauth_url(config, redirect_uri)
     return {
