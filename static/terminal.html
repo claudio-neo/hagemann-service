@@ -823,6 +823,10 @@ header {
         <button class="big-btn btn-amber" id="mbBtnKst" style="display:none" onclick="kstWechselRestricted()">
           <span class="btn-icon">🔄</span> Abteilung wechseln
         </button>
+        <button class="big-btn" id="mbBtnRaucher" style="display:none;background:linear-gradient(135deg,#6366f1,#4f46e5);color:white" onclick="raucherpauseRestricted()">
+          <span class="btn-icon" id="mbRauchIcon">🚬</span>
+          <span id="mbRauchLabel">Raucherpause</span>
+        </button>
         <button class="big-btn btn-green" onclick="goToScreen('screen-urlaub-neu')">
           <span class="btn-icon">🌴</span> Urlaubsantrag stellen
         </button>
@@ -1411,6 +1415,16 @@ function kstWechselRestricted() {
     'KST-Wechsel ist nur während einer aktiven Schicht möglich.');
 }
 
+// Raucherpause en tablet restringido: solo con jornada activa.
+function raucherpauseRestricted() {
+  if (!selectedFichaje) {
+    showConfirm('info', 'ℹ️', 'Nicht eingeloggt',
+      'Raucherpause ist nur während einer aktiven Schicht möglich.');
+    return;
+  }
+  doRaucherpause();
+}
+
 function showChangeScreen() {
   const deptName = selectedFichaje?.centro_coste_actual?.nombre || '';
   document.getElementById('changeTitle').textContent = 'Abteilung wechseln';
@@ -1599,11 +1613,33 @@ function goToMeinBereich() {
   document.getElementById('mbTitle').textContent = fullName(selectedEmp);
   document.getElementById('mbSubtitle').textContent = '#' + selectedEmp.id_nummer;
 
-  // Modo restringido: mostrar KST-Wechsel, ocultar "Meine Anträge".
+  // Modo restringido: mostrar KST-Wechsel + Raucherpause, ocultar "Meine Anträge".
   const kstBtn = document.getElementById('mbBtnKst');
   const antBtn = document.getElementById('mbBtnAntraege');
+  const rauchBtn = document.getElementById('mbBtnRaucher');
   if (kstBtn) kstBtn.style.display = RESTRICTED ? '' : 'none';
   if (antBtn) antBtn.style.display = RESTRICTED ? 'none' : '';
+  if (rauchBtn) rauchBtn.style.display = RESTRICTED ? '' : 'none';
+  if (RESTRICTED && rauchBtn) {
+    pausaActiva = null;
+    document.getElementById('mbRauchIcon').textContent = '🚬';
+    document.getElementById('mbRauchLabel').textContent = 'Raucherpause';
+    if (selectedFichaje) {
+      apiFetch(`/fichajes/pausa/estado/${selectedEmp.id}`).then(estado => {
+        pausaActiva = estado.en_pausa;
+        const ic = document.getElementById('mbRauchIcon');
+        const lb = document.getElementById('mbRauchLabel');
+        if (pausaActiva && estado.pausa_activa) {
+          ic.textContent = '▶';
+          lb.textContent = `Pause beenden (${estado.pausa_activa.minutos_transcurridos || 0} Min.)`;
+        } else {
+          const t = estado.total_raucherpausen_heute || 0;
+          ic.textContent = '🚬';
+          lb.textContent = t > 0 ? `Raucherpause (${t}x heute)` : 'Raucherpause';
+        }
+      }).catch(() => {});
+    }
+  }
 
   // Load summary (vacation + hours)
   const sum = document.getElementById('mbSummary');
