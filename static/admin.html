@@ -282,7 +282,6 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
   <div class="logo">⚙ Hagemann <span class="logo-badge" id="logo-badge">Admin</span></div>
   <button class="nav-btn active" onclick="showPage('dashboard')" id="nav-dashboard">📊 Dashboard</button>
   <button class="nav-btn hidden" onclick="showPage('berichte')" id="nav-berichte">📈 Berichte</button>
-  <button class="nav-btn hidden" onclick="showPage('feiertage')" id="nav-feiertage">📅 Feiertage</button>
   <button class="nav-btn" onclick="showPage('urlaub')" id="nav-urlaub">🌴 Urlaub</button>
   <button class="nav-btn" onclick="showPage('stundenkonto')" id="nav-stundenkonto">⏱ Stundenkonto</button>
   <button class="nav-btn hidden" onclick="showPage('schichtplanung')" id="nav-schichtplanung">🗓 Schichtplanung</button>
@@ -386,54 +385,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 </div>
 
 <!-- ===== PAGE: FEIERTAGE ===== -->
-<div id="page-feiertage" class="page">
-  <div class="container">
-    <div class="page-header">
-      <div><h1>Feiertage</h1><p>Verwaltung der gesetzlichen Feiertage</p></div>
-      <button class="btn btn-primary" onclick="openFeiertagModal()">+ Feiertag hinzufügen</button>
-    </div>
-
-    <!-- Check date -->
-    <div class="card" style="margin-bottom:20px">
-      <div class="card-title" style="margin-bottom:12px">📅 Datum prüfen</div>
-      <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap">
-        <div class="form-group" style="margin-bottom:0">
-          <label>Datum prüfen</label>
-          <input type="date" id="checkDate" class="form-control" style="width:200px">
-        </div>
-        <button class="btn btn-outline" onclick="checkFeiertag()">Prüfen</button>
-        <div id="checkResult" style="font-size:14px; padding:8px 0;"></div>
-      </div>
-    </div>
-
-    <!-- Year selector -->
-    <div style="display:flex; gap:10px; align-items:center; margin-bottom:16px">
-      <select id="feiertageYear" class="form-control" style="width:120px" onchange="loadFeiertage()"></select>
-      <span id="feiertageBadge" class="badge badge-blue">—</span>
-    </div>
-
-    <div class="card">
-      <div class="table-wrap">
-        <table id="feiertageTable">
-          <thead>
-            <tr>
-              <th onclick="sortTable('feiertageTable',0)" data-col="0">Datum <span class="sort-icon"></span></th>
-              <th onclick="sortTable('feiertageTable',1)" data-col="1">Name <span class="sort-icon"></span></th>
-              <th onclick="sortTable('feiertageTable',2)" data-col="2">Bundesland <span class="sort-icon"></span></th>
-              <th onclick="sortTable('feiertageTable',3)" data-col="3">Typ <span class="sort-icon"></span></th>
-              <th onclick="sortTable('feiertageTable',4)" data-col="4">Status <span class="sort-icon"></span></th>
-              <th>Aktion</th>
-            </tr>
-          </thead>
-          <tbody id="feiertageTbody"></tbody>
-        </table>
-        <div id="feiertageLeer" class="empty hidden">Keine Feiertage vorhanden</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== PAGE: URLAUB ===== -->
+<!-- ===== PAGE: URLAUB (enthält jetzt auch Feiertage als Tab) ===== -->
 <div id="page-urlaub" class="page">
   <div class="container">
     <div class="page-header">
@@ -455,6 +407,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
       <button class="tab-btn" onclick="switchUrlaubTab('saldo')" id="utab-saldo">Salden</button>
       <button class="tab-btn" onclick="switchUrlaubTab('krankmeldung')" id="utab-krankmeldung">🏥 Krankmeldung<span id="pill-krankmeldung" class="pill hidden">0</span></button>
       <button class="tab-btn" onclick="switchUrlaubTab('kalender')" id="utab-kalender">📅 Übersicht</button>
+      <button class="tab-btn hidden" onclick="switchUrlaubTab('feiertage')" id="utab-feiertage">📅 Feiertage</button>
     </div>
 
     <!-- KALENDER / ÜBERSICHT -->
@@ -471,6 +424,42 @@ hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
       <div class="card">
         <div class="table-wrap">
           <table class="shift-grid" id="kalGrid"><tbody><tr><td>Lade…</td></tr></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- FEIERTAGE (gesetzliche Feiertage) -->
+    <div id="urlaubFeiertage" class="hidden">
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Datum prüfen</label>
+            <input type="date" id="checkDate" class="form-control" style="width:180px">
+          </div>
+          <button class="btn btn-outline" onclick="checkFeiertag()">Prüfen</button>
+          <div id="checkResult" style="font-size:14px; padding:8px 0;"></div>
+          <span style="flex:1"></span>
+          <select id="feiertageYear" class="form-control" style="width:120px" onchange="loadFeiertage()"></select>
+          <span id="feiertageBadge" class="badge badge-blue">—</span>
+          <button class="btn btn-primary" onclick="openFeiertagModal()">+ Feiertag hinzufügen</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table id="feiertageTable">
+            <thead>
+              <tr>
+                <th onclick="sortTable('feiertageTable',0)" data-col="0">Datum <span class="sort-icon"></span></th>
+                <th onclick="sortTable('feiertageTable',1)" data-col="1">Name <span class="sort-icon"></span></th>
+                <th onclick="sortTable('feiertageTable',2)" data-col="2">Bundesland <span class="sort-icon"></span></th>
+                <th onclick="sortTable('feiertageTable',3)" data-col="3">Typ <span class="sort-icon"></span></th>
+                <th onclick="sortTable('feiertageTable',4)" data-col="4">Status <span class="sort-icon"></span></th>
+                <th>Aktion</th>
+              </tr>
+            </thead>
+            <tbody id="feiertageTbody"></tbody>
+          </table>
+          <div id="feiertageLeer" class="empty hidden">Keine Feiertage vorhanden</div>
         </div>
       </div>
     </div>
@@ -1836,7 +1825,6 @@ function showPage(page) {
 
   if (page === 'dashboard') loadDashboard();
   if (page === 'berichte') initBerichte();
-  if (page === 'feiertage') initFeiertage();
   if (page === 'urlaub') loadUrlaub();
   if (page === 'stundenkonto') initStundenkonto();
   if (page === 'schichtplanung') initSchichtplanung();
@@ -1887,7 +1875,7 @@ async function init() {
 
     // Nav buttons — map permission → nav element
     if (has('reports:view'))       show('nav-berichte');
-    if (has('employees:edit'))     show('nav-feiertage');
+    if (has('employees:edit'))     show('utab-feiertage');
     if (has('shifts:write'))       show('nav-schichtplanung');
     if (has('corrections:review')) show('nav-korrekturen');
     if (has('approvals:level1'))   show('nav-genehmigungen');
@@ -2777,13 +2765,16 @@ function switchUrlaubTab(tab) {
   document.getElementById('utab-saldo').classList.toggle('active', tab === 'saldo');
   document.getElementById('utab-krankmeldung').classList.toggle('active', tab === 'krankmeldung');
   document.getElementById('utab-kalender').classList.toggle('active', tab === 'kalender');
+  document.getElementById('utab-feiertage')?.classList.toggle('active', tab === 'feiertage');
   document.getElementById('urlaubAntraege').classList.toggle('hidden', tab !== 'antraege');
   document.getElementById('urlaubSaldo').classList.toggle('hidden', tab !== 'saldo');
   document.getElementById('urlaubKrankmeldung').classList.toggle('hidden', tab !== 'krankmeldung');
   document.getElementById('urlaubKalender').classList.toggle('hidden', tab !== 'kalender');
+  document.getElementById('urlaubFeiertage')?.classList.toggle('hidden', tab !== 'feiertage');
   if (tab === 'saldo') loadSaldoGrid();
   if (tab === 'krankmeldung') initKrankmeldung();
   if (tab === 'kalender') loadKalender();
+  if (tab === 'feiertage') initFeiertage();
 }
 
 // ===== Abwesenheits-Übersicht (Kalender-Raster) =====
