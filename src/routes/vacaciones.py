@@ -46,7 +46,7 @@ def _calcular_dias_laborables(
         Festivo.activo == True,
         Festivo.fecha >= fecha_inicio,
         Festivo.fecha <= fecha_fin,
-        Festivo.bundesland.in_(["DE", "SN"]),
+        Festivo.bundesland.in_(["DE", "BB"]),
     ).all()
     festivos_set = {f.fecha for f in festivos}
 
@@ -910,7 +910,7 @@ def kalender_abwesenheiten(
     feiertage = {
         f[0].day for f in db.query(Festivo.fecha).filter(
             Festivo.activo == True,
-            Festivo.bundesland.in_(["DE", "SN"]),
+            Festivo.bundesland.in_(["DE", "BB"]),
             Festivo.fecha >= mes_inicio,
             Festivo.fecha <= mes_fin,
         ).all()
