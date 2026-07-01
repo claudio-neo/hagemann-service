@@ -1804,7 +1804,7 @@ function populateYearSelect(selectId, defaultYear) {
   const el = document.getElementById(selectId);
   const now = new Date().getFullYear();
   el.innerHTML = '';
-  for (let y = now + 1; y >= now - 3; y--) {
+  for (let y = now + 2; y >= now - 3; y--) {
     el.innerHTML += `<option value="${y}" ${y === (defaultYear || now) ? 'selected' : ''}>${y}</option>`;
   }
 }
